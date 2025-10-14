@@ -4,7 +4,7 @@
 \usepackage{ifxetex}
 \ifxetex
     \usepackage{fontspec}
-    \setsansfont{Arial}[Scale=0.5]
+    \setsansfont{Arial}[Scale=0.8]
 \fi
 
 
@@ -27,6 +27,35 @@
 \end{itemize}
 \end{frame}
 
+\begin{frame}{Data Structures}
+\begin{itemize}
+
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Alghorithm}
+\begin{itemize}
+    \begin{algorithm}
+        \caption{Pre-processing}
+        \begin{algorithmic}[1]
+            \State Read input data
+            \State Compute grid and split in blocks
+            \State Read and compute viscosity $\kappa$
+            \State Assemble matrices
+        \end{algorithmic}
+    \end{algorithm}
+    \begin{algorithm}
+        \caption{Time-stepping}
+        \begin{algorithmic}[1]
+            \For{each time step $k$}
+                \State Compute $p_\star^{k+\frac{1}{2}}=p^{k-\frac{1}{2}}+\phi^{k-\frac{1}{2}}$
+                \State Compute $\nabla p_\star^{k+\frac{1}{2}}$
+                \State Compute $g^{k+\frac{1}{2}}=f^{k+\frac{1}{2}}-\nabla p_\star^{k+\frac{1}{2}}-\frac{\nu}{2 \kappa}u^(k)+\frac{\nu}{2}\left(\delta_\text{xx}\Nu\right)$  
+            \EndFor
+        \end{algorithmic}
+    \end{algorithm}
+\end{itemize}
+\end{frame}
 
 \begin{frame}{Open Problems}
 \begin{itemize}
