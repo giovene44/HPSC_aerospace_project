@@ -10,7 +10,12 @@ public:
 
     class Porosity{}; // TODO: Discuss in case the porosity is in a file or is a given function
 
-    class ForcingTerm : public Function{};
+    class ForcingTerm : public Function{
+    public:
+        ForcingTerm(){}
+        float value(int i, int j, int k, float t){ return 0.0; } // Placeholder implementation
+    };
+
     
     class Nu: public Function{};
 
@@ -30,10 +35,16 @@ public:
     NavierStokesBrinkmann();
     void solve();
 protected:
-    void assemble_rhs();
-    void assemble_lhs();
-    void gradient();
-    void divergence();
+
+    //setup methods:
+    void setup(); //read grid, setup initial values, assemble K, gamma, initial conditions
+
+    //methods inside the iteration:
+    void assemble_g_rhs();
+    void solve_momentum();
+    void solve_pressure();
+    void output_results(int timestep) const;
+
 
     Grid grid;
     Porosity porosity;
@@ -47,6 +58,7 @@ protected:
     /*Data structure*/ auto phi;
     /*Data structure*/ auto other_phi;
     /*Data structure*/ auto gradient_pressure; // TODO: Choose if separate the components or not
+    /*Data structure*/ auto g_rhs; // rhs of the momentum equation
     /*Data structure*/ auto eta;
     /*Data structure*/ auto zeta;
     /*Data structure*/ auto ksi;
