@@ -19,8 +19,18 @@
             val = data[axes][i + j*Nx + k*Nx*Ny];
         }
 
+        void value(int axes, int index, float &val){
+            if(axes < 0 || axes >= 3) throw std::out_of_range("axes index out of range");
+            if(index < 0 || index >= Nx*Ny*Nz) throw std::out_of_range("index out of range");
+            val = data[axes][index];
+        }
+
         void set_value(int axes, int i, int j, int k, float val){
             data[axes][i + j*Nx + k*Nx*Ny] = val;
+        }
+
+        void set_value(int axes, int index, float val){
+            data[axes][index] = val;
         }
 
         void second_derivative(int axes, int derivation_direction, int i, int j, int k, float &val){
@@ -42,6 +52,20 @@
                     }
             val = v1 - 2*v2 + v3;
 
+        }
+
+        void second_derivative(int axes, int derivation_direction, int index, float &val){
+            int i = index % Nx;
+            int j = (index / Nx) % Ny;
+            int k = index / (Nx * Ny);
+            second_derivative(axes, derivation_direction, i, j, k, val);
+        }
+
+        void divergence(int index, float &val){
+            int i = index % Nx;
+            int j = (index / Nx) % Ny;
+            int k = index / (Nx * Ny);
+            divergence(i, j, k, val);
         }
 
         void divergence(int i, int j, int k, float &val){
