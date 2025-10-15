@@ -11,11 +11,11 @@ class ScalarVariables {
             };
 
         Real& set(Dim i, Dim j, Dim k) { //This set works like set(i,j,k) = value;
-            return pressure_data[i * (Ny * Nz) + j * Nz + k];
+            return pressure_data[i + j * Nx + k * Nx * Ny];
         }
 
         Real get(Dim i, Dim j, Dim k) const {
-            return pressure_data[i * (Ny * Nz) + j * Nz + k];
+            return pressure_data[i + j * Nx + k * Nx * Ny];
         }
         Real getGradient_x(Dim i, Dim j, Dim k) const {
             return (get(i+1,j,k) - get(i-1,j,k)) / 2.0f;
@@ -26,7 +26,7 @@ class ScalarVariables {
         }
 
         Real getGradient_z(Dim i, Dim j, Dim k) const {
-            return (get(i,j,k+1) - get(i,j,k-1)) / 2.0f;\
+            return (get(i,j,k+1) - get(i,j,k-1)) / 2.0f;
         }
 
     private:
