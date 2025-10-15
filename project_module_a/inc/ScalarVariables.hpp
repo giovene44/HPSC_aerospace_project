@@ -1,4 +1,4 @@
-#ifdef SCALARVARIABLES_HPP
+#ifndef SCALARVARIABLES_HPP
 #define SCALARVARIABLES_HPP
 
 #include "variables.hpp"
