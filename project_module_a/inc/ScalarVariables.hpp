@@ -1,7 +1,9 @@
+#ifdef SCALARVARIABLES_HPP
+#define SCALARVARIABLES_HPP
+
+#include "variables.hpp"
 #include <vector>
 
-using Real = float;
-using Dim = unsigned int;
 
 class ScalarVariables {
     public:
@@ -35,3 +37,5 @@ class ScalarVariables {
         const Dim Nz;
         std::vector<Real> pressure_data;
 };
+
+#endif // SCALARVARIABLES_HPP
