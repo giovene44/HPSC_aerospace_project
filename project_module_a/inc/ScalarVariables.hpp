@@ -3,6 +3,7 @@
 
 #include "variables.hpp"
 #include <vector>
+#include <iostream>
 
 class ScalarVariables
 {
@@ -25,26 +26,26 @@ public:
 
     Real getGradient_x(Dim i, Dim j, Dim k) const
     {
-        auto lhs = i > 0 ? get(i - 1, j, k) : 0.0f;
-        auto rhs = i < Nx ? get(i + 1, j, k) : 0.0f;
+        auto lhs = i%Nx > 0 ? get(i - 1, j, k) : 0.0f;
+        auto rhs = i%Nx < Nx-1 ? get(i + 1, j, k) : 0.0f;
 
-        return (rhs - lhs) / 2.0f;
+        return (rhs - lhs) * 0.5f;
     }
 
     Real getGradient_y(Dim i, Dim j, Dim k) const
     {
-        auto lhs = j > 0 ? get(i, j - 1, k) : 0.0f;
-        auto rhs = j < Ny ? get(i, j + 1, k) : 0.0f;
+        auto lhs = j%Ny > 0 ? get(i, j - 1, k) : 0.0f;
+        auto rhs = j%Ny < Ny-1 ? get(i, j + 1, k) : 0.0f;
 
-        return (rhs - lhs) / 2.0f;
+        return (rhs - lhs) * 0.5f;
     }
 
     Real getGradient_z(Dim i, Dim j, Dim k) const
     {
-        auto lhs = k > 0 ? get(i, j, k - 1) : 0.0f;
-        auto rhs = k < Nz ? get(i, j, k + 1) : 0.0f;
+        auto lhs = k%Nz > 0 ? get(i, j, k - 1) : 0.0f;
+        auto rhs = k%Nz < Nz-1 ? get(i, j, k + 1) : 0.0f;
 
-        return (rhs - lhs) / 2.0f;
+        return (rhs - lhs) * 0.5f;
     }
 
 private:
