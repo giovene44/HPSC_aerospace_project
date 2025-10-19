@@ -1,87 +1,132 @@
+#ifndef VECTORVARIABLES_HPP
+#define VECTORVARIABLES_HPP
+
+#include "variables.hpp"
 #include <vector>
+#include <iostream>
+
  
  class VectorVariable{
     public:
-        VectorVariable(int Nx_, int Ny_, int Nz_){
-            Nx = Nx_;
-            Ny = Ny_;
-            Nz = Nz_;
+        VectorVariable(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_)
+        : Nx(Nx_), Ny(Ny_), Nz(Nz_), dx(dx_), dy(dy_), dz(dz_)
+        {
+            data.resize(3);
+            for (int a = 0; a < 3; ++a)
+                data[a].resize(Nx * Ny * Nz, 0.0);
         }
+  
 
         //accessing method:
         //assuming i,j,k start from 0.
-        void value(int axes, int i, int j, int k, float &val){
+        inline Real value(int axes, Dim i, Dim j, Dim k) const {
             if(axes < 0 || axes >= 3) throw std::out_of_range("axes index out of range");
-            if(i < 0 || i >= Nx) val = 0.0;
-            else if(j < 0 || j >= Ny) val = 0.0;
-            else if(k < 0 || k >= Nz) val = 0.0;
+            if(i < 0 || i >= Nx) return 0.0;
+            else if(j < 0 || j >= Ny) return 0.0;
+            else if(k < 0 || k >= Nz) return 0.0;
             else
-            val = data[axes][i + j*Nx + k*Nx*Ny];
+            return data[axes][i + j*Nx + k*Nx*Ny];
         }
 
-        void value(int axes, int index, float &val){
+        inline Real value(int axes, Dim index) const {
             if(axes < 0 || axes >= 3) throw std::out_of_range("axes index out of range");
             if(index < 0 || index >= Nx*Ny*Nz) throw std::out_of_range("index out of range");
-            val = data[axes][index];
+            return data[axes][index];
         }
 
-        void set_value(int axes, int i, int j, int k, float val){
-            data[axes][i + j*Nx + k*Nx*Ny] = val;
+        inline Real& set(int axes, Dim i, Dim j, Dim k) noexcept {
+            return data[axes][i + j * Nx + k * Nx * Ny];
         }
 
-        void set_value(int axes, int index, float val){
-            data[axes][index] = val;
+        inline Real& set(int axes, Dim index) noexcept {
+            return data[axes][index];
         }
 
-        void second_derivative(int axes, int derivation_direction, int i, int j, int k, float &val){
-           float v1, v2, v3;
-           if(derivation_direction == 0){ //x direction
-                value(axes, i+1, j, k, v1);
-                value(axes, i, j, k, v2);
-                value(axes, i-1, j, k, v3);
+
+        Real first_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const {
+            Real v1, v2, den, val;
+            if(derivation_direction == 0){ //x direction
+                v1 = value(axes, i+1, j, k);  
+                v2 = value(axes, i-1, j, k);
+                den = 2*dx;  //uses a centered finite differences scheme
               }
               else if(derivation_direction == 1){ //y direction
-                 value(axes, i, j+1, k, v1);
-                 value(axes, i, j, k, v2);
-                 value(axes, i, j-1, k, v3);
+                 v1 = value(axes, i, j+1, k);
+                 v2 = value(axes, i, j-1, k);
+                    den = 2*dy;
                   }
                 else if(derivation_direction == 2){ //z direction
-                   value(axes, i, j, k+1, v1);
-                   value(axes, i, j, k, v2);
-                   value(axes, i, j, k-1, v3);
+                   v1 = value(axes, i, j, k+1);
+                   v2 = value(axes, i, j, k-1);
+                     den = 2*dz;
+                    }
+            val = v1 - v2;
+            val/=den;
+            return val;
+        }
+
+        Real first_derivative(int axes, int derivation_direction, Dim index) const {
+            Dim i = index % Nx;
+            Dim j = (index / Nx) % Ny;
+            Dim k = index / (Nx * Ny);
+            return first_derivative(axes, derivation_direction, i, j, k);
+        }
+
+        Real second_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const {
+           Real v1, v2, v3, den, val;
+           if(derivation_direction == 0){ //x direction
+                v1 = value(axes, i+1, j, k);
+                v2 = value(axes, i, j, k);
+                v3 = value(axes, i-1, j, k);
+                den = dx*dx;
+              }
+              else if(derivation_direction == 1){ //y direction
+                 v1 = value(axes, i, j+1, k);
+                 v2 = value(axes, i, j, k);
+                 v3 = value(axes, i, j-1, k);
+                    den = dy*dy;
+                  }
+                else if(derivation_direction == 2){ //z direction
+                   v1 = value(axes, i, j, k+1);
+                   v2 = value(axes, i, j, k);
+                   v3 = value(axes, i, j, k-1);
+                     den = dz*dz;
                     }
             val = v1 - 2*v2 + v3;
-
+            val/=den;
+            return val;
         }
 
-        void second_derivative(int axes, int derivation_direction, int index, float &val){
-            int i = index % Nx;
-            int j = (index / Nx) % Ny;
-            int k = index / (Nx * Ny);
-            second_derivative(axes, derivation_direction, i, j, k, val);
+        Real second_derivative(int axes, int derivation_direction, Dim index) const {
+            Dim i = index % Nx;
+            Dim j = (index / Nx) % Ny;
+            Dim k = index / (Nx * Ny);
+            return second_derivative(axes, derivation_direction, i, j, k);
         }
 
-        void divergence(int index, float &val){
-            int i = index % Nx;
-            int j = (index / Nx) % Ny;
-            int k = index / (Nx * Ny);
-            divergence(i, j, k, val);
+        Real divergence(Dim index) const {
+            Dim i = index % Nx;
+            Dim j = (index / Nx) % Ny;
+            Dim k = index / (Nx * Ny);
+            return divergence(i, j, k);
         }
 
-        void divergence(int i, int j, int k, float &val){
-            float dVx_dx, dVy_dy, dVz_dz;
-            second_derivative(0, 0, i, j, k, dVx_dx);
-            second_derivative(1, 1, i, j, k, dVy_dy);
-            second_derivative(2, 2, i, j, k, dVz_dz);
-            val = dVx_dx + dVy_dy + dVz_dz;
+        Real divergence(Dim i, Dim j, Dim k) const {
+            return (first_derivative(0, 0, i, j, k)
+            + first_derivative(1, 1, i, j, k)
+            +first_derivative(2, 2, i, j, k));
         }
-
 
 
     private:
 
-    std::vector<std::vector<float>> data;
-    int Nx, Ny, Nz;
+    std::vector<std::vector<Real>> data;
+    Dim Nx, Ny, Nz;
+    Real dx,dy,dz;
 
         
     };
+
+
+
+#endif // VECTORVARIABLES_HPP
