@@ -13,6 +13,8 @@ TEST_DIR = tests
 # Detect all source and test files
 SRC_FILES = $(wildcard $(SRC_DIR)/*.cpp)
 TEST_SRCS = $(wildcard $(TEST_DIR)/test_*.cpp)
+EXCLUDE_TEST_SRCS = $(SRC_DIR)/main.cpp $(SRC_DIR)/navies_stokes_brinkman.cpp # TODO: Remove this once the main.cpp and navies_stokes_brinkman.cpp are removed from the tests
+TEST_LINK_SRCS = $(filter-out $(EXCLUDE_TEST_SRCS), $(SRC_FILES))
 
 # Generate corresponding binary names
 TEST_BINS = $(patsubst $(TEST_DIR)/%.cpp, $(BIN_DIR)/%, $(TEST_SRCS))
@@ -30,13 +32,13 @@ directories:
 	@mkdir -p $(BIN_DIR)
 
 # Build release test binaries (linking source files)
-$(BIN_DIR)/%: $(TEST_DIR)/%.cpp $(SRC_FILES)
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) $(SRC_FILES) $< -o $@
+$(BIN_DIR)/%: $(TEST_DIR)/%.cpp $(TEST_LINK_SRCS) | directories
+	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) $(TEST_LINK_SRCS) $< -o $@
 	@echo "Build complete: $@"
 
 # Build debug test binaries (linking source files)
-$(BIN_DIR)/%_debug: $(TEST_DIR)/%.cpp $(SRC_FILES)
-	$(CXX) $(DEBUG_FLAGS) -I$(INCLUDE_DIR) $(SRC_FILES) $< -o $@
+$(BIN_DIR)/%_debug: $(TEST_DIR)/%.cpp $(TEST_LINK_SRCS) | directories
+	$(CXX) $(DEBUG_FLAGS) -I$(INCLUDE_DIR) $(TEST_LINK_SRCS) $< -o $@
 	@echo "Debug build complete: $@"
 
 debug: directories $(TEST_DEBUG_BINS)
