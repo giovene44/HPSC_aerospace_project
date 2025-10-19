@@ -4,7 +4,7 @@ CXXFLAGS = -std=c++11 -Wall -Wextra -O2
 DEBUG_FLAGS = -std=c++11 -Wall -Wextra -g -O0
 
 # Directories
-INCLUDE_DIR = include
+INCLUDE_DIR = inc
 SRC_DIR = src
 BUILD_DIR = build
 BIN_DIR = bin
