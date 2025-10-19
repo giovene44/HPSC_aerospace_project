@@ -1,78 +1,69 @@
 \documentclass{beamer}
 \usetheme[bgphoto]{polimi}
 \usepackage[utf8]{inputenc}
+\usepackage{algorithm}
 \usepackage{ifxetex}
 \ifxetex
     \usepackage{fontspec}
     \setsansfont{Arial}[Scale=0.8]
 \fi
 
-
 \title{High Performance Scientific Computing for \\ Aerospace Project}
 \subtitle{15th October 2025 update}
 \date{October 15, 2025}
 
 \begin{document}
-    \begin{frame}
-        \maketitle
-    \end{frame}
-
-
+\begin{frame}
+    \maketitle
+\end{frame}
 
 \begin{frame}{Progress Overview}
-\begin{itemize}
-    \item Defined the data structures needed.
-    \item Separation of roles and classes.
-    \item High-level implementation of the code.
-\end{itemize}
+    \begin{itemize}
+        \item Defined the data structures needed.
+        \item Separation of roles and classes.
+        \item High-level implementation of the code.
+    \end{itemize}
 \end{frame}
 
-\begin{frame}{Data Structures}
-\begin{itemize}
-
-\end{itemize}
-\end{frame}
-
-\begin{frame}{Alghorithm}
-\begin{itemize}
-    \begin{algorithm}
-        \caption{Pre-processing}
-        \begin{algorithmic}[1]
-            \State Read input data
-            \State Compute grid and split in blocks
-            \State Read and compute viscosity $\kappa$
-            \State Assemble matrices
-        \end{algorithmic}
-    \end{algorithm}
-    \begin{algorithm}
-        \caption{Time-stepping}
-        \begin{algorithmic}[1]
-            \For{each time step $k$}
-                \State Compute $p_\star^{k+\frac{1}{2}}=p^{k-\frac{1}{2}}+\phi^{k-\frac{1}{2}}$
-                \State Compute $\nabla p_\star^{k+\frac{1}{2}}$
-                \State Compute $g^{k+\frac{1}{2}}=f^{k+\frac{1}{2}}-\nabla p_\star^{k+\frac{1}{2}}-\frac{\nu}{2 \kappa}u^(k)+\frac{\nu}{2}\left(\delta_\text{xx}\Nu\right)$  
-            \EndFor
-        \end{algorithmic}
-    \end{algorithm}
-\end{itemize}
-\end{frame}
+% \begin{frame}{Algorithm}
+% \begin{block}{Pre-processing}
+%     \begin{itemize}
+%         \item Read input data
+%         \item Compute grid and split in blocks
+%         \item Read and compute viscosity $\kappa$
+%         \item Assemble matrices
+%     \end{itemize}
+% \end{block}
+% \begin{block}{Time-stepping}
+%     \begin{itemize}
+%         \item For each time step $k$:
+%         \begin{itemize}
+%             \item Compute $p_\star^{k+\frac{1}{2}}=p^{k-\frac{1}{2}}+\phi^{k-\frac{1}{2}}$
+%             \item Compute $\nabla p_\star^{k+\frac{1}{2}}$
+%             \item Compute $g^{k+\frac{1}{2}}=f^{k+\frac{1}{2}}-\nabla p_\star^{k+\frac{1}{2}}-\frac{\nu}{2 \kappa}u^{(k)}+\frac{\nu}{2}\left(\delta_\text{xx}\nu\right)$  
+%         \end{itemize}
+%     \end{itemize}
+% \end{block}
+% \end{frame}
 
 \begin{frame}{Open Problems}
-\begin{itemize}
-    \item Computation of grid and viscosity.
-    \item Establish the order of nodes to maximize performance.
-    \item Potentially excessive memory usage.
-\end{itemize}
+    \begin{itemize}
+        \item Computation of grid.
+        \item Input values $\kappa$, $\nu$, initial conditions handling.
+        \item Establish the order of nodes to maximize performance.
+        \item Potentially excessive memory usage.
+    \end{itemize}
 \end{frame}
 
 
 \begin{frame}{Planned Activities}
-\begin{itemize}
-    \item Optimization of the storage in data structures.
-    \item Complete the definition of the data structures for $\beta$ and $\gamma$.
-    \item Discuss about the parallelization strategy for the solution of linear systems.
-    \item Actual implementation of code.
-\end{itemize}
+    \begin{itemize}
+        \item Optimization of the storage in data structures.
+        \item Complete the definition of the data structures for $\beta$ and $\gamma$.
+        \item Decide how to deal with input data $\kappa$, $\nu$, initial conditions (if they are a given function or a set of data).
+        \item Discuss about the parallelization strategy for the solution of linear systems.
+        \item Actual implementation of code.
+    \end{itemize}
 \end{frame}
 
 \end{document}

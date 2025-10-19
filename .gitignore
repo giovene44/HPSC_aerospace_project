@@ -1,2 +1,9 @@
 project_module_a/bin/
 project_module_a/build/
+project_module_a/report/slides/presentation.toc
+project_module_a/report/slides/presentation.synctex.gz
+project_module_a/report/slides/presentation.out
+project_module_a/report/slides/presentation.log
+project_module_a/report/slides/presentation.fls
+project_module_a/report/slides/presentation.fdb_latexmk
+project_module_a/report/slides/presentation.aux
