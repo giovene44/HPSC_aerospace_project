@@ -10,6 +10,12 @@
     "cmath": "cpp",
     "tuple": "cpp",
     "type_traits": "cpp",
-    "variant": "cpp"
+    "variant": "cpp",
+    "array": "cpp",
+    "memory": "cpp",
+    "format": "cpp",
+    "istream": "cpp",
+    "functional": "cpp",
+    "utility": "cpp"
   }
 }

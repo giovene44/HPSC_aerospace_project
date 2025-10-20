@@ -41,9 +41,20 @@ auto NavierStokesBrinkmann::assemble_rhs(auto output, auto vector1, auto vector2
         }
     }
 }
-
-
-
+// change does not work
+void NavierStokesBrinkmann::scalar_assemble_rhs(ScalarVariables &output, ScalarVariables &vector1, ScalarVariables &vector2)
+{
+    for (int i = 0; i < Nx; i++)
+    { // i indicates the index of the element in the vector
+        for (int j = 0; j < Ny; j++)
+        {
+            for (int k = 0; k < Nz; k++)
+            {
+                output.set(i, j, k) = vector1.get(i, j, k) - vector2.get(i, j, k);
+            }
+        }
+    }
+}
 
 void NavierStokesBrinkmann::solve_momentum()
 {
