@@ -4,7 +4,7 @@
 void NavierStokesBrinkmann::assemble()
 
 
-void NavierStokesBrinkmann::assemble_rhs()
+void NavierStokesBrinkmann::assemble_g_rhs()
 {
 
     //this method assembles the g vector for the current time step.
@@ -16,12 +16,9 @@ void NavierStokesBrinkmann::assemble_rhs()
         for (int j=0; j<g_rhs[0].size(); j++) //j indicates the index of the element in the vector
         {
 
-            float eta_local_second_derivative;
-            eta.second_derivative(i, 0, j, eta_local_second_derivative); // x direction
-            float zeta_local_second_derivative;
-            zeta.second_derivative(i, 1, j, zeta_local_second_derivative); // y direction
-            float u_local_second_derivative;
-            u.second_derivative(i, 2, j, u_local_second_derivative); // z direction
+            float eta_local_second_derivative = eta.second_derivative(i, 0, j); // x direction
+            float zeta_local_second_derivative = zeta.second_derivative(i, 1, j); // y direction
+            float u_local_second_derivative = u.second_derivative(i, 2, j); // z direction
 
             g_rhs[i][j] = forcing_term.value(i,j,t) - gradient_pressure[i][j] 
             - eta*velocity_predictor[i][j]/(2.0* /*K[i][j] or K.get(i,j)*/)+ eta/2.0 
@@ -29,4 +26,13 @@ void NavierStokesBrinkmann::assemble_rhs()
 
         }
     }
+}
+
+void NavierStokesBrinkmann::solve_momentum()
+{
+    
+    // xi = u + dt/beta * g
+
+
+
 }
