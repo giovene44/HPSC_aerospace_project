@@ -1,4 +1,7 @@
 #include <string>
+#include "ScalarVariables.hpp"
+#include "VectorVariable.hpp"
+#include "gamma_beta.h"
 
 class NavierStokesBrinkmann {
 public:
@@ -52,21 +55,23 @@ protected:
 
     //Some of these data structures can be merged in one with further optimization
 
-    /*Data structure*/ auto pressure_predictor;
-    /*Data structure*/ auto velocity_predictor;
-    /*Data structure*/ auto psi;
-    /*Data structure*/ auto phi;
-    /*Data structure*/ auto other_phi;
-    /*Data structure*/ auto gradient_pressure; // TODO: Choose if separate the components or not
-    /*Data structure*/ auto g_rhs; // rhs of the momentum equation
-    /*Data structure*/ auto eta;
-    /*Data structure*/ auto zeta;
-    /*Data structure*/ auto xi;
-    /*Data structure*/ auto nu;
-    /*Data structure*/ auto beta;
-    /*Data structure*/ auto gamma;
+    ScalarVariables pressure_predictor;
+    VectorVariable velocity_predictor;
+    ScalarVariables psi;
+    ScalarVariables phi;
+    ScalarVariables other_phi;
+    VectorVariable g_rhs; // rhs of the momentum equation
+    VectorVariable eta;
+    VectorVariable zeta;
+    VectorVariable xi;
+    VectorVariable nu;
+    Beta beta;
+    Gamma gamma;
+    Dim Nx;
+    Dim Ny;
+    Dim Nz;
 
 
-    /*Data structure*/ auto velocity_solution;
-    /*Data structure*/ auto pressure_solution;
+    VectorVariable velocity_solution;
+    ScalarVariables pressure_solution;
 };
