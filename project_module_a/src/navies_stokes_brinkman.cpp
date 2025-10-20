@@ -30,8 +30,26 @@ void NavierStokesBrinkmann::assemble_g_rhs()
 
 void NavierStokesBrinkmann::solve_momentum()
 {
+    // set the righ t-hand side vector xi
+    for (int a=0; a<3; a++){ //a indicates the component among the 3 components of the vector
+        for (int i=0; i<Nx; i++){ //i indicates the index of the element in the vector
+            for (int j=0; j<Ny; j++){
+                for(int k=0; k<Nz; k++){
+
+                    xi.set(a,i,j,k) = u.value(a,i,j,k) + dt / beta(i,j,k) * g_rhs.value(a,i,j,k) - eta.value(a,i,j,k);
+                
+                }
+            }
+        }
+    }
+
+
     
-    // xi = u + dt/beta * g
+
+
+
+
+
 
 
 
