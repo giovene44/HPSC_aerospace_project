@@ -14,6 +14,25 @@ public:
         pressure_data.resize(Nx * Ny * Nz, 0.0f);
     };
 
+    ScalarVariables operator+(const ScalarVariables &other) const
+    {
+        ScalarVariables result(Nx, Ny, Nz);
+        for (Dim index = 0; index < Nx * Ny * Nz; ++index)
+        {
+            result.set(index) = this->get(index) + other.get(index);
+        }
+        return result;
+    }
+
+    ScalarVariables &operator+=(const ScalarVariables &other)
+    {
+        for (Dim index = 0; index < Nx * Ny * Nz; ++index)
+        {
+            this->set(index) += other.get(index);
+        }
+        return *this;
+    }
+
     
     Real &set(Dim i, Dim j, Dim k)
     { // This set works like set(i,j,k) = value;
