@@ -8,15 +8,21 @@
 class ScalarVariables
 {
 public:
-    ScalarVariables(Dim Nx, Dim Ny, Dim Nz)
+    ScalarVariables(const Dim Nx, const Dim Ny, const Dim Nz)
         : Nx(Nx), Ny(Ny), Nz(Nz)
     {
         pressure_data.resize(Nx * Ny * Nz, 0.0f);
     };
 
+    
     Real &set(Dim i, Dim j, Dim k)
     { // This set works like set(i,j,k) = value;
         return pressure_data[i + j * Nx + k * Nx * Ny];
+    }
+
+    Real &set(Dim index)
+    { // This set works like set(index) = value;
+        return pressure_data[index];
     }
 
     Real get(Dim i, Dim j, Dim k) const
@@ -24,8 +30,27 @@ public:
         return pressure_data[i + j * Nx + k * Nx * Ny];
     }
 
+    Real get(Dim index) const
+    {
+        return pressure_data[index];
+    }
+
+
+
     Real getGradient_x(Dim i, Dim j, Dim k) const
     {
+        auto lhs = i%Nx > 0 ? get(i - 1, j, k) : 0.0f;
+        auto rhs = i%Nx < Nx-1 ? get(i + 1, j, k) : 0.0f;
+
+        return (rhs - lhs) * 0.5f;
+    }
+
+    Real getGradient_x(Dim index) const
+    {
+        Dim i = index % Nx;
+        Dim j = (index / Nx) % Ny;
+        Dim k = index / (Nx * Ny);
+
         auto lhs = i%Nx > 0 ? get(i - 1, j, k) : 0.0f;
         auto rhs = i%Nx < Nx-1 ? get(i + 1, j, k) : 0.0f;
 
@@ -40,8 +65,33 @@ public:
         return (rhs - lhs) * 0.5f;
     }
 
+
+    Real getGradient_y(Dim index) const
+    {
+        Dim i = index % Nx;
+        Dim j = (index / Nx) % Ny;
+        Dim k = index / (Nx * Ny);
+
+        auto lhs = j%Ny > 0 ? get(i, j - 1, k) : 0.0f;
+        auto rhs = j%Ny < Ny-1 ? get(i, j + 1, k) : 0.0f;
+
+        return (rhs - lhs) * 0.5f;
+    }
+
     Real getGradient_z(Dim i, Dim j, Dim k) const
     {
+        auto lhs = k%Nz > 0 ? get(i, j, k - 1) : 0.0f;
+        auto rhs = k%Nz < Nz-1 ? get(i, j, k + 1) : 0.0f;
+
+        return (rhs - lhs) * 0.5f;
+    }
+
+    Real getGradient_z(Dim index) const
+    {
+        Dim i = index % Nx;
+        Dim j = (index / Nx) % Ny;
+        Dim k = index / (Nx * Ny);
+
         auto lhs = k%Nz > 0 ? get(i, j, k - 1) : 0.0f;
         auto rhs = k%Nz < Nz-1 ? get(i, j, k + 1) : 0.0f;
 
