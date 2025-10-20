@@ -61,7 +61,7 @@ protected:
     /*Data structure*/ auto g_rhs; // rhs of the momentum equation
     /*Data structure*/ auto eta;
     /*Data structure*/ auto zeta;
-    /*Data structure*/ auto ksi;
+    /*Data structure*/ auto xi;
     /*Data structure*/ auto nu;
     /*Data structure*/ auto beta;
     /*Data structure*/ auto gamma;
