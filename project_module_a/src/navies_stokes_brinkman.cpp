@@ -170,6 +170,11 @@ void NavierStokesBrinkmann::compute_vector_gamma_D_term(int direction)
     }
 }
 
+// ----------------------------------------------------------------------------
+// Purpose:
+//   Compute the right-hand side vector for the momentum equation by
+//   calculating the difference between two input vector fields.
+// ----------------------------------------------------------------------------
 void NavierStokesBrinkmann::compute_vector_rhs(const VectorVariable &vector1, const VectorVariable &vector2)
 {
     compute_vector_difference(vector_rhs, vector1, vector2);
