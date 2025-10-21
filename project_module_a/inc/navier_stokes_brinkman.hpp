@@ -75,7 +75,7 @@ public:
     void compute_vector_gamma_D_term(int direction);
     void compute_vector_rhs(const VectorVariable &vector1, const VectorVariable &vector2);
 
-        void block_solver(int derivation_direction, const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
+    void block_solver(int derivation_direction, const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
     void block_solver(int derivation_direction, const ScalarVariables &rhs, ScalarVariables &solution);
     /*
     // setup methods:
