@@ -190,3 +190,149 @@ void NavierStokesBrinkmann::compute_vector_rhs(const VectorVariable &vector1, co
 {
     compute_vector_difference(vector_rhs, vector1, vector2);
 }
+
+void NavierStokesBrinkmann::block_solver(int derivation_direction, const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution)
+{
+    if (derivation_direction < 0 || derivation_direction > 2)
+        throw std::invalid_argument("Invalid derivation direction. Must be 0, 1, or 2.");
+
+   //this method decomposes the 3D problem into multiple 1D tridiagonal systems.
+   //this decomposition is based on the specified direction (0 for x, 1 for y, 2 for z).
+
+    
+    if (derivation_direction == 0){
+        for( Dim j = 0; j < Ny; ++j ){
+            for( Dim k = 0; k < Nz; ++k ){
+
+                Dim stride = j*Nx + k*Nx*Ny;
+
+                std::vector<float> a(Nx-1, 0.0f);
+                std::vector<float> b(Nx, 0.0f);
+                std::vector<float> c(Nx-1, 0.0f);
+                std::vector<float> d(Nx, 0.0f);
+                std::vector<float> x(Nx, 0.0f);
+
+                std::vector<float> gamma_line(Nx, 0.0f);
+                for( Dim i = 0; i < Nx; ++i ){
+                    gamma_line[i] = -gamma.get(stride + i);
+                }
+
+
+                // a = gamma line without first element
+                for( Dim i = 1; i < Nx; ++i ){
+                    a[i-1] = gamma_line[i];
+                }
+
+                // b = 1 + 2*gamma line
+                for( Dim i = 0; i < Nx; ++i ){
+                    b[i] = 1.0f - 2.0f * gamma_line[i];
+                }
+
+                // c = gamma line without last element
+                for( Dim i = 0; i < Nx-1; ++i ){
+                    c[i] = gamma_line[i+1];
+                }
+
+                // d = rhs
+                for( Dim i = 0; i < Nx; ++i ){
+                    d[i] = rhs.get(stride + i);
+                }
+
+                // Solve the tridiagonal system
+                thomas_algorithm(a, b, c, d, x);
+
+                // Store the solution
+                for( Dim i = 0; i < Nx; ++i ){
+                    solution.set(stride + i) = x[i];
+                }
+
+            }
+        }
+    }
+
+    if( derivation_direction == 1){
+        for( Dim i = 0; i < Nx; ++i ){
+            for( Dim k = 0; k < Nz; ++k ){
+
+                Dim stride = i + k*Nx*Ny;
+
+                std::vector<float> a(Ny-1, 0.0f);
+                std::vector<float> b(Ny, 0.0f);
+                std::vector<float> c(Ny-1, 0.0f);
+                std::vector<float> d(Ny, 0.0f);
+                std::vector<float> x(Ny, 0.0f);
+
+                std::vector<float> gamma_line(Ny, 0.0f);
+                for( Dim j = 0; j < Ny; ++j ){
+                    gamma_line[j] = -gamma.get(stride + j*Nx);
+                }
+
+                // a = gamma line without first element
+                for( Dim j = 1; j < Ny; ++j ){
+                    a[j-1] = gamma_line[j];
+                }
+                // b = 1 + 2*gamma line
+                for( Dim j = 0; j < Ny; ++j ){
+                    b[j] = 1.0f - 2.0f * gamma_line[j];
+                }
+                // c = gamma line without last element
+                for( Dim j = 0; j < Ny-1; ++j ){
+                    c[j] = gamma_line[j+1];
+                }
+                // d = rhs
+                for( Dim j = 0; j < Ny; ++j ){
+                    d[j] = rhs.get(stride + j*Nx);
+                }
+                // Solve the tridiagonal system
+                thomas_algorithm(a, b, c, d, x);
+                // Store the solution
+                for( Dim j = 0; j < Ny; ++j ){
+                    solution.set(stride + j*Nx) = x[j];
+                }
+            }
+        }
+    }
+
+    if( derivation_direction == 2){
+        for( Dim i = 0; i < Nx; ++i ){
+            for( Dim j = 0; j < Ny; ++j ){
+
+                Dim stride = i + j*Nx;
+
+                std::vector<float> a(Nz-1, 0.0f);
+                std::vector<float> b(Nz, 0.0f);
+                std::vector<float> c(Nz-1, 0.0f);
+                std::vector<float> d(Nz, 0.0f);
+                std::vector<float> x(Nz, 0.0f);
+
+                std::vector<float> gamma_line(Nz, 0.0f);
+                for( Dim k = 0; k < Nz; ++k ){
+                    gamma_line[k] = -gamma.get(stride + k*Nx*Ny);
+                }
+
+                // a = gamma line without first element
+                for( Dim k = 1; k < Nz; ++k ){
+                    a[k-1] = gamma_line[k];
+                }
+                // b = 1 + 2*gamma line
+                for( Dim k = 0; k < Nz; ++k ){
+                    b[k] = 1.0f - 2.0f * gamma_line[k];
+                }
+                // c = gamma line without last element
+                for( Dim k = 0; k < Nz-1; ++k ){
+                    c[k] = gamma_line[k+1];
+                }
+                // d = rhs
+                for( Dim k = 0; k < Nz; ++k ){
+                    d[k] = rhs.get(stride + k*Nx*Ny);
+                }
+                // Solve the tridiagonal system
+                thomas_algorithm(a, b, c, d, x);
+                // Store the solution
+                for( Dim k = 0; k < Nz; ++k ){
+                    solution.set(stride + k*Nx*Ny) = x[k];
+                }
+            }
+        }
+    }
+}
