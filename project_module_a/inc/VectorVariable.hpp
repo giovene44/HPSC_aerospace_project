@@ -18,7 +18,7 @@ public:
 
     inline Dim size() const noexcept
     {
-        return 3;
+        return data.size();
     }
 
     inline Dim elements_per_component() const noexcept

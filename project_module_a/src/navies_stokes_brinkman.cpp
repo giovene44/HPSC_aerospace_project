@@ -1,7 +1,5 @@
 #include "navier_stokes_brinkman.hpp"
 #include "VectorVariable.hpp"
-
-#include "navier_stokes_brinkman.hpp"
 #include "VectorVariable.hpp"
 #include <stdexcept>
 
@@ -13,7 +11,7 @@ Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
 
-    Real nu_val = nu.value(0, i, j, k);
+    Real nu_val = nu.get(i, j, k);
     return 1.0f + (dt * nu_val) / (2.0f * k_val);
 }
 
@@ -31,7 +29,7 @@ Real NavierStokesBrinkmann::compute_gamma(Dim i, Dim j, Dim k) const
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
 
-    Real nu_val = nu.value(0, i, j, k);
+    Real nu_val = nu.get(i, j, k);
     Real beta = 1.0f + (dt * nu_val) / (2.0f * k_val);
     return (dt * nu_val) / (2.0f * beta);
 }
@@ -115,8 +113,8 @@ void NavierStokesBrinkmann::compute_vector_g()
             // -----------------------------------------------------------------
             // Physical properties
             // -----------------------------------------------------------------
-            float nu_val = nu.value(comp, idx); // local viscosity ν
-            float k_val = k_field.get(idx);     // local permeability k
+            float nu_val = nu.get(idx);     // local kinematic viscosity ν
+            float k_val = k_field.get(idx); // local permeability k
             if (std::abs(k_val) < 1e-12f)
                 k_val = 1e-12f; // avoid division by zero
 
@@ -130,7 +128,8 @@ void NavierStokesBrinkmann::compute_vector_g()
             // -----------------------------------------------------------------
             // Assemble RHS term
             // -----------------------------------------------------------------
-            float rhs_val =
+
+            float g_val =
                 forcing                                             // f
                 - grad_p                                            // -∇p
                 + 0.5f * nu_val * (dxx_eta + dyy_zeta + dzz_u)      // + (ν/2)(∇²η + ∇²ζ + ∇²u)
@@ -139,7 +138,7 @@ void NavierStokesBrinkmann::compute_vector_g()
             // -----------------------------------------------------------------
             // Store result
             // -----------------------------------------------------------------
-            vector_rhs.set(comp, idx) = rhs_val;
+            g.set(comp, idx) = g_val;
         }
     }
 }
