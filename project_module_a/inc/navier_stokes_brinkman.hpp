@@ -24,6 +24,9 @@ public:
     void solve();
 
 protected:
+    // initialization methods:
+    void initialize_gamma_field();
+
     // output should be passed by reference and should be allocated in the costructor of the class "!!!"    IMPORTANT
     // Function declarations only; implementations moved to the .cpp file
     void compute_vector_difference(VectorVariable &output, const VectorVariable &v1, const VectorVariable &v2);
@@ -65,11 +68,12 @@ protected:
     // ============================================================================
     // PHYSICAL AND MATERIAL FIELDS
     // ============================================================================
-    VectorVariable u_0;      // Velocity field
-    ScalarVariables p_0;     // Pressure field
-    VectorVariable f;        // Forcing term (can vary in space)
-    VectorVariable nu;       // Kinematic viscosity (can vary in space)
-    ScalarVariables k_field; // Brinkman permeability or resistance term
+    VectorVariable u_0;          // Velocity field
+    ScalarVariables p_0;         // Pressure field
+    VectorVariable f;            // Forcing term (can vary in space)
+    VectorVariable nu;           // Kinematic viscosity (can vary in space)
+    ScalarVariables k_field;     // Brinkman permeability or resistance term
+    ScalarVariables gamma_field; // Gamma field for Brinkman term
 
     // ============================================================================
     // VECTOR LINEAR SOLVER VARIABLES (MOMENTUM EQUATION)

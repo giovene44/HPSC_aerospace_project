@@ -7,25 +7,6 @@
 
 #include <cmath> // for std::abs
 
-void NavierStokesBrinkmann::compute_vector_difference(VectorVariable &output, const VectorVariable &v1, const VectorVariable &v2)
-{
-    // output must be preallocated and have matching dimensions
-    for (int a = 0; a < output.size(); ++a)
-    {
-        for (int i = 0; i < Nx; ++i)
-        {
-            for (int j = 0; j < Ny; ++j)
-            {
-                for (int k = 0; k < Nz; ++k)
-                {
-                    output.set(a, i, j, k) =
-                        v1.value(a, i, j, k) - v2.value(a, i, j, k);
-                }
-            }
-        }
-    }
-}
-
 Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
 {
     Real k_val = k_field.get(i, j, k);
@@ -61,6 +42,36 @@ Real NavierStokesBrinkmann::compute_gamma(Dim index) const
     Dim j = (index / Nx) % Ny;
     Dim k = index / (Nx * Ny);
     return compute_gamma(i, j, k);
+}
+
+void NavierStokesBrinkmann::initialize_gamma_field()
+{
+    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+    {
+        Dim i = idx % Nx;
+        Dim j = (idx / Nx) % Ny;
+        Dim k = idx / (Nx * Ny);
+        gamma_field.set(idx) = compute_gamma(i, j, k);
+    }
+}
+
+void NavierStokesBrinkmann::compute_vector_difference(VectorVariable &output, const VectorVariable &v1, const VectorVariable &v2)
+{
+    // output must be preallocated and have matching dimensions
+    for (int a = 0; a < output.size(); ++a)
+    {
+        for (int i = 0; i < Nx; ++i)
+        {
+            for (int j = 0; j < Ny; ++j)
+            {
+                for (int k = 0; k < Nz; ++k)
+                {
+                    output.set(a, i, j, k) =
+                        v1.value(a, i, j, k) - v2.value(a, i, j, k);
+                }
+            }
+        }
+    }
 }
 
 void NavierStokesBrinkmann::compute_gradient_pressure_field()
@@ -164,7 +175,7 @@ void NavierStokesBrinkmann::compute_vector_gamma_D_term(int direction)
             {
                 D_term = u_0.second_derivative(comp, 2, idx); // ∂zz u
             }
-            Real gamma_val = compute_gamma(idx);
+            Real gamma_val = gamma_field.get(idx);
             vector_gamma_D_term.set(comp, idx) = gamma_val * D_term;
         }
     }
