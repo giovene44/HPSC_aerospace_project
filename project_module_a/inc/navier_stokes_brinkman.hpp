@@ -1,33 +1,11 @@
 #include <string>
+#include <cmath>
 #include "ScalarVariables.hpp"
 #include "VectorVariable.hpp"
-#include "gamma_beta.h"
 
 class NavierStokesBrinkmann
 {
 public:
-    class Function
-    {
-    public:
-        Function() {}
-        float value(/*Point*/){};
-    };
-
-    class Porosity
-    {
-    }; // TODO: Discuss in case the porosity is in a file or is a given function
-
-    class ForcingTerm : public Function
-    {
-    public:
-        ForcingTerm() {}
-        float value(int i, int j, int k, float t) { return 0.0; } // Placeholder implementation
-    };
-
-    class Nu : public Function
-    {
-    };
-
     class Grid
     {
 
@@ -46,45 +24,86 @@ public:
     void solve();
 
 protected:
-    // setup methods:
-    void setup(); // read grid, setup initial values, assemble K, gamma, initial conditions
+    // output should be passed by reference and should be allocated in the costructor of the class "!!!"    IMPORTANT
+    // Function declarations only; implementations moved to the .cpp file
+    void compute_vector_difference(VectorVariable &output, const VectorVariable &v1, const VectorVariable &v2);
+
+    Real compute_beta(Dim i, Dim j, Dim k) const;
+    Real compute_beta(Dim index) const;
+
+    Real compute_gamma(Dim i, Dim j, Dim k) const;
+    Real compute_gamma(Dim index) const;
 
     // methods inside the iteration:
-    void assemble_g();
-    auto assemble_rhs(auto &vector_1, auto &vector_2);
+    void compute_vector_g();
+    void compute_vector_xi();
+    void compute_gradient_pressure_field();
+    void compute_vector_gamma_D_term(int direction);
+    void compute_vector_rhs(const VectorVariable &vector1, const VectorVariable &vector2);
+
+    /*
+    // setup methods:
+    void setup(); // read grid, setup initial values, assemble K, gamma, initial conditions
     void solve_linear_systems(auto &rhs, auto &a, auto &b, auto &c, auto &output);
     void update_variables();
     void solve_momentum();
     void solve_pressure();
     void output_results(int timestep) const;
+    */
 
-    Grid grid;
-    Porosity porosity;
-    ForcingTerm forcing_term;
+    // ============================================================================
+    // GRID, MATERIAL, AND TIME INFORMATION
+    // ============================================================================
+    Grid grid; // Grid geometry and domain decomposition
 
-    // Some of these data structures can be merged in one with further optimization
+    float dt; // Time step
 
-    ScalarVariables pressure_predictor;
-    VectorVariable velocity_predictor;
-    ScalarVariables psi;
-    ScalarVariables phi;
-    ScalarVariables other_phi;
-    ScalarVariables rhs;
-    VectorVariable g_rhs; // rhs of the momentum equation
-    VectorVariable eta;
-    VectorVariable zeta;
-    VectorVariable xi;
-    VectorVariable nu;
-    ScalarVariables sol_linear_system;
-    ScalarVariables a;
-    ScalarVariables b;
-    ScalarVariables c;
-    Beta beta;
-    Gamma gamma;
-    Dim Nx;
-    Dim Ny;
-    Dim Nz;
+    Dim Nx; // Grid points in x
+    Dim Ny; // Grid points in y
+    Dim Nz; // Grid points in z
 
-    VectorVariable velocity_solution;
-    ScalarVariables pressure_solution;
+    // ============================================================================
+    // PHYSICAL AND MATERIAL FIELDS
+    // ============================================================================
+    VectorVariable u_0;      // Velocity field
+    ScalarVariables p_0;     // Pressure field
+    VectorVariable f;        // Forcing term (can vary in space)
+    VectorVariable nu;       // Kinematic viscosity (can vary in space)
+    ScalarVariables k_field; // Brinkman permeability or resistance term
+
+    // ============================================================================
+    // VECTOR LINEAR SOLVER VARIABLES (MOMENTUM EQUATION)
+    //    Used to solve the three components of momentum
+    // ============================================================================
+    VectorVariable g;
+    VectorVariable vector_gamma_D_term; // γ·D term in the momentum equation
+    VectorVariable vector_rhs;          // RHS of the momentum equation
+    VectorVariable u_1;                 // Velocity field
+    VectorVariable xi;                  // x-direction solve intermediate
+    VectorVariable eta_0;               // y-direction solve intermediate
+    VectorVariable eta_1;               // y-direction solve intermediate
+    VectorVariable zeta_0;              // z-direction solve intermediate
+    VectorVariable zeta_1;              // z-direction solve intermediate
+    VectorVariable gradient_pressure;   // ∇p correction term
+    VectorVariable velocity_solution;   // Final velocity solution
+
+    // ============================================================================
+    // SCALAR LINEAR SOLVER VARIABLES (PRESSURE EQUATION AND OTHER SCALARS)
+    // ============================================================================
+    ScalarVariables rhs;       // RHS of scalar Poisson equation
+    ScalarVariables psi;       // Auxiliary scalar (potential or correction)
+    ScalarVariables phi;       // Pressure correction
+    ScalarVariables other_phi; // Additional scalar field for iterative updates
+
+    ScalarVariables sol_linear_system;  // Temporary solution of scalar linear system
+    ScalarVariables a;                  // Tridiagonal coefficient a (lower diag)
+    ScalarVariables b;                  // Tridiagonal coefficient b (main diag)
+    ScalarVariables c;                  // Tridiagonal coefficient c (upper diag)
+    ScalarVariables pressure_predictor; // Intermediate pressure estimate
+
+    // ============================================================================
+    // FINAL SOLUTION STORAGE
+    // ============================================================================
+    VectorVariable velocity_solution;  // Final converged velocity
+    ScalarVariables pressure_solution; // Final converged pressure
 };

@@ -1,7 +1,7 @@
-#include "navier_stokes_brinkmann.hpp"
+#include "navier_stokes_brinkman.hpp"
 
-int main(){
+int main()
+{
 
-    
     return 0;
 }
