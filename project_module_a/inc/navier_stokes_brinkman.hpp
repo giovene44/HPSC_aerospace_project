@@ -103,19 +103,6 @@ public:
 
     void block_solver(int derivation_direction, const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
     void block_solver(int derivation_direction, const ScalarVariables &rhs, ScalarVariables &solution);
-    /*
-    // setup methods:
-    void setup(); // read grid, setup initial values, assemble K, gamma, initial conditions
-    void solve_linear_systems(auto &rhs, auto &a, auto &b, auto &c, auto &output);
-    void update_variables();
-    void solve_momentum();
-    void solve_pressure();
-    void output_results(int timestep) const;
-    void compute_vector_g();                                                               // tested
-    void compute_vector_xi();                                                              // tested
-    void compute_gradient_pressure_field();                                                // to be tested
-    void compute_vector_gamma_D_term(int direction);                                       // to be tested
-    void compute_vector_rhs(const VectorVariable &vector1, const VectorVariable &vector2); // to be tested
 
     // TODO:
     /*
