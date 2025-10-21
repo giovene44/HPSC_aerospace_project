@@ -336,3 +336,144 @@ void NavierStokesBrinkmann::block_solver(int derivation_direction, const ScalarV
         }
     }
 }
+
+
+
+
+void NavierStokesBrinkmann::block_solver(int derivation_direction, const ScalarVariables &rhs, ScalarVariables &solution)
+{
+    // ----------------------------------------------------------------------------
+    // Implementation of the block_solver method for the pressure: (no gamma needed here)
+    // it is still a naive implementation that doesn't take into account boundary conditions
+    // i redefine a,b,c,d every time because the thomas_algorithm does modify those vectors!,
+    //moreover when we will add the BCs we will need to modify a,b,c in specific positions, 
+    //hence in specific iterations of the loops
+
+    if (derivation_direction < 0 || derivation_direction > 2)
+        throw std::invalid_argument("Invalid derivation direction. Must be 0, 1, or 2.");
+
+   //this method decomposes the 3D problem into multiple 1D tridiagonal systems.
+   //this decomposition is based on the specified direction (0 for x, 1 for y, 2 for z).
+
+    
+    if (derivation_direction == 0){
+        for( Dim j = 0; j < Ny; ++j ){
+            for( Dim k = 0; k < Nz; ++k ){
+
+                Dim stride = j*Nx + k*Nx*Ny;
+
+                std::vector<float> a(Nx-1, 0.0f);
+                std::vector<float> b(Nx, 0.0f);
+                std::vector<float> c(Nx-1, 0.0f);
+                std::vector<float> d(Nx, 0.0f);
+                std::vector<float> x(Nx, 0.0f);
+
+
+                // a = -1
+                for( Dim i = 1; i < Nx; ++i ){
+                    a[i-1] = -1.0f;
+                }
+
+                // b = 3
+                for( Dim i = 0; i < Nx; ++i ){
+                    b[i] = 3.0f;
+                }
+
+                // c = -1
+                for( Dim i = 0; i < Nx-1; ++i ){
+                    c[i] = -1.0f;
+                }
+
+                // d = rhs
+                for( Dim i = 0; i < Nx; ++i ){
+                    d[i] = rhs.get(stride + i);
+                }
+
+                // Solve the tridiagonal system
+                thomas_algorithm(a, b, c, d, x);
+
+                // Store the solution
+                for( Dim i = 0; i < Nx; ++i ){
+                    solution.set(stride + i) = x[i];
+                }
+
+            }
+        }
+    }
+
+    if( derivation_direction == 1){
+        for( Dim i = 0; i < Nx; ++i ){
+            for( Dim k = 0; k < Nz; ++k ){
+
+                Dim stride = i + k*Nx*Ny;
+
+                std::vector<float> a(Ny-1, 0.0f);
+                std::vector<float> b(Ny, 0.0f);
+                std::vector<float> c(Ny-1, 0.0f);
+                std::vector<float> d(Ny, 0.0f);
+                std::vector<float> x(Ny, 0.0f);
+
+                // a = -1
+                for( Dim j = 1; j < Ny; ++j ){
+                    a[j-1] = -1.0f;
+                }
+                // b = 3
+                for( Dim j = 0; j < Ny; ++j ){
+                    b[j] = 3.0f;
+                }
+                // c = -1
+                for( Dim j = 0; j < Ny-1; ++j ){
+                    c[j] = -1.0f;
+                }
+                // d = rhs
+                for( Dim j = 0; j < Ny; ++j ){
+                    d[j] = rhs.get(stride + j*Nx);
+                }
+                // Solve the tridiagonal system
+                thomas_algorithm(a, b, c, d, x);
+                // Store the solution
+                for( Dim j = 0; j < Ny; ++j ){
+                    solution.set(stride + j*Nx) = x[j];
+                }
+            }
+        }
+    }
+
+    if( derivation_direction == 2){
+        for( Dim i = 0; i < Nx; ++i ){
+            for( Dim j = 0; j < Ny; ++j ){
+
+                Dim stride = i + j*Nx;
+
+                std::vector<float> a(Nz-1, 0.0f);
+                std::vector<float> b(Nz, 0.0f);
+                std::vector<float> c(Nz-1, 0.0f);
+                std::vector<float> d(Nz, 0.0f);
+                std::vector<float> x(Nz, 0.0f);
+                
+                // a = -1
+                for( Dim k = 1; k < Nz; ++k ){
+                    a[k-1] = -1.0f;
+                }
+                // b = 3
+                for( Dim k = 0; k < Nz; ++k ){
+                    b[k] = 3.0f;
+                }
+                // c = -1       
+                for( Dim k = 0; k < Nz-1; ++k ){
+                    c[k] = -1.0f;
+                }
+                // d = rhs
+                for( Dim k = 0; k < Nz; ++k ){
+                    d[k] = rhs.get(stride + k*Nx*Ny);
+                }
+                // Solve the tridiagonal system
+                thomas_algorithm(a, b, c, d, x);
+                // Store the solution
+                for( Dim k = 0; k < Nz; ++k ){
+                    solution.set(stride + k*Nx*Ny) = x[k];
+                }
+            }
+        }
+    }
+}
