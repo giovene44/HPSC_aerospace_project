@@ -71,15 +71,12 @@ public:
         c_prime[0] = c[0] / b[0];
         rhs_prime[0] = rhs[0] / b[0];
 
-        for (int i = 1; i < n - 1; ++i)
+        for (int i = 1; i < n; ++i)
         {
-            float m = 1.0 / (b[i] - a[i - 1] * c_prime[i - 1]);
+            float m = 1.0 / (b[i] - a[i] * c_prime[i - 1]);
             c_prime[i] = c[i] * m;
-            rhs_prime[i] = (rhs[i] - a[i - 1] * rhs_prime[i - 1]) * m;
+            rhs_prime[i] = (rhs[i] - a[i] * rhs_prime[i - 1]) * m;
         }
-
-        float m = 1.0 / (b[n - 1] - a[n - 2] * c_prime[n - 2]);
-        rhs_prime[n - 1] = (rhs[n - 1] - a[n - 2] * rhs_prime[n - 2]) * m;
 
         x[n - 1] = rhs_prime[n - 1];
 
@@ -101,8 +98,12 @@ public:
     void compute_vector_gamma_D_term(int direction);
     void compute_vector_rhs(const VectorVariable &vector1, const VectorVariable &vector2);
 
-    void block_solver(int derivation_direction, const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
-    void block_solver(int derivation_direction, const ScalarVariables &rhs, ScalarVariables &solution);
+    void block_solver_x(const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
+    void block_solver_y(const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
+    void block_solver_z(const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
+    void block_solver_x(const ScalarVariables &rhs, ScalarVariables &solution);
+    void block_solver_y(const ScalarVariables &rhs, ScalarVariables &solution);
+    void block_solver_z(const ScalarVariables &rhs, ScalarVariables &solution);
 
     // TODO:
     /*
