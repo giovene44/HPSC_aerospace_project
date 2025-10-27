@@ -13,7 +13,7 @@ public:
     {
         data.clear();
         for (int a = 0; a < 3; ++a)
-            data.push_back(ScalarVariables(Nx, Ny, Nz));
+            data.push_back(ScalarVariables(Nx, Ny, Nz, dx, dy, dz));
     }
 
     inline Dim size() const noexcept
@@ -81,21 +81,21 @@ public:
         Real v1, v2, den, val;
         if (derivation_direction == 0)
         { // x direction
-            v1 = value(axes, i + 1, j, k);
+            v1 = value(axes, i, j, k);
             v2 = value(axes, i - 1, j, k);
-            den = 2 * dx; // uses a centered finite differences scheme
+            den = dx; // uses a centered finite differences scheme
         }
         else if (derivation_direction == 1)
         { // y direction
-            v1 = value(axes, i, j + 1, k);
+            v1 = value(axes, i, j, k);
             v2 = value(axes, i, j - 1, k);
-            den = 2 * dy;
+            den = dy;
         }
         else if (derivation_direction == 2)
         { // z direction
-            v1 = value(axes, i, j, k + 1);
+            v1 = value(axes, i, j, k);
             v2 = value(axes, i, j, k - 1);
-            den = 2 * dz;
+            den = dz;
         }
         val = v1 - v2;
         val /= den;

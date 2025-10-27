@@ -27,11 +27,11 @@ public:
     NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz, const float dt, const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f)
         : Nx(Nx), Ny(Ny), Nz(Nz), dt(dt), dx(dx), dy(dy), dz(dz),
           u_0(Nx, Ny, Nz, dx, dy, dz),
-          p_0(Nx, Ny, Nz),
+          p_0(Nx, Ny, Nz, dx, dy, dz),
           f(Nx, Ny, Nz, dx, dy, dz),
-          nu(Nx, Ny, Nz),
-          k_field(Nx, Ny, Nz),
-          gamma_field(Nx, Ny, Nz),
+          nu(Nx, Ny, Nz, dx, dy, dz),
+          k_field(Nx, Ny, Nz, dx, dy, dz),
+          gamma_field(Nx, Ny, Nz, dx, dy, dz),
           g(Nx, Ny, Nz, dx, dy, dz),
           vector_gamma_D_term(Nx, Ny, Nz, dx, dy, dz),
           vector_rhs(Nx, Ny, Nz, dx, dy, dz),
@@ -43,15 +43,15 @@ public:
           zeta_1(Nx, Ny, Nz, dx, dy, dz),
           gradient_pressure(Nx, Ny, Nz, dx, dy, dz),
           velocity_solution(Nx, Ny, Nz, dx, dy, dz),
-          rhs(Nx, Ny, Nz),
-          psi(Nx, Ny, Nz),
-          phi(Nx, Ny, Nz),
-          other_phi(Nx, Ny, Nz),
-          sol_linear_system(Nx, Ny, Nz),
-          a(Nx, Ny, Nz),
-          b(Nx, Ny, Nz),
-          c(Nx, Ny, Nz),
-          pressure_solution(Nx, Ny, Nz)
+          rhs(Nx, Ny, Nz, dx, dy, dz),
+          psi(Nx, Ny, Nz, dx, dy, dz),
+          phi(Nx, Ny, Nz, dx, dy, dz),
+          other_phi(Nx, Ny, Nz, dx, dy, dz),
+          sol_linear_system(Nx, Ny, Nz, dx, dy, dz),
+          a(Nx, Ny, Nz, dx, dy, dz),
+          b(Nx, Ny, Nz, dx, dy, dz),
+          c(Nx, Ny, Nz, dx, dy, dz),
+          pressure_solution(Nx, Ny, Nz, dx, dy, dz)
     {
         // constructor body (leave empty or add initialization code here)
     }
@@ -101,6 +101,10 @@ public:
     void compute_vector_gamma_D_term(int direction);
     void compute_vector_rhs(const VectorVariable &vector1, const VectorVariable &vector2);
 
+    void compute_scalar_rhs_pressure_1();
+
+    // solvers:
+    void NavierStokesBrinkmann::impose_Neumann_bc_scalar(int direction, int side, float neumann_boundary_value);
     void block_solver(int derivation_direction, const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
     void block_solver(int derivation_direction, const ScalarVariables &rhs, ScalarVariables &solution);
 

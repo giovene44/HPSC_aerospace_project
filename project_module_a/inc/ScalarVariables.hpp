@@ -14,8 +14,8 @@ public:
      * Initializes an empty scalar field of given dimensions
      * and fills it with zeros.
      */
-    ScalarVariables(const Dim Nx, const Dim Ny, const Dim Nz)
-        : Nx(Nx), Ny(Ny), Nz(Nz)
+    ScalarVariables(const Dim Nx, const Dim Ny, const Dim Nz, const Real dx_, const Real dy_, const Real dz_)
+        : Nx(Nx), Ny(Ny), Nz(Nz), dx(dx_), dy(dy_), dz(dz_)
     {
         size_t total = static_cast<size_t>(Nx) * static_cast<size_t>(Ny) * static_cast<size_t>(Nz);
         data.assign(total, Real(0));
@@ -40,7 +40,7 @@ public:
     // --- Operators ---
     ScalarVariables operator+(const ScalarVariables &other) const
     {
-        ScalarVariables result(Nx, Ny, Nz);
+        ScalarVariables result(Nx, Ny, Nz, dx, dy, dz);
         for (Dim index = 0; index < Nx * Ny * Nz; ++index)
         {
             result.set(index) = this->get(index) + other.get(index);
@@ -81,7 +81,7 @@ public:
     // --- Gradients ---
     Real getGradient_x(Dim i, Dim j, Dim k) const
     {
-        auto lhs = i % Nx > 0 ? get(i - 1, j, k) : 0.0f;
+        auto lhs = i % Nx > 0 ? get(i, j, k) : 0.0f;
         auto rhs = i % Nx < Nx - 1 ? get(i + 1, j, k) : 0.0f;
         return (rhs - lhs) * 0.5f;
     }
@@ -91,14 +91,12 @@ public:
         Dim i = index % Nx;
         Dim j = (index / Nx) % Ny;
         Dim k = index / (Nx * Ny);
-        auto lhs = i % Nx > 0 ? get(i - 1, j, k) : 0.0f;
-        auto rhs = i % Nx < Nx - 1 ? get(i + 1, j, k) : 0.0f;
-        return (rhs - lhs) * 0.5f;
+        return getGradient_x(i, j, k);
     }
 
     Real getGradient_y(Dim i, Dim j, Dim k) const
     {
-        auto lhs = j % Ny > 0 ? get(i, j - 1, k) : 0.0f;
+        auto lhs = j % Ny > 0 ? get(i, j, k) : 0.0f;
         auto rhs = j % Ny < Ny - 1 ? get(i, j + 1, k) : 0.0f;
         return (rhs - lhs) * 0.5f;
     }
@@ -108,14 +106,12 @@ public:
         Dim i = index % Nx;
         Dim j = (index / Nx) % Ny;
         Dim k = index / (Nx * Ny);
-        auto lhs = j % Ny > 0 ? get(i, j - 1, k) : 0.0f;
-        auto rhs = j % Ny < Ny - 1 ? get(i, j + 1, k) : 0.0f;
-        return (rhs - lhs) * 0.5f;
+        return getGradient_y(i, j, k);
     }
 
     Real getGradient_z(Dim i, Dim j, Dim k) const
     {
-        auto lhs = k % Nz > 0 ? get(i, j, k - 1) : 0.0f;
+        auto lhs = k % Nz > 0 ? get(i, j, k) : 0.0f;
         auto rhs = k % Nz < Nz - 1 ? get(i, j, k + 1) : 0.0f;
         return (rhs - lhs) * 0.5f;
     }
@@ -125,9 +121,7 @@ public:
         Dim i = index % Nx;
         Dim j = (index / Nx) % Ny;
         Dim k = index / (Nx * Ny);
-        auto lhs = k % Nz > 0 ? get(i, j, k - 1) : 0.0f;
-        auto rhs = k % Nz < Nz - 1 ? get(i, j, k + 1) : 0.0f;
-        return (rhs - lhs) * 0.5f;
+        return getGradient_z(i, j, k);
     }
 
     // --- Utility ---
@@ -140,6 +134,7 @@ private:
     const Dim Ny;
     const Dim Nz;
     std::vector<Real> data;
+    Real dx, dy, dz;
 };
 
 #endif // SCALARVARIABLES_HPP
