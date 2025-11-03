@@ -76,6 +76,7 @@ public:
         return data[axes].set(index);
     }
 
+    // !!! : WE ONLY USE THIS ON THE BOUNDARY CONDITION => IF WE USE OTHERWISE IT IS WRONG
     Real first_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const
     {
         Real v1, v2, den, val;
