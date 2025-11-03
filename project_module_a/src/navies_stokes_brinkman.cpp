@@ -210,19 +210,30 @@ void NavierStokesBrinkmann::compute_scalar_rhs_pressure_1()
 
 void NavierStokesBrinkmann::impose_Neumann_bc_scalar(int direction, int side, float neumann_boundary_value)
 {
+    float value, c;
     if (direction == 0)
     {
+
         int i;
+
         if (side == 0)
+        {
             i = 0;
+            value = 2.0f * dx * neumann_boundary_value;
+        }
+
         else
+        {
             i = Nx - 1;
+            c = (1 + 1.0f / dx * dx);
+            value = -dx * c * neumann_boundary_value;
+        }
 
         for (int y = 0; y < Ny; y++)
         {
             for (int z = 0; z < Nz; z++)
             {
-                rhs.set(i, y, z) = rhs.get(i, y, z) + 2 * dx * neumann_boundary_value;
+                rhs.set(i, y, z) = rhs.get(i, y, z) + value;
             }
         }
     }
@@ -230,15 +241,23 @@ void NavierStokesBrinkmann::impose_Neumann_bc_scalar(int direction, int side, fl
     {
         int y;
         if (side == 0)
+        {
             y = 0;
+            value = 2.0f * dy * neumann_boundary_value;
+        }
+
         else
+        {
             y = Ny - 1;
+            c = (1 + 1.0f / dy * dy);
+            value = -dy * c * neumann_boundary_value;
+        }
 
         for (int i = 0; i < Nx; i++)
         {
             for (int z = 0; z < Nz; z++)
             {
-                rhs.set(i, y, z) = rhs.get(i, y, z) + 2 * dx * neumann_boundary_value;
+                rhs.set(i, y, z) = rhs.get(i, y, z) + value;
             }
         }
     }
@@ -246,15 +265,23 @@ void NavierStokesBrinkmann::impose_Neumann_bc_scalar(int direction, int side, fl
     {
         int z;
         if (side == 0)
+        {
             z = 0;
+            value = 2.0f * dz * neumann_boundary_value;
+        }
+
         else
+        {
             z = Nz - 1;
+            c = (1 + 1.0f / dz * dz);
+            value = -dz * c * neumann_boundary_value;
+        }
 
         for (int i = 0; i < Nx; i++)
         {
             for (int y = 0; y < Ny; y++)
             {
-                rhs.set(i, y, z) = rhs.get(i, y, z) + 2 * dx * neumann_boundary_value;
+                rhs.set(i, y, z) = rhs.get(i, y, z) + value;
             }
         }
     }
@@ -486,19 +513,19 @@ void NavierStokesBrinkmann::block_solver_y(const ScalarVariables &rhs, ScalarVar
     std::vector<float> c(Ny, -1 / (dy * dy));
     std::vector<float> d(Ny);
     std::vector<float> x(Ny);
-    //first compute central block 
-    for (Dim i = 1; i < Nx-1; ++i)
+    // first compute central block
+    for (Dim i = 1; i < Nx - 1; ++i)
     {
         for (Dim k = 0; k < Nz; ++k)
         {
 
             Dim stride = i + k * Nx * Ny;
 
-         /*    // Boundary conditions on a,b,c can be set here if needed
-            a[stride] = 0.0f;
-            c[stride] = -2.0f / (dy * dy);
-            b[stride + Ny - 1] = 1.0f + 1.0f / (dy * dy);
-            c[stride + Ny - 1] = 0.0f; */
+            /*    // Boundary conditions on a,b,c can be set here if needed
+               a[stride] = 0.0f;
+               c[stride] = -2.0f / (dy * dy);
+               b[stride + Ny - 1] = 1.0f + 1.0f / (dy * dy);
+               c[stride + Ny - 1] = 0.0f; */
 
             // d = rhs
             for (Dim j = 0; j < Ny; ++j)
@@ -517,11 +544,11 @@ void NavierStokesBrinkmann::block_solver_y(const ScalarVariables &rhs, ScalarVar
         }
     }
 
-    //then compute left boundary
-    a= std::vector<float> (Ny, 0.0 / (dy * dy));
-    b= std::vector<float> (Ny, 1.0f + 1.0f / (dy * dy));
-    c= std::vector<float> (Ny, -2.0f / (dy * dy));
-    
+    // then compute left boundary
+    a = std::vector<float>(Ny, 0.0 / (dy * dy));
+    b = std::vector<float>(Ny, 1.0f + 1.0f / (dy * dy));
+    c = std::vector<float>(Ny, -2.0f / (dy * dy));
+
     for (Dim k = 0; k < Nz; ++k)
     {
 
@@ -541,17 +568,16 @@ void NavierStokesBrinkmann::block_solver_y(const ScalarVariables &rhs, ScalarVar
         {
             solution.set(stride + j * Nx) = x[j];
         }
-        
     }
 
-    //then compute right boundary
-    a= std::vector<float> (Ny, -2.0 / (dy * dy));
-    b= std::vector<float> (Ny, 1.0f + 1.0f / (dy * dy));
-    c= std::vector<float> (Ny, 0.0f / (dy * dy));
+    // then compute right boundary
+    a = std::vector<float>(Ny, -2.0 / (dy * dy));
+    b = std::vector<float>(Ny, 1.0f + 1.0f / (dy * dy));
+    c = std::vector<float>(Ny, 0.0f / (dy * dy));
     for (Dim k = 0; k < Nz; ++k)
     {
 
-        Dim stride = (Nx-1) + k * Nx * Ny;
+        Dim stride = (Nx - 1) + k * Nx * Ny;
 
         // d = rhs
         for (Dim j = 0; j < Ny; ++j)
@@ -567,7 +593,6 @@ void NavierStokesBrinkmann::block_solver_y(const ScalarVariables &rhs, ScalarVar
         {
             solution.set(stride + j * Nx) = x[j];
         }
-        
     }
 }
 
@@ -578,8 +603,8 @@ void NavierStokesBrinkmann::block_solver_z(const ScalarVariables &rhs, ScalarVar
     std::vector<float> b(Nz, 1.0f + 2 / (dz * dz));
     std::vector<float> c(Nz, -1 / (dz * dz));
     std::vector<float> d(Nz);
-    std::vector<float> x(Nz);   
-    for (Dim i = 1; i < Nx-1; ++i)
+    std::vector<float> x(Nz);
+    for (Dim i = 1; i < Nx - 1; ++i)
     {
         for (Dim j = 0; j < Ny; ++j)
         {
@@ -602,11 +627,11 @@ void NavierStokesBrinkmann::block_solver_z(const ScalarVariables &rhs, ScalarVar
             }
         }
     }
-    //then compute left boundary
-    a= std::vector<float> (Ny, 0.0 / (dy * dy));
-    b= std::vector<float> (Ny, 1.0f + 1.0f / (dy * dy));
-    c= std::vector<float> (Ny, -2.0f / (dy * dy));
-    
+    // then compute left boundary
+    a = std::vector<float>(Ny, 0.0 / (dy * dy));
+    b = std::vector<float>(Ny, 1.0f + 1.0f / (dy * dy));
+    c = std::vector<float>(Ny, -2.0f / (dy * dy));
+
     for (Dim k = 0; k < Nz; ++k)
     {
 
@@ -626,17 +651,16 @@ void NavierStokesBrinkmann::block_solver_z(const ScalarVariables &rhs, ScalarVar
         {
             solution.set(stride + j * Nx) = x[j];
         }
-        
     }
 
-    //then compute right boundary
-    a= std::vector<float> (Ny, -2.0 / (dy * dy));
-    b= std::vector<float> (Ny, 1.0f + 1.0f / (dy * dy));
-    c= std::vector<float> (Ny, 0.0f / (dy * dy));
+    // then compute right boundary
+    a = std::vector<float>(Ny, -2.0 / (dy * dy));
+    b = std::vector<float>(Ny, 1.0f + 1.0f / (dy * dy));
+    c = std::vector<float>(Ny, 0.0f / (dy * dy));
     for (Dim k = 0; k < Nz; ++k)
     {
 
-        Dim stride = (Nx-1) + k * Nx * Ny;
+        Dim stride = (Nx - 1) + k * Nx * Ny;
 
         // d = rhs
         for (Dim j = 0; j < Ny; ++j)
@@ -652,6 +676,5 @@ void NavierStokesBrinkmann::block_solver_z(const ScalarVariables &rhs, ScalarVar
         {
             solution.set(stride + j * Nx) = x[j];
         }
-        
     }
 }
