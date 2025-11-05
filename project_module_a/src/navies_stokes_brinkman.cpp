@@ -1,6 +1,4 @@
 #include "navier_stokes_brinkman.hpp"
-#include "VectorVariable.hpp"
-#include "VectorVariable.hpp"
 #include <stdexcept>
 
 #include <cmath> // for std::abs
@@ -457,7 +455,8 @@ void NavierStokesBrinkmann::block_solver(int derivation_direction, const ScalarV
     }
 }
 
-void NavierStokesBrinkmann::block_solver_x(const ScalarVariables &rhs, ScalarVariables &solution)
+template <typename StrideFunc>
+void NavierStokesBrinkmann::block_solver(const ScalarVariables &rhs, ScalarVariables &solution, const DimensionsHandler<StrideFunc> &dim_hand)
 {
     // ----------------------------------------------------------------------------
     // Implementation of the block_solver method for the pressure: (no gamma needed here)
@@ -468,213 +467,45 @@ void NavierStokesBrinkmann::block_solver_x(const ScalarVariables &rhs, ScalarVar
 
     // this method decomposes the 3D problem into multiple 1D tridiagonal systems.
     // this decomposition is based on the specified direction (0 for x, 1 for y, 2 for z).
+    using N1 = dim_hand.N1;
+    using N2 = dim_hand.N2;
+    using N3 = dim_hand.N3;
+    using dN1 = dim_hand.dN1;
+    using stride_func = dim_hand.stride;
 
-    std::vector<float> a(Nx, -1.0 / (dx * dx));
-    std::vector<float> b(Nx, 1.0f + 2.0f / (dx * dx));
-    std::vector<float> c(Nx, -1.0 / (dx * dx));
-    std::vector<float> d(Nx);
-    std::vector<float> x(Nx);
+    std::vector<Real> a(N1, Real(-1.0) / (dN1 * dN1));
+    std::vector<Real> b(N1, Real(1.0) + Real(2.0) / (dN1 * dN1));
+    std::vector<Real> c(N1, Real(-1.0) / (dN1 * dN1));
+    std::vector<Real> d(N1);
+    std::vector<Real> x(N1);
 
     // Boundary conditions on a,b,c can be set here if needed
     a[0] = 0.0f;
-    c[0] = -2.0f / (dx * dx);
-    b[Nx - 1] = 1.0f + 1.0f / (dx * dx);
-    c[Nx - 1] = 0.0f;
+    c[0] = -2.0f / (dN1 * dN1);
+    b[N1 - 1] = 1.0f + 1.0f / (dN1 * dN1);
+    c[N1 - 1] = 0.0f;
 
-    for (Dim j = 0; j < Ny; ++j)
+    for (Dim inedx_1 = 0; inedx_1 < N2; ++inedx_1)
     {
-        for (Dim k = 0; k < Nz; ++k)
+        for (Dim inedx_2 = 0; inedx_2 < N3; ++inedx_2)
         {
 
-            Dim stride = j * Nx + k * Nx * Ny;
+            Dim stride = stride_func(inedx_1, inedx_2);
 
             // d = rhs
-            for (Dim i = 0; i < Nx; ++i)
+            for (Dim index_0 = 0; index_0 < N1; ++index_0)
             {
-                d[i] = rhs.get(stride + i);
+                d[index_0] = rhs.get(stride + index_0);
             }
 
             // Solve the tridiagonal system
             thomas_algorithm(a, b, c, d, x);
 
             // Store the solution
-            for (Dim i = 0; i < Nx; ++i)
+            for (Dim index_0 = 0; index_0 < N1; ++index_0)
             {
-                solution.set(stride + i) = x[i];
+                solution.set(stride + index_0) = x[index_0];
             }
-        }
-    }
-}
-void NavierStokesBrinkmann::block_solver_y(const ScalarVariables &rhs, ScalarVariables &solution)
-{
-    // Similar implementation as block_solver_x but for the y-direction
-    std::vector<float> a(Ny, -1 / (dy * dy));
-    std::vector<float> b(Ny, 1.0f + 2 / (dy * dy));
-    std::vector<float> c(Ny, -1 / (dy * dy));
-    std::vector<float> d(Ny);
-    std::vector<float> x(Ny);
-    // first compute central block
-    for (Dim i = 1; i < Nx - 1; ++i)
-    {
-        for (Dim k = 0; k < Nz; ++k)
-        {
-
-            Dim stride = i + k * Nx * Ny;
-
-            /*    // Boundary conditions on a,b,c can be set here if needed
-               a[stride] = 0.0f;
-               c[stride] = -2.0f / (dy * dy);
-               b[stride + Ny - 1] = 1.0f + 1.0f / (dy * dy);
-               c[stride + Ny - 1] = 0.0f; */
-
-            // d = rhs
-            for (Dim j = 0; j < Ny; ++j)
-            {
-                d[j] = rhs.get(stride + j * Nx);
-            }
-
-            // Solve the tridiagonal system
-            thomas_algorithm(a, b, c, d, x);
-
-            // Store the solution
-            for (Dim j = 0; j < Ny; ++j)
-            {
-                solution.set(stride + j * Nx) = x[j];
-            }
-        }
-    }
-
-    // then compute left boundary
-    a = std::vector<float>(Ny, 0.0 / (dy * dy));
-    b = std::vector<float>(Ny, 1.0f + 1.0f / (dy * dy));
-    c = std::vector<float>(Ny, -2.0f / (dy * dy));
-
-    for (Dim k = 0; k < Nz; ++k)
-    {
-
-        Dim stride = 0 + k * Nx * Ny;
-
-        // d = rhs
-        for (Dim j = 0; j < Ny; ++j)
-        {
-            d[j] = rhs.get(stride + j * Nx);
-        }
-
-        // Solve the tridiagonal system
-        thomas_algorithm(a, b, c, d, x);
-
-        // Store the solution
-        for (Dim j = 0; j < Ny; ++j)
-        {
-            solution.set(stride + j * Nx) = x[j];
-        }
-    }
-
-    // then compute right boundary
-    a = std::vector<float>(Ny, -2.0 / (dy * dy));
-    b = std::vector<float>(Ny, 1.0f + 1.0f / (dy * dy));
-    c = std::vector<float>(Ny, 0.0f / (dy * dy));
-    for (Dim k = 0; k < Nz; ++k)
-    {
-
-        Dim stride = (Nx - 1) + k * Nx * Ny;
-
-        // d = rhs
-        for (Dim j = 0; j < Ny; ++j)
-        {
-            d[j] = rhs.get(stride + j * Nx);
-        }
-
-        // Solve the tridiagonal system
-        thomas_algorithm(a, b, c, d, x);
-
-        // Store the solution
-        for (Dim j = 0; j < Ny; ++j)
-        {
-            solution.set(stride + j * Nx) = x[j];
-        }
-    }
-}
-
-void NavierStokesBrinkmann::block_solver_z(const ScalarVariables &rhs, ScalarVariables &solution)
-{
-    // Similar implementation as block_solver_y but for the z-direction
-    std::vector<float> a(Nz, -1 / (dz * dz));
-    std::vector<float> b(Nz, 1.0f + 2 / (dz * dz));
-    std::vector<float> c(Nz, -1 / (dz * dz));
-    std::vector<float> d(Nz);
-    std::vector<float> x(Nz);
-    for (Dim i = 1; i < Nx - 1; ++i)
-    {
-        for (Dim j = 0; j < Ny; ++j)
-        {
-
-            Dim stride = i + j * Nx;
-
-            // d = rhs
-            for (Dim k = 0; k < Nz; ++k)
-            {
-                d[k] = rhs.get(stride + k * Nx * Ny);
-            }
-
-            // Solve the tridiagonal system
-            thomas_algorithm(a, b, c, d, x);
-
-            // Store the solution
-            for (Dim k = 0; k < Nz; ++k)
-            {
-                solution.set(stride + k * Nx * Ny) = x[k];
-            }
-        }
-    }
-    // then compute left boundary
-    a = std::vector<float>(Ny, 0.0 / (dy * dy));
-    b = std::vector<float>(Ny, 1.0f + 1.0f / (dy * dy));
-    c = std::vector<float>(Ny, -2.0f / (dy * dy));
-
-    for (Dim k = 0; k < Nz; ++k)
-    {
-
-        Dim stride = 0 + k * Nx * Ny;
-
-        // d = rhs
-        for (Dim j = 0; j < Ny; ++j)
-        {
-            d[j] = rhs.get(stride + j * Nx);
-        }
-
-        // Solve the tridiagonal system
-        thomas_algorithm(a, b, c, d, x);
-
-        // Store the solution
-        for (Dim j = 0; j < Ny; ++j)
-        {
-            solution.set(stride + j * Nx) = x[j];
-        }
-    }
-
-    // then compute right boundary
-    a = std::vector<float>(Ny, -2.0 / (dy * dy));
-    b = std::vector<float>(Ny, 1.0f + 1.0f / (dy * dy));
-    c = std::vector<float>(Ny, 0.0f / (dy * dy));
-    for (Dim k = 0; k < Nz; ++k)
-    {
-
-        Dim stride = (Nx - 1) + k * Nx * Ny;
-
-        // d = rhs
-        for (Dim j = 0; j < Ny; ++j)
-        {
-            d[j] = rhs.get(stride + j * Nx);
-        }
-
-        // Solve the tridiagonal system
-        thomas_algorithm(a, b, c, d, x);
-
-        // Store the solution
-        for (Dim j = 0; j < Ny; ++j)
-        {
-            solution.set(stride + j * Nx) = x[j];
         }
     }
 }

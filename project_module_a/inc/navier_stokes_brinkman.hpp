@@ -2,6 +2,7 @@
 #include <cmath>
 #include "ScalarVariables.hpp"
 #include "VectorVariable.hpp"
+#include "DimensionsHandler.hpp"
 
 class NavierStokesBrinkmann
 {
@@ -103,9 +104,9 @@ public:
     void block_solver_x(const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
     void block_solver_y(const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
     void block_solver_z(const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
-    void block_solver_x(const ScalarVariables &rhs, ScalarVariables &solution);
-    void block_solver_y(const ScalarVariables &rhs, ScalarVariables &solution);
-    void block_solver_z(const ScalarVariables &rhs, ScalarVariables &solution);
+    
+    template<typename StrideFunction>
+    void NavierStokesBrinkmann::block_solver(const ScalarVariables &rhs, ScalarVariables &solution, const DimensionsHandler<StrideFunction> &dim_hand);
 
     // TODO:
     /*
@@ -113,6 +114,7 @@ public:
     - boundary conditions
     - solve scalar linear system
     - solve vector linear system
+    - include DimensionHandler (stride functions has to be declared in the solve functions)
     */
 
     // ============================================================================
