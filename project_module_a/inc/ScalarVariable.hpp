@@ -1,12 +1,12 @@
-#ifndef SCALARVARIABLES_HPP
-#define SCALARVARIABLES_HPP
+#ifndef SCALARVARIABLE_HPP
+#define SCALARVARIABLE_HPP
 
-#include "variables.hpp"
+#include "Variables.hpp"
 #include <vector>
 #include <iostream>
 #include <stdexcept>
 
-class ScalarVariables
+class ScalarVariable
 {
 public:
     /**
@@ -14,7 +14,7 @@ public:
      * Initializes an empty scalar field of given dimensions
      * and fills it with zeros.
      */
-    ScalarVariables(const Dim Nx, const Dim Ny, const Dim Nz, const Real dx_, const Real dy_, const Real dz_)
+    ScalarVariable(const Dim Nx, const Dim Ny, const Dim Nz, const Real dx_, const Real dy_, const Real dz_)
         : Nx(Nx), Ny(Ny), Nz(Nz), dx(dx_), dy(dy_), dz(dz_)
     {
         size_t total = static_cast<size_t>(Nx) * static_cast<size_t>(Ny) * static_cast<size_t>(Nz);
@@ -26,21 +26,21 @@ public:
      * Initializes the scalar field with an existing data vector.
      * The vector must have size Nx * Ny * Nz.
      */
-    ScalarVariables(const Dim Nx, const Dim Ny, const Dim Nz, const std::vector<Real> &input_data)
+    ScalarVariable(const Dim Nx, const Dim Ny, const Dim Nz, const std::vector<Real> &input_data)
         : Nx(Nx), Ny(Ny), Nz(Nz)
     {
         if (input_data.size() != static_cast<size_t>(Nx * Ny * Nz))
         {
             throw std::invalid_argument(
-                "Error in ScalarVariables constructor: input_data size does not match Nx*Ny*Nz");
+                "Error in ScalarVariable constructor: input_data size does not match Nx*Ny*Nz");
         }
         data = input_data;
     }
 
     // --- Operators ---
-    ScalarVariables operator+(const ScalarVariables &other) const
+    ScalarVariable operator+(const ScalarVariable &other) const
     {
-        ScalarVariables result(Nx, Ny, Nz, dx, dy, dz);
+        ScalarVariable result(Nx, Ny, Nz, dx, dy, dz);
         for (Dim index = 0; index < Nx * Ny * Nz; ++index)
         {
             result.set(index) = this->get(index) + other.get(index);
@@ -48,7 +48,7 @@ public:
         return result;
     }
 
-    ScalarVariables &operator+=(const ScalarVariables &other)
+    ScalarVariable &operator+=(const ScalarVariable &other)
     {
         for (Dim index = 0; index < Nx * Ny * Nz; ++index)
         {
@@ -137,4 +137,4 @@ private:
     Real dx, dy, dz;
 };
 
-#endif // SCALARVARIABLES_HPP
+#endif // SCALARVARIABLE_HPP

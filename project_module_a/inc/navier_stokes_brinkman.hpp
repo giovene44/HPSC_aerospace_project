@@ -1,6 +1,6 @@
 #include <string>
 #include <cmath>
-#include "ScalarVariables.hpp"
+#include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
 #include "DimensionsHandler.hpp"
 
@@ -100,13 +100,11 @@ public:
     void compute_vector_rhs(const VectorVariable &vector1, const VectorVariable &vector2);
     void compute_scalar_rhs_pressure_1();
     void impose_Neumann_bc_scalar(int direction, int side, float neumann_boundary_value);
-    void block_solver(int derivation_direction, const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
-    void block_solver_x(const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
-    void block_solver_y(const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
-    void block_solver_z(const ScalarVariables &rhs, const ScalarVariables &gamma, ScalarVariables &solution);
-    
+
     template<typename StrideFunction>
-    void NavierStokesBrinkmann::block_solver(const ScalarVariables &rhs, ScalarVariables &solution, const DimensionsHandler<StrideFunction> &dim_hand);
+    void NavierStokesBrinkmann::block_solver(const ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandler<StrideFunction> &dim_hand);
+    template<typename StrideFunction>
+    void NavierStokesBrinkmann::block_solver(const ScalarVariable &rhs, const ScalarVariable &gamma, ScalarVariable &solution, const DimensionsHandler<StrideFunction> &dim_hand);
 
     // TODO:
     /*
@@ -136,11 +134,11 @@ public:
     // PHYSICAL AND MATERIAL FIELDS
     // ============================================================================
     VectorVariable u_0;          // Velocity field
-    ScalarVariables p_0;         // Pressure field
+    ScalarVariable p_0;         // Pressure field
     VectorVariable f;            // Forcing term (can vary in space)
-    ScalarVariables nu;          // Kinematic viscosity (can vary in space)
-    ScalarVariables k_field;     // Brinkman permeability or resistance term
-    ScalarVariables gamma_field; // Gamma field for Brinkman term
+    ScalarVariable nu;          // Kinematic viscosity (can vary in space)
+    ScalarVariable k_field;     // Brinkman permeability or resistance term
+    ScalarVariable gamma_field; // Gamma field for Brinkman term
 
     // ============================================================================
     // VECTOR LINEAR SOLVER VARIABLES (MOMENTUM EQUATION)
@@ -160,18 +158,18 @@ public:
     // ============================================================================
     // SCALAR LINEAR SOLVER VARIABLES (PRESSURE EQUATION AND OTHER SCALARS)
     // ============================================================================
-    ScalarVariables rhs;       // RHS of scalar Poisson equation
-    ScalarVariables psi;       // Auxiliary scalar (potential or correction)
-    ScalarVariables phi;       // Pressure correction
-    ScalarVariables other_phi; // Additional scalar field for iterative updates
+    ScalarVariable rhs;       // RHS of scalar Poisson equation
+    ScalarVariable psi;       // Auxiliary scalar (potential or correction)
+    ScalarVariable phi;       // Pressure correction
+    ScalarVariable other_phi; // Additional scalar field for iterative updates
 
-    ScalarVariables sol_linear_system; // Temporary solution of scalar linear system
-    ScalarVariables a;                 // Tridiagonal coefficient a (lower diag)
-    ScalarVariables b;                 // Tridiagonal coefficient b (main diag)
-    ScalarVariables c;                 // Tridiagonal coefficient c (upper diag)
+    ScalarVariable sol_linear_system; // Temporary solution of scalar linear system
+    ScalarVariable a;                 // Tridiagonal coefficient a (lower diag)
+    ScalarVariable b;                 // Tridiagonal coefficient b (main diag)
+    ScalarVariable c;                 // Tridiagonal coefficient c (upper diag)
     // ============================================================================
     // FINAL SOLUTION STORAGE
     // ============================================================================
     VectorVariable velocity_solution;  // Final converged velocity
-    ScalarVariables pressure_solution; // Final converged pressure
+    ScalarVariable pressure_solution; // Final converged pressure
 };

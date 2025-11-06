@@ -1,4 +1,4 @@
-#include "ScalarVariables.hpp"
+#include "ScalarVariable.hpp"
 #include "NavierStokesBrinkman.hpp"
 
 // CODE TO BE LATER INSERTED INTO THE MAIN CLASS NavierStokesBrinkman
@@ -27,7 +27,7 @@ std::function<float(float, float, float)> BC_function_w = [](float x, float y, f
     return 1.0f;
 };
 
-void apply_bc_to_rhs1(ScalarVariables &rhs)
+void apply_bc_to_rhs1(ScalarVariable &rhs)
 {
     //applying boundary conditions to rhs_1
     
@@ -46,7 +46,7 @@ void apply_bc_to_rhs1(ScalarVariables &rhs)
     }
 }
 
-void apply_bc_to_rhs2(ScalarVariables &rhs)
+void apply_bc_to_rhs2(ScalarVariable &rhs)
 {
     //applying boundary conditions to rhs_2
     
@@ -64,7 +64,7 @@ void apply_bc_to_rhs2(ScalarVariables &rhs)
     }
 }
 
-void apply_bc_to_rhs3(ScalarVariables &rhs)
+void apply_bc_to_rhs3(ScalarVariable &rhs)
 {
     //applying boundary conditions to rhs_3
 
@@ -82,7 +82,7 @@ void apply_bc_to_rhs3(ScalarVariables &rhs)
     }
 }
 
-void apply_bc_to_rhs4(ScalarVariables &rhs)
+void apply_bc_to_rhs4(ScalarVariable &rhs)
 {
     //applying boundary conditions to rhs_1 for the rhs used when solving along y!
 
@@ -99,7 +99,7 @@ void apply_bc_to_rhs4(ScalarVariables &rhs)
     }
 }
 
-void apply_bc_to_rhs5(ScalarVariables &rhs)
+void apply_bc_to_rhs5(ScalarVariable &rhs)
 {
     //applying boundary conditions to rhs_2 for the rhs used when solving along y!
 
@@ -117,7 +117,7 @@ void apply_bc_to_rhs5(ScalarVariables &rhs)
     }
 }
 
-void apply_bc_to_rhs6(ScalarVariables &rhs)
+void apply_bc_to_rhs6(ScalarVariable &rhs)
 {
     //applying boundary conditions to rhs_3 for the rhs used when solving along y!
 
@@ -134,7 +134,7 @@ void apply_bc_to_rhs6(ScalarVariables &rhs)
 }
 
 
-void apply_bc_to_rhs7(ScalarVariables &rhs)
+void apply_bc_to_rhs7(ScalarVariable &rhs)
 {
     //applying boundary conditions to rhs_1 for the rhs used when solving along z!
 
@@ -151,7 +151,7 @@ void apply_bc_to_rhs7(ScalarVariables &rhs)
     }
 }
 
-void apply_bc_to_rhs8(ScalarVariables &rhs)
+void apply_bc_to_rhs8(ScalarVariable &rhs)
 {
     //applying boundary conditions to rhs_2 for the rhs used when solving along z!
 
@@ -168,7 +168,7 @@ void apply_bc_to_rhs8(ScalarVariables &rhs)
     }
 }
 
-void apply_bc_to_rhs9(ScalarVariables &rhs)
+void apply_bc_to_rhs9(ScalarVariable &rhs)
 {
     //applying boundary conditions to rhs_3 for the rhs used when solving along z!
 

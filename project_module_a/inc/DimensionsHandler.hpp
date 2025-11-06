@@ -1,4 +1,4 @@
-#include "variables.hpp"
+#include "Variables.hpp"
 
 template <typename StrideFunction>
 struct DimensionsHandler

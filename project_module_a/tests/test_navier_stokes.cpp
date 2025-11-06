@@ -51,7 +51,7 @@ namespace
         // -------------------------------------------------------------
         // Scalar fields
         // -------------------------------------------------------------
-        auto check_scalar = [&](const ScalarVariables &s, const std::string &name)
+        auto check_scalar = [&](const ScalarVariable &s, const std::string &name)
         {
             assert(s.size() == Nx * Ny * Nz);
             std::cout << "  • " << name << " OK" << std::endl;

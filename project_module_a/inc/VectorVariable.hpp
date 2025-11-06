@@ -1,7 +1,7 @@
 #ifndef VECTORVARIABLES_HPP
 #define VECTORVARIABLES_HPP
-#include "ScalarVariables.hpp"
-#include "variables.hpp"
+#include "ScalarVariable.hpp"
+#include "Variables.hpp"
 #include <vector>
 #include <iostream>
 
@@ -13,7 +13,7 @@ public:
     {
         data.clear();
         for (int a = 0; a < 3; ++a)
-            data.push_back(ScalarVariables(Nx, Ny, Nz, dx, dy, dz));
+            data.push_back(ScalarVariable(Nx, Ny, Nz, dx, dy, dz));
     }
 
     inline Dim size() const noexcept
@@ -162,7 +162,7 @@ public:
     }
 
 private:
-    std::vector<ScalarVariables> data;
+    std::vector<ScalarVariable> data;
     Dim Nx, Ny, Nz;
     Real dx, dy, dz;
 };
