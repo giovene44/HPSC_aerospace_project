@@ -7,7 +7,7 @@ namespace
     void dimension_test()
     {
         const Dim Nx = 4, Ny = 5, Nz = 6;
-        const Real dt = 0.01f;
+        const float dt = 0.01f;
         const Real dx = 0.1f, dy = 0.1f, dz = 0.1f;
 
         std::cout << "Running dimension test..." << std::endl;
@@ -93,7 +93,7 @@ namespace
     void compute_vector_g_test_v_p_costant()
     {
         const Dim Nx = 4, Ny = 4, Nz = 4;
-        const Real dt = 0.01f;
+        const float dt = 0.01f;
         const Real dx = 0.1f, dy = 0.1f, dz = 0.1f;
 
         std::cout << "Running g function test..." << std::endl;
@@ -112,9 +112,7 @@ namespace
                     for (Dim i = 0; i < Nx; ++i)
                     {
                         nsb.f.set(cmp, i, j, k) = static_cast<Real>(cmp + 1);
-                        nsb.u_0.set(cmp, i, j, k) = 2.0f;    // uniform velocity field
-                        nsb.eta.set(cmp, i, j, k) = 2.0f;  // uniform velocity field
-                        nsb.zeta.set(cmp, i, j, k) = 2.0f; // uniform velocity field
+                        nsb.u_0.set(cmp, i, j, k) = 2.0f; // uniform velocity field
                     }
         }
 
@@ -153,7 +151,7 @@ namespace
     void compute_vector_g_test_zero_forcing()
     {
         const Dim Nx = 4, Ny = 4, Nz = 4;
-        const Real dt = 0.01f;
+        const float dt = 0.01f;
         const Real dx = 0.1f, dy = 0.1f, dz = 0.1f;
 
         std::cout << "Running g test: zero forcing..." << std::endl;
@@ -199,7 +197,7 @@ namespace
     void compute_vector_g_test_variable_force()
     {
         const Dim Nx = 4, Ny = 4, Nz = 4;
-        const Real dt = 0.01f;
+        const float dt = 0.01f;
         const Real dx = 0.1f, dy = 0.1f, dz = 0.1f;
 
         std::cout << "Running g test: variable forcing..." << std::endl;
@@ -245,7 +243,7 @@ namespace
     void compute_vector_g_test_diffusion_term()
     {
         const Dim Nx = 4, Ny = 4, Nz = 4;
-        const Real dt = 0.01f;
+        const float dt = 0.01f;
         const Real dx = 0.1f, dy = 0.1f, dz = 0.1f;
 
         std::cout << "Running g test: diffusion term..." << std::endl;
@@ -268,14 +266,6 @@ namespace
                     nsb.u_0.set(0, i, j, k) = x * x;
                     nsb.u_0.set(1, i, j, k) = 0.0f;
                     nsb.u_0.set(2, i, j, k) = 0.0f;
-
-                    nsb.eta.set(0, i, j, k) = x * x;
-                    nsb.eta.set(1, i, j, k) = 0.0f;
-                    nsb.eta.set(2, i, j, k) = 0.0f;
-
-                    nsb.zeta.set(0, i, j, k) = x * x;
-                    nsb.zeta.set(1, i, j, k) = 0.0f;
-                    nsb.zeta.set(2, i, j, k) = 0.0f;
                 }
 
         for (Dim idx = 0; idx < nsb.k_field.size(); ++idx)
@@ -302,7 +292,7 @@ namespace
     void compute_vector_xi_test_constant()
     {
         const Dim Nx = 4, Ny = 4, Nz = 4;
-        const Real dt = 0.01f;
+        const float dt = 0.01f;
         const Real dx = 0.1f, dy = 0.1f, dz = 0.1f;
 
         std::cout << "Running ξ test: constant fields..." << std::endl;
@@ -351,7 +341,7 @@ namespace
     void compute_vector_xi_test_variable_g()
     {
         const Dim Nx = 4, Ny = 4, Nz = 4;
-        const Real dt = 0.01f;
+        const float dt = 0.01f;
         const Real dx = 0.1f, dy = 0.1f, dz = 0.1f;
 
         std::cout << "Running ξ test: variable g..." << std::endl;
@@ -400,7 +390,7 @@ namespace
     void compute_vector_xi_test_variable_k()
     {
         const Dim Nx = 4, Ny = 4, Nz = 4;
-        const Real dt = 0.01f;
+        const float dt = 0.01f;
         const Real dx = 0.1f, dy = 0.1f, dz = 0.1f;
 
         std::cout << "Running ξ test: variable k..." << std::endl;
@@ -447,7 +437,7 @@ namespace
     void compute_vector_xi_test_zero_g()
     {
         const Dim Nx = 4, Ny = 4, Nz = 4;
-        const Real dt = 0.01f;
+        const float dt = 0.01f;
         const Real dx = 0.1f, dy = 0.1f, dz = 0.1f;
 
         std::cout << "Running ξ test: zero g..." << std::endl;
