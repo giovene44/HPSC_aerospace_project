@@ -1,10 +1,12 @@
 #ifndef SCALARVARIABLE_HPP
 #define SCALARVARIABLE_HPP
 
-#include "Variables.hpp"
 #include <vector>
 #include <iostream>
 #include <stdexcept>
+
+using Real = float;
+using Dim = int;
 
 class ScalarVariable
 {
@@ -19,6 +21,12 @@ public:
     {
         size_t total = static_cast<size_t>(Nx) * static_cast<size_t>(Ny) * static_cast<size_t>(Nz);
         data.assign(total, Real(0));
+    }
+
+    ScalarVariable(const ScalarVariable &other)
+        : Nx(other.Nx), Ny(other.Ny), Nz(other.Nz),
+          data(other.data), dx(other.dx), dy(other.dy), dz(other.dz)
+    {
     }
 
     /**
@@ -57,6 +65,20 @@ public:
         return *this;
     }
 
+    ScalarVariable &operator=(const ScalarVariable &other)
+    {
+        if (this == &other)
+            return *this;
+
+        if (Nx != other.Nx || Ny != other.Ny || Nz != other.Nz)
+            throw std::runtime_error("ScalarVariable::operator=: dimension mismatch");
+
+        data = other.data;
+        dx = other.dx;
+        dy = other.dy;
+        dz = other.dz;
+        return *this;
+    }
     // --- Accessors ---
     Real &set(Dim i, Dim j, Dim k)
     {

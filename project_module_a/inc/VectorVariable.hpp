@@ -1,7 +1,6 @@
 #ifndef VECTORVARIABLES_HPP
 #define VECTORVARIABLES_HPP
 #include "ScalarVariable.hpp"
-#include "Variables.hpp"
 #include <vector>
 #include <iostream>
 

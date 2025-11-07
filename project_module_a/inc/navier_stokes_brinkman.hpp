@@ -2,7 +2,13 @@
 #include <cmath>
 #include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
-#include "DimensionsHandler.hpp"
+#include "Solver/P_solver.hpp"
+#include "Solver/U_solver.hpp"
+#include "Solver/V_solver.hpp"
+#include "Solver/W_solver.hpp"
+
+using Real = float;
+using Dim = int;
 
 class NavierStokesBrinkmann
 {
@@ -52,9 +58,22 @@ public:
           a(Nx, Ny, Nz, dx, dy, dz),
           b(Nx, Ny, Nz, dx, dy, dz),
           c(Nx, Ny, Nz, dx, dy, dz),
-          pressure_solution(Nx, Ny, Nz, dx, dy, dz)
+          pressure_solution(Nx, Ny, Nz, dx, dy, dz),
+
+          p_solver(Nx, Ny, Nz, dx, dy, dz, gamma_field),
+          u_solver(Nx, Ny, Nz, dx, dy, dz, gamma_field),
+          v_solver(Nx, Ny, Nz, dx, dy, dz, gamma_field),
+          w_solver(Nx, Ny, Nz, dx, dy, dz, gamma_field)
+
     {
-        // constructor body (leave empty or add initialization code here)
+        // ✅ First initialize gamma_field completely
+        initialize_gamma_field();
+
+        // Now update gamma in solvers
+        p_solver.set_gamma(gamma_field);
+        u_solver.set_gamma(gamma_field);
+        v_solver.set_gamma(gamma_field);
+        w_solver.set_gamma(gamma_field);
     }
     // initialization methods:
     void initialize_gamma_field();
@@ -63,29 +82,6 @@ public:
     // Function declarations only; implementations moved to the .cpp file
     void compute_vector_difference(VectorVariable &output, const VectorVariable &v1, const VectorVariable &v2);
 
-    void thomas_algorithm(const std::vector<float> &a, const std::vector<float> &b, const std::vector<float> &c, const std::vector<float> &rhs, std::vector<float> &x)
-    {
-        int n = rhs.size();
-        std::vector<float> c_prime(c.size(), 0.0);
-        std::vector<float> rhs_prime(n, 0.0);
-
-        c_prime[0] = c[0] / b[0];
-        rhs_prime[0] = rhs[0] / b[0];
-
-        for (int i = 1; i < n; ++i)
-        {
-            float m = 1.0 / (b[i] - a[i] * c_prime[i - 1]);
-            c_prime[i] = c[i] * m;
-            rhs_prime[i] = (rhs[i] - a[i] * rhs_prime[i - 1]) * m;
-        }
-
-        x[n - 1] = rhs_prime[n - 1];
-
-        for (int i = n - 2; i >= 0; --i)
-        {
-            x[i] = rhs_prime[i] - c_prime[i] * x[i + 1];
-        }
-    }
     Real compute_beta(Dim i, Dim j, Dim k) const;
     Real compute_beta(Dim index) const;
 
@@ -99,21 +95,6 @@ public:
     void compute_vector_gamma_D_term(int direction);
     void compute_vector_rhs(const VectorVariable &vector1, const VectorVariable &vector2);
     void compute_scalar_rhs_pressure_1();
-    void impose_Neumann_bc_scalar(int direction, int side, float neumann_boundary_value);
-
-    template<typename StrideFunction>
-    void NavierStokesBrinkmann::block_solver(const ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandler<StrideFunction> &dim_hand);
-    template<typename StrideFunction>
-    void NavierStokesBrinkmann::block_solver(const ScalarVariable &rhs, const ScalarVariable &gamma, ScalarVariable &solution, const DimensionsHandler<StrideFunction> &dim_hand);
-
-    // TODO:
-    /*
-    - compute_diagonal_terms a,b,c
-    - boundary conditions
-    - solve scalar linear system
-    - solve vector linear system
-    - include DimensionHandler (stride functions has to be declared in the solve functions)
-    */
 
     // ============================================================================
     // GRID, MATERIAL, AND TIME INFORMATION
@@ -131,11 +112,19 @@ public:
     Real dz = 1.0f; // Grid spacing in z
 
     // ============================================================================
+    // SOLVER CLASS
+    // ============================================================================
+    P_solver p_solver;
+    U_solver u_solver;
+    V_solver v_solver;
+    W_solver w_solver;
+
+    // ============================================================================
     // PHYSICAL AND MATERIAL FIELDS
     // ============================================================================
-    VectorVariable u_0;          // Velocity field
+    VectorVariable u_0;         // Velocity field
     ScalarVariable p_0;         // Pressure field
-    VectorVariable f;            // Forcing term (can vary in space)
+    VectorVariable f;           // Forcing term (can vary in space)
     ScalarVariable nu;          // Kinematic viscosity (can vary in space)
     ScalarVariable k_field;     // Brinkman permeability or resistance term
     ScalarVariable gamma_field; // Gamma field for Brinkman term
@@ -170,6 +159,6 @@ public:
     // ============================================================================
     // FINAL SOLUTION STORAGE
     // ============================================================================
-    VectorVariable velocity_solution;  // Final converged velocity
+    VectorVariable velocity_solution; // Final converged velocity
     ScalarVariable pressure_solution; // Final converged pressure
 };
