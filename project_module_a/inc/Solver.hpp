@@ -67,7 +67,7 @@ public:
     DimensionsHandler<StrideZ> dim_hand_z;
 
     virtual ~Solver() = default;
-    Solver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, ScalarVariable gam)
+    Solver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, ScalarVariable &gam)
         : Nx(Nx_), Ny(Ny_), Nz(Nz_),
           dx(dx_), dy(dy_), dz(dz_),
           dim_hand_x(Nx, Ny, Nz, dx, StrideX{Ny_, Nz_}),
@@ -79,7 +79,7 @@ public:
     virtual void solve_y_dir(ScalarVariable &, ScalarVariable &) = 0;
     virtual void solve_z_dir(ScalarVariable &, ScalarVariable &) = 0;
 
-    void set_gamma(const ScalarVariable &g) { gamma_field = g; }
+    void set_gamma(ScalarVariable &g) { gamma_field = g; }
 
 private:
     void thomas_algorithm(const std::vector<float> &a, const std::vector<float> &b, const std::vector<float> &c, const std::vector<float> &rhs, std::vector<float> &x)
@@ -107,7 +107,7 @@ private:
     }
 
 protected:
-    ScalarVariable gamma_field;
+     ScalarVariable& gamma_field;
 
     virtual void apply_bc_x_dir(ScalarVariable &) = 0;
     virtual void apply_bc_y_dir(ScalarVariable &) = 0;

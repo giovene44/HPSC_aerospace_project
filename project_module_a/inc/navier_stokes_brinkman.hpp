@@ -66,14 +66,12 @@ public:
           w_solver(Nx, Ny, Nz, dx, dy, dz, gamma_field)
 
     {
+        
         // ✅ First initialize gamma_field completely
         initialize_gamma_field();
 
-        // Now update gamma in solvers
-        p_solver.set_gamma(gamma_field);
-        u_solver.set_gamma(gamma_field);
-        v_solver.set_gamma(gamma_field);
-        w_solver.set_gamma(gamma_field);
+        
+        
     }
     // initialization methods:
     void initialize_gamma_field();
