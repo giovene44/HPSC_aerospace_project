@@ -1,7 +1,7 @@
 #ifndef VARIABLES_HPP
 #define VARIABLES_HPP
 
-using Real = float;
+using Real = Real;
 using Dim = unsigned int;
 
 

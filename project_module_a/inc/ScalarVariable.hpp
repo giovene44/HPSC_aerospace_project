@@ -10,7 +10,7 @@ class ScalarVariable
 {
 public:
     /**
-     * Constructor 1:
+     * Constructor:
      * Initializes an empty scalar field of given dimensions
      * and fills it with zeros.
      */
@@ -19,22 +19,6 @@ public:
     {
         size_t total = static_cast<size_t>(Nx) * static_cast<size_t>(Ny) * static_cast<size_t>(Nz);
         data.assign(total, Real(0));
-    }
-
-    /**
-     * Constructor 2:
-     * Initializes the scalar field with an existing data vector.
-     * The vector must have size Nx * Ny * Nz.
-     */
-    ScalarVariable(const Dim Nx, const Dim Ny, const Dim Nz, const std::vector<Real> &input_data)
-        : Nx(Nx), Ny(Ny), Nz(Nz)
-    {
-        if (input_data.size() != static_cast<size_t>(Nx * Ny * Nz))
-        {
-            throw std::invalid_argument(
-                "Error in ScalarVariable constructor: input_data size does not match Nx*Ny*Nz");
-        }
-        data = input_data;
     }
 
     // --- Operators ---
@@ -56,6 +40,23 @@ public:
         }
         return *this;
     }
+
+    ScalarVariable &operator=(const ScalarVariable &other)
+    {
+        if (this == &other)
+            return *this;
+        if (Nx != other.Nx || Ny != other.Ny || Nz != other.Nz)
+        {
+            throw std::invalid_argument("Dimension mismatch in ScalarVariable assignment");
+        }
+        dx = other.dx;
+        dy = other.dy;
+        dz = other.dz;
+        data = other.data;
+        return *this;
+    }
+
+    
 
     // --- Accessors ---
     Real &set(Dim i, Dim j, Dim k)
@@ -122,6 +123,57 @@ public:
         Dim j = (index / Nx) % Ny;
         Dim k = index / (Nx * Ny);
         return getGradient_z(i, j, k);
+    }
+
+    ScalarVariable getGradient_x() const
+    {
+        // Overloaded function to compute gradient for all elements
+        ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
+        for (Dim i = 0; i < Nx; ++i)
+        {
+            for (Dim j = 0; j < Ny; ++j)
+            {
+                for (Dim k = 0; k < Nz; ++k)
+                {
+                    gradient.set(i, j, k) = getGradient_x(i, j, k);
+                }
+            }
+        }
+        return gradient;
+    }
+
+    ScalarVariable getGradient_y() const
+    {
+        // Overloaded function to compute gradient for all elements
+        ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
+        for (Dim i = 0; i < Nx; ++i)
+        {
+            for (Dim j = 0; j < Ny; ++j)
+            {
+                for (Dim k = 0; k < Nz; ++k)
+                {
+                    gradient.set(i, j, k) = getGradient_y(i, j, k);
+                }
+            }
+        }
+        return gradient;
+    }
+
+    ScalarVariable getGradient_z() const
+    {
+        // Overloaded function to compute gradient for all elements
+        ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
+        for (Dim i = 0; i < Nx; ++i)
+        {
+            for (Dim j = 0; j < Ny; ++j)
+            {
+                for (Dim k = 0; k < Nz; ++k)
+                {
+                    gradient.set(i, j, k) = getGradient_z(i, j, k);
+                }
+            }
+        }
+        return gradient;
     }
 
     // --- Utility ---
