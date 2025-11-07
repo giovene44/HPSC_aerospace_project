@@ -75,6 +75,11 @@ public:
         return data[axes].set(index);
     }
 
+    inline ScalarVariable &set(const int axes) noexcept
+    {
+        return data[axes];
+    }
+
     // !!! : WE ONLY USE THIS ON THE BOUNDARY CONDITION => IF WE USE OTHERWISE IT IS WRONG
     Real first_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const
     {
@@ -158,6 +163,49 @@ public:
     Real divergence(Dim i, Dim j, Dim k) const
     {
         return (first_derivative(0, 0, i, j, k) + first_derivative(1, 1, i, j, k) + first_derivative(2, 2, i, j, k));
+    }
+
+    VectorVariable &operator+=(const VectorVariable &rhs)
+    {
+        if (Nx != rhs.get_Nx() || Ny != rhs.get_Ny() || Nz != rhs.get_Nz())
+            throw std::invalid_argument("VectorVariable::operator+= dimension mismatch");
+
+        for (int a = 0; a < static_cast<int>(size()); ++a)
+        {
+            for (Dim i = 0; i < Nx; ++i)
+            {
+                for (Dim j = 0; j < Ny; ++j)
+                {
+                    for (Dim k = 0; k < Nz; ++k)
+                    {
+                        this->set(a, i, j, k) += rhs.value(a, i, j, k);
+                    }
+                }
+            }
+        }
+        return *this;
+    }
+
+    VectorVariable operator-(const VectorVariable &rhs) const
+    {
+        if (Nx != rhs.get_Nx() || Ny != rhs.get_Ny() || Nz != rhs.get_Nz())
+            throw std::invalid_argument("VectorVariable::operator- dimension mismatch");
+
+        VectorVariable out(Nx, Ny, Nz, dx, dy, dz);
+        for (int a = 0; a < static_cast<int>(size()); ++a)
+        {
+            for (Dim i = 0; i < Nx; ++i)
+            {
+                for (Dim j = 0; j < Ny; ++j)
+                {
+                    for (Dim k = 0; k < Nz; ++k)
+                    {
+                        out.set(a, i, j, k) = value(a, i, j, k) - rhs.value(a, i, j, k);
+                    }
+                }
+            }
+        }
+        return out;
     }
 
 private:

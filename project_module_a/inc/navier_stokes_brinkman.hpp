@@ -31,8 +31,8 @@ public:
     void solve();
 
 public:
-    NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz, const float dt, const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f)
-        : Nx(Nx), Ny(Ny), Nz(Nz), dt(dt), dx(dx), dy(dy), dz(dz),
+    NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz, const Real dt, const Real T, const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f)
+        : Nx(Nx), Ny(Ny), Nz(Nz), dt(dt), T(T), dx(dx), dy(dy), dz(dz),
           u_0(Nx, Ny, Nz, dx, dy, dz),
           p_0(Nx, Ny, Nz, dx, dy, dz),
           f(Nx, Ny, Nz, dx, dy, dz),
@@ -42,13 +42,14 @@ public:
           g(Nx, Ny, Nz, dx, dy, dz),
           vector_gamma_D_term(Nx, Ny, Nz, dx, dy, dz),
           vector_rhs(Nx, Ny, Nz, dx, dy, dz),
-          u_1(Nx, Ny, Nz, dx, dy, dz),
+          delta_u(Nx, Ny, Nz, dx, dy, dz),
           xi(Nx, Ny, Nz, dx, dy, dz),
-          eta_0(Nx, Ny, Nz, dx, dy, dz),
-          eta_1(Nx, Ny, Nz, dx, dy, dz),
-          zeta_0(Nx, Ny, Nz, dx, dy, dz),
-          zeta_1(Nx, Ny, Nz, dx, dy, dz),
+          eta(Nx, Ny, Nz, dx, dy, dz),
+          delta_eta(Nx, Ny, Nz, dx, dy, dz),
+          zeta(Nx, Ny, Nz, dx, dy, dz),
+          delta_zeta(Nx, Ny, Nz, dx, dy, dz),
           gradient_pressure(Nx, Ny, Nz, dx, dy, dz),
+          pressure_predictor(Nx, Ny, Nz, dx, dy, dz),
           velocity_solution(Nx, Ny, Nz, dx, dy, dz),
           rhs(Nx, Ny, Nz, dx, dy, dz),
           psi(Nx, Ny, Nz, dx, dy, dz),
@@ -101,7 +102,8 @@ public:
     // ============================================================================
     Grid grid; // Grid geometry and domain decomposition
 
-    float dt; // Time step
+    Real dt; // Time step
+    Real T;  // Total simulation time
 
     Dim Nx; // Grid points in x
     Dim Ny; // Grid points in y
@@ -136,21 +138,22 @@ public:
     VectorVariable g;
     VectorVariable vector_gamma_D_term; // γ·D term in the momentum equation
     VectorVariable vector_rhs;          // RHS of the momentum equation
-    VectorVariable u_1;                 // Velocity field
+    VectorVariable delta_u;             // Velocity field
     VectorVariable xi;                  // x-direction solve intermediate
-    VectorVariable eta_0;               // y-direction solve intermediate
-    VectorVariable eta_1;               // y-direction solve intermediate
-    VectorVariable zeta_0;              // z-direction solve intermediate
-    VectorVariable zeta_1;              // z-direction solve intermediate
+    VectorVariable eta;                 // y-direction solve intermediate
+    VectorVariable delta_eta;           // y-direction solve intermediate
+    VectorVariable zeta;                // z-direction solve intermediate
+    VectorVariable delta_zeta;          // z-direction solve intermediate
     VectorVariable gradient_pressure;   // ∇p correction term
 
     // ============================================================================
     // SCALAR LINEAR SOLVER VARIABLES (PRESSURE EQUATION AND OTHER SCALARS)
     // ============================================================================
-    ScalarVariable rhs;       // RHS of scalar Poisson equation
-    ScalarVariable psi;       // Auxiliary scalar (potential or correction)
-    ScalarVariable phi;       // Pressure correction
-    ScalarVariable other_phi; // Additional scalar field for iterative updates
+    ScalarVariable pressure_predictor; // Pressure predictor
+    ScalarVariable rhs;                // RHS of scalar Poisson equation
+    ScalarVariable psi;                // Auxiliary scalar (potential or correction)
+    ScalarVariable phi;                // Pressure correction
+    ScalarVariable other_phi;          // Additional scalar field for iterative updates
 
     ScalarVariable sol_linear_system; // Temporary solution of scalar linear system
     ScalarVariable a;                 // Tridiagonal coefficient a (lower diag)

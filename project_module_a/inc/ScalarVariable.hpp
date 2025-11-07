@@ -12,7 +12,7 @@ class ScalarVariable
 {
 public:
     /**
-     * Constructor 1:
+     * Constructor:
      * Initializes an empty scalar field of given dimensions
      * and fills it with zeros.
      */
@@ -144,6 +144,57 @@ public:
         Dim j = (index / Nx) % Ny;
         Dim k = index / (Nx * Ny);
         return getGradient_z(i, j, k);
+    }
+
+    ScalarVariable getGradient_x() const
+    {
+        // Overloaded function to compute gradient for all elements
+        ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
+        for (Dim i = 0; i < Nx; ++i)
+        {
+            for (Dim j = 0; j < Ny; ++j)
+            {
+                for (Dim k = 0; k < Nz; ++k)
+                {
+                    gradient.set(i, j, k) = getGradient_x(i, j, k);
+                }
+            }
+        }
+        return gradient;
+    }
+
+    ScalarVariable getGradient_y() const
+    {
+        // Overloaded function to compute gradient for all elements
+        ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
+        for (Dim i = 0; i < Nx; ++i)
+        {
+            for (Dim j = 0; j < Ny; ++j)
+            {
+                for (Dim k = 0; k < Nz; ++k)
+                {
+                    gradient.set(i, j, k) = getGradient_y(i, j, k);
+                }
+            }
+        }
+        return gradient;
+    }
+
+    ScalarVariable getGradient_z() const
+    {
+        // Overloaded function to compute gradient for all elements
+        ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
+        for (Dim i = 0; i < Nx; ++i)
+        {
+            for (Dim j = 0; j < Ny; ++j)
+            {
+                for (Dim k = 0; k < Nz; ++k)
+                {
+                    gradient.set(i, j, k) = getGradient_z(i, j, k);
+                }
+            }
+        }
+        return gradient;
     }
 
     // --- Utility ---

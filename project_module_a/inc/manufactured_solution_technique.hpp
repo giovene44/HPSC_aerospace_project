@@ -1,32 +1,33 @@
 #include <cmath>
 #include <vector>
+#include "Variables.hpp"
 
 class ManufacturedSolution {
 public:
     // Constructor with default Reynolds number = 100
-    ManufacturedSolution(float reynolds_number = 100.0f) : Re(reynolds_number) {}
+    ManufacturedSolution(Real reynolds_number = 100.0f) : Re(reynolds_number) {}
     
     // Set Reynolds number
-    void setReynoldsNumber(float reynolds_number) {
+    void setReynoldsNumber(Real reynolds_number) {
         Re = reynolds_number;
     }
     
     // Get Reynolds number
-    float getReynoldsNumber() const {
+    Real getReynoldsNumber() const {
         return Re;
     }
     
     // Compute velocity field [u, v, w]
-    std::vector<float> velocity(float x, float y, float z, float t) const {
-        std::vector<float> u(3);
+    std::vector<Real> velocity(Real x, Real y, Real z, Real t) const {
+        std::vector<Real> u(3);
         
-        float sin_x = std::sin(x);
-        float cos_x = std::cos(x);
-        float sin_y = std::sin(y);
-        float cos_y = std::cos(y);
-        float sin_z = std::sin(z);
-        float cos_z = std::cos(z);
-        float sin_t = std::sin(t);
+        Real sin_x = std::sin(x);
+        Real cos_x = std::cos(x);
+        Real sin_y = std::sin(y);
+        Real cos_y = std::cos(y);
+        Real sin_z = std::sin(z);
+        Real cos_z = std::cos(z);
+        Real sin_t = std::sin(t);
         
         u[0] = sin_t * sin_x * sin_y * sin_z;
         u[1] = sin_t * cos_x * cos_y * cos_z;
@@ -36,41 +37,41 @@ public:
     }
     
     // Compute pressure
-    float pressure(float x, float y, float z) const {
-        float cos_x = std::cos(x);
-        float sin_y = std::sin(y);
-        float sin_z = std::sin(z);
-        float cos_z = std::cos(z);
+    Real pressure(Real x, Real y, Real z) const {
+        Real cos_x = std::cos(x);
+        Real sin_y = std::sin(y);
+        Real sin_z = std::sin(z);
+        Real cos_z = std::cos(z);
         
         return (-3.0f / Re) * cos_x * sin_y * (sin_z - cos_z);
     }
     
     // Compute coefficient k
-    float coefficient(float x, float y, float z) const {
+    Real coefficient(Real x, Real y, Real z) const {
         return std::sin(x) * std::sin(y) * std::sin(z);
     }
     
     // Compute forcing term [fx, fy, fz]
-    std::vector<float> forcing(float x, float y, float z, float t) const {
-        std::vector<float> result(3);
+    std::vector<Real> forcing(Real x, Real y, Real z, Real t) const {
+        std::vector<Real> result(3);
         
         // Precompute common trigonometric values
-        float sin_x = std::sin(x);
-        float cos_x = std::cos(x);
-        float sin_y = std::sin(y);
-        float cos_y = std::cos(y);
-        float sin_z = std::sin(z);
-        float cos_z = std::cos(z);
-        float sin_t = std::sin(t);
-        float cos_t = std::cos(t);
+        Real sin_x = std::sin(x);
+        Real cos_x = std::cos(x);
+        Real sin_y = std::sin(y);
+        Real cos_y = std::cos(y);
+        Real sin_z = std::sin(z);
+        Real cos_z = std::cos(z);
+        Real sin_t = std::sin(t);
+        Real cos_t = std::cos(t);
         
         // Compute k
-        float k_val = coefficient(x, y, z);
+        Real k_val = coefficient(x, y, z);
         
         // Compute u, v, w values
-        float u_val = sin_t * sin_x * sin_y * sin_z;
-        float v_val = sin_t * cos_x * cos_y * cos_z;
-        float w_val = sin_t * cos_x * sin_y * (sin_z + cos_z);
+        Real u_val = sin_t * sin_x * sin_y * sin_z;
+        Real v_val = sin_t * cos_x * cos_y * cos_z;
+        Real w_val = sin_t * cos_x * sin_y * (sin_z + cos_z);
         
         // f_x component
         result[0] = cos_t * sin_x * sin_y * sin_z
@@ -94,5 +95,5 @@ public:
     }
     
 private:
-    float Re;  // Reynolds number
+    Real Re;  // Reynolds number
 };
