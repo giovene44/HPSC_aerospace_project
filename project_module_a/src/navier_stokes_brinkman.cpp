@@ -2,6 +2,50 @@
 #include <stdexcept>
 
 #include <cmath> // for std::abs
+#include <fstream>
+#include <sstream>
+
+void NavierStokesBrinkmann::parse_input(const std::string &input_file)
+{
+    std::ifstream file(input_file);
+    if (!file.is_open())
+    {
+        std::cerr << "Error - Cannot open file " << input_file << std::endl;
+    }
+
+    // Lambda function used just to read the input file
+    auto next_value = [&](auto &var) {
+        std::string line;
+        while (std::getline(file, line)) {
+            if (line.empty() || line[0] == '#') continue;
+            std::istringstream iss(line);
+            iss >> var;
+            return;
+        }
+    };
+
+    std::string u0_init_file, p0_init_file, k_file;
+
+    // ========= Mesh dimensions ==========
+    next_value(Nx);
+    next_value(Ny);
+    next_value(Nz);
+
+    // ========== Time parameters ==========
+    next_value(dt);
+    next_value(T);
+
+    // ========== Spatial parameters ==========
+    next_value(dx);
+    next_value(dy);
+    next_value(dz);
+
+    // ========= Initial values ==========
+    next_value(u0_init_file);
+    next_value(p0_init_file);
+    next_value(k_file);
+}
+
 
 void NavierStokesBrinkmann::parse_input(const std::string &input_file)
 {
