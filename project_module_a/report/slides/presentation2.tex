@@ -1,0 +1,30 @@
+\documentclass{beamer}
+\usetheme[bgphoto]{polimi}
+\usepackage[utf8]{inputenc}
+\usepackage{algorithm}
+\usepackage{ifxetex}
+\ifxetex
+    \usepackage{fontspec}
+    \setsansfont{Arial}[Scale=0.8]
+\fi
+
+\title{High Performance Scientific Computing for \\ Aerospace Project}
+\subtitle{15th October 2025 update}
+\date{November 8th, 2025}
+
+\begin{document}
+\begin{frame}
+    \maketitle
+\end{frame}
+
+
+\begin{frame}{Input Handling}
+    We have defined a class structure to handle input data:
+    \begin{itemize}
+        \item \texttt{InputReader} class to read and parse input files.
+        \item \texttt{GridGenerator} class to compute the computational grid and split it into blocks.
+        \item \texttt{ViscosityCalculator} class to read and compute viscosity $\kappa$ values.
+    \end{itemize}
+    
+
+\end{frame}

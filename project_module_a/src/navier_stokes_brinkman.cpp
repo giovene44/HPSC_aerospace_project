@@ -24,10 +24,7 @@ void NavierStokesBrinkmann::parse_input(const std::string &input_file)
         }
     };
 
-    std::string line;
-
-    Real u0_init, p0_init;
-    std::string k_file;
+    std::string u0_init_file, p0_init_file, k_file;
 
     // ========= Mesh dimensions ==========
     next_value(Nx);
@@ -44,8 +41,8 @@ void NavierStokesBrinkmann::parse_input(const std::string &input_file)
     next_value(dz);
 
     // ========= Initial values ==========
-    next_value(u0_init);
-    next_value(p0_init);
+    next_value(u0_init_file);
+    next_value(p0_init_file);
     next_value(k_file);
 }
 
