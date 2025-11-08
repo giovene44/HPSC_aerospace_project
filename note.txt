@@ -1,0 +1,23 @@
+PRESENTATION 
+
+1. Create Class Diagramm [1 slide] [Espo]
+2. How to import Mesh from file ( Initial Values ) [1 slide] [Fra G]
+3.A Understanding of BC => only x axes [Fra V]
+3.B Understanding of BC => how to write the rhs ( not considering the known faces, which will be not solved) [Fra F]
+4. how to manage BC [with template] [1 slide] [Gio]
+5. Future workflow [1 slide]   => divide between code validation and parallelization strategy []
+    => compute error, compute residual, convergence study, 
+    => vectorization of the sequantial code
+    => parallelization of the code 
+
+TODO ( code ) : 
+0. TEST !!! [Dani, Marco, ...]
+
+NB: test the stride during BC and Solve
+
+
+1. Change from 4 subclasses of Solver to 2 subclasses, also check the Stride. [ Gio ]
+
+2. Initialization of the input ( as u_0, p_0) [Espo]
+
+3. Compute error with graph ( !!! )
