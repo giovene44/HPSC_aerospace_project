@@ -64,7 +64,7 @@ namespace
         check_scalar(nsb.psi, "psi");
         check_scalar(nsb.phi, "phi");
         check_scalar(nsb.other_phi, "other_phi");
-        check_scalar(nsb.sol_linear_system, "sol_linear_system");
+        check_scalar(nsb.sol_tmp, "sol_linear_system");
         check_scalar(nsb.a, "a");
         check_scalar(nsb.b, "b");
         check_scalar(nsb.c, "c");

@@ -27,8 +27,6 @@ public:
     protected:
     };
 
-    NavierStokesBrinkmann();
-    void solve();
 
 public:
     NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz, const float dt, const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f)
@@ -115,7 +113,7 @@ public:
     Real dy = 1.0f; // Grid spacing in y
     Real dz = 1.0f; // Grid spacing in z
 
-    Real dt,T;
+    Real T;
 
     // ============================================================================
     // SOLVER CLASS
