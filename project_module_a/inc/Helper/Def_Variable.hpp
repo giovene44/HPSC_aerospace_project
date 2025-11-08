@@ -1,0 +1,7 @@
+#ifndef DEF_VARIABLE_HPP
+#define DEF_VARIABLE_HPP
+
+using Real = float;
+using Dim = int;
+
+#endif // DEF_VARIABLE_HPP

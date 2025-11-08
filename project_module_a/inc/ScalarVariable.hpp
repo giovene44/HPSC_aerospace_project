@@ -1,12 +1,12 @@
 #ifndef SCALARVARIABLE_HPP
 #define SCALARVARIABLE_HPP
 
+#include "Helper/Def_Variable.hpp"
 #include <vector>
 #include <iostream>
 #include <stdexcept>
 
-using Real = float;
-using Dim = int;
+
 
 class ScalarVariable
 {

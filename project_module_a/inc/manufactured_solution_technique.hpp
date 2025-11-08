@@ -1,7 +1,6 @@
 #include <cmath>
 #include <vector>
-using Real = float;
-using Dim = int;
+#include "Helper/Def_Variable.hpp"
 
 class ManufacturedSolution
 {
