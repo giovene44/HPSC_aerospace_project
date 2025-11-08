@@ -1,5 +1,6 @@
 #ifndef VECTORVARIABLES_HPP
 #define VECTORVARIABLES_HPP
+#include "VectorVariable.hpp"
 #include "ScalarVariable.hpp"
 #include <vector>
 #include <iostream>
@@ -208,14 +209,34 @@ public:
         return out;
     }
 
+    VectorVariable operator+(const VectorVariable &rhs) const
+    {
+        if (Nx != rhs.get_Nx() || Ny != rhs.get_Ny() || Nz != rhs.get_Nz())
+            throw std::invalid_argument("VectorVariable::operator+ dimension mismatch");
+
+        VectorVariable out(Nx, Ny, Nz, dx, dy, dz);
+        for (int a = 0; a < static_cast<int>(size()); ++a)
+        {
+            for (Dim i = 0; i < Nx; ++i)
+            {
+                for (Dim j = 0; j < Ny; ++j)
+                {
+                    for (Dim k = 0; k < Nz; ++k)
+                    {
+                        out.set(a, i, j, k) = value(a, i, j, k) + rhs.value(a, i, j, k);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
     inline ScalarVariable &component(int axes)
     {
         if (axes < 0 || axes >= static_cast<int>(size()))
             throw std::out_of_range("axes index out of range");
         return data[axes];
     }
-
-   
 
     // Convenient named accessors
     inline ScalarVariable &x() { return component(0); }

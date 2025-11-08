@@ -3,6 +3,47 @@
 
 #include <cmath> // for std::abs
 
+void NavierStokesBrinkmann::parse_input(const std::string &input_file)
+{
+    std::ifstream file(input_file);
+    if (!file.is_open())
+    {
+        std::cerr << "Error - Cannot open file " << input_file << std::endl;
+    }
+
+    // Lambda function used just to read the input file
+    auto next_value = [&](auto &var) {
+        std::string line;
+        while (std::getline(file, line)) {
+            if (line.empty() || line[0] == '#') continue;
+            std::istringstream iss(line);
+            iss >> var;
+            return;
+        }
+    };
+
+    std::string u0_init_file, p0_init_file, k_file;
+
+    // ========= Mesh dimensions ==========
+    next_value(Nx);
+    next_value(Ny);
+    next_value(Nz);
+
+    // ========== Time parameters ==========
+    next_value(dt);
+    next_value(T);
+
+    // ========== Spatial parameters ==========
+    next_value(dx);
+    next_value(dy);
+    next_value(dz);
+
+    // ========= Initial values ==========
+    next_value(u0_init_file);
+    next_value(p0_init_file);
+    next_value(k_file);
+}
+
 Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
 {
     Real k_val = k_field.get(i, j, k);
@@ -51,63 +92,6 @@ void NavierStokesBrinkmann::initialize_gamma_field()
     }
 }
 
-void NavierStokesBrinkmann::compute_vector_difference(VectorVariable &output, const VectorVariable &v1, const VectorVariable &v2)
-{
-    // output must be preallocated and have matching dimensions
-    for (int a = 0; a < output.size(); ++a)
-    {
-        for (int i = 0; i < Nx; ++i)
-        {
-            for (int j = 0; j < Ny; ++j)
-            {
-                for (int k = 0; k < Nz; ++k)
-                {
-                    output.set(a, i, j, k) =
-                        v1.value(a, i, j, k) - v2.value(a, i, j, k);
-                }
-            }
-        }
-    }
-}
-
-
-void NavierStokesBrinkmann::compute_vector_summatory(VectorVariable &output, const VectorVariable &v1, const VectorVariable &v2)
-{
-    // output must be preallocated and have matching dimensions
-    for (int a = 0; a < output.size(); ++a)
-    {
-        for (int i = 0; i < Nx; ++i)
-        {
-            for (int j = 0; j < Ny; ++j)
-            {
-                for (int k = 0; k < Nz; ++k)
-                {
-                    output.set(a, i, j, k) =
-                        v1.value(a, i, j, k) + v2.value(a, i, j, k);
-                }
-            }
-        }
-    }
-}
-
-void NavierStokesBrinkmann::compute_gradient_pressure_field()
-{
-    for (Dim comp = 0; comp < gradient_pressure.size(); ++comp)
-    {
-        for (Dim idx = 0; idx < gradient_pressure.elements_per_component(); ++idx)
-        {
-            Real grad = 0.0f;
-            if (comp == 0)
-                grad = p_0.getGradient_x(idx);
-            else if (comp == 1)
-                grad = p_0.getGradient_y(idx);
-            else if (comp == 2)
-                grad = p_0.getGradient_z(idx);
-            gradient_pressure.set(comp, idx) = grad;
-        }
-    }
-}
-
 void NavierStokesBrinkmann::compute_vector_g()
 {
     // -------------------------------------------------------------------------
@@ -117,41 +101,46 @@ void NavierStokesBrinkmann::compute_vector_g()
     //   g = f - ∇p + (ν/2)(Dxx*η0 + Dyy*ζ0 + Dzz*u0) - (ν / (2k)) * u0
     // -------------------------------------------------------------------------
 
-    for (int comp = 0; comp < vector_rhs.size(); ++comp)
+    gradient_pressure_predictor.set(0) = pressure_predictor.getGradient_x();
+    gradient_pressure_predictor.set(1) = pressure_predictor.getGradient_y();
+    gradient_pressure_predictor.set(2) = pressure_predictor.getGradient_z();
+
+    for (Dim comp = 0; comp < vector_rhs.size(); ++comp)
     {
         for (Dim idx = 0; idx < vector_rhs.elements_per_component(); ++idx)
         {
             // -----------------------------------------------------------------
             // Directional Laplacian terms
             // -----------------------------------------------------------------
-            float dxx_eta = eta_0.second_derivative(comp, 0, idx);   // ∂²η/∂x²
-            float dyy_zeta = zeta_0.second_derivative(comp, 1, idx); // ∂²ζ/∂y²
-            float dzz_u = u_0.second_derivative(comp, 2, idx);       // ∂²u/∂z²
+            Real dxx_eta = eta.second_derivative(comp, 0, idx);             // ∂²η/∂x²
+            Real dyy_zeta = zeta.second_derivative(comp, 1, idx);           // ∂²ζ/∂y²
+            Real dzz_u = velocity_solution.second_derivative(comp, 2, idx); // ∂²u/∂z²
+            Real laplacian = dxx_eta + dyy_zeta + dzz_u;
 
             // -----------------------------------------------------------------
             // Physical properties
             // -----------------------------------------------------------------
-            float nu_val = nu.get(idx);     // local kinematic viscosity ν
-            float k_val = k_field.get(idx); // local permeability k
-            if (std::abs(k_val) < 1e-12f)
-                k_val = 1e-12f; // avoid division by zero
+            Real nu_val = nu.get(idx);                       // local kinematic viscosity ν
+            Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k //TODO:SET WHEN READING IS BETTER
 
             // -----------------------------------------------------------------
             // Forcing and pressure gradient
             // -----------------------------------------------------------------
-            float forcing = f.value(comp, idx); // external forcing term
-            compute_gradient_pressure_field();
-            float grad_p = gradient_pressure.value(comp, idx);
+            Real forcing = f.value(comp, idx); // external forcing term
 
             // -----------------------------------------------------------------
             // Assemble RHS term
             // -----------------------------------------------------------------
 
-            float g_val =
-                forcing                                             // f
-                - grad_p                                            // -∇p
-                + 0.5f * nu_val * (dxx_eta + dyy_zeta + dzz_u)      // + (ν/2)(∇²η + ∇²ζ + ∇²u)
-                - (nu_val / (2.0f * k_val)) * u_0.value(comp, idx); // - (ν/(2k))u₀
+            Real p_grad = gradient_pressure_predictor.value(comp, idx);
+
+            Real velocity = u_0.value(comp, idx);
+
+            Real g_val =
+                forcing                                                  // f
+                - p_grad                                                 // -∇p
+                + Real(0.5) * nu_val * laplacian                         // + (ν/2)(∇²η + ∇²ζ + ∇²u)
+                - (nu_val / (Real(2.0) * k_val)) * velocity; // - (ν/(2k))u₀
 
             // -----------------------------------------------------------------
             // Store result
@@ -173,90 +162,88 @@ void NavierStokesBrinkmann::compute_vector_xi()
     }
 }
 
-
-
-void NavierStokesBrinkmann::compute_scalar_rhs_pressure_1()
+void NavierStokesBrinkmann::compute_rhs_pressure()
 {
     ScalarVariable div_u(Nx, Ny, Nz, dx, dy, dz);
 
-    for (int x = 0; x < Nx; ++x)
+    for (Dim x = 0; x < Nx; ++x)
     {
-        for (int y = 0; y < Ny; ++y)
+        for (Dim y = 0; y < Ny; ++y)
         {
-            for (int z = 0; z < Nz; ++z)
+            for (Dim z = 0; z < Nz; ++z)
             {
                 rhs.set(x, y, z) =
                     -(1.0f / dt) *
-                    u_1.divergence(x, y, z);
+                    velocity_solution.divergence(x, y, z);
             }
-        }
-    }
-}
-
-void NavierStokesBrinkmann::update_pressure_and_velocity_fields()
-{
-    // Update pressure field
-    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
-    {
-        pressure_solution.set(idx) += other_phi.get(idx);
-    }
-
-    // Update velocity field
-    compute_gradient_pressure_field();
-    for (int comp = 0; comp < velocity_solution.size(); ++comp)
-    {
-        for (Dim idx = 0; idx < velocity_solution.elements_per_component(); ++idx)
-        {
-            Real grad_p = gradient_pressure.value(comp, idx);
-            velocity_solution.set(comp, idx) =
-                u_1.value(comp, idx) - (dt / compute_beta(idx)) * grad_p;
         }
     }
 }
 
 void NavierStokesBrinkmann::solve()
 {
+    auto stride_x = [this](Dim j, Dim k)
+    {
+        return j * Nx + k * Nx * Ny;
+    };
+
+    auto stride_y = [this](Dim i, Dim k)
+    {
+        return i + k * Nx * Ny;
+    };
+
+    auto stride_z = [this](Dim i, Dim j)
+    {
+        return i + j * Nx;
+    };
+    DimensionsHandlerScalar<decltype(stride_x)> x_scalar_handler(Nx, Ny, Nz, dx, stride_x);
+    DimensionsHandlerScalar<decltype(stride_y)> y_scalar_handler(Nx, Ny, Nz, dy, stride_y);
+    DimensionsHandlerScalar<decltype(stride_z)> z_scalar_handler(Nx, Ny, Nz, dz, stride_z);
+
+    DimensionsHandlerVector<decltype(stride_x)> x_vector_handler(Nx, Ny, Nz, 0, 1, 2, dx, stride_x);
+    DimensionsHandlerVector<decltype(stride_y)> y_vector_handler(Nx, Ny, Nz, 1, 0, 2, dy, stride_y);
+    DimensionsHandlerVector<decltype(stride_z)> z_vector_handler(Nx, Ny, Nz, 2, 0, 1, dz, stride_z);
+
+    velocity_solver.set_u_boundary() = u_0;
+    pressure_solver.set_p_boundary() = p_0;
+    velocity_solution = u_0;
+    pressure_solution = p_0;
+    // output method 
+
 
     for (Real t = 0.0f; t < T; t += dt)
     {
-    // ============================================================================
-    // MOMENTUM EQUATION SOLVE
-    // ============================================================================
+        pressure_predictor = pressure_solution + other_phi;
+
         compute_vector_g();
         compute_vector_xi();
 
-        compute_vector_difference(vector_rhs, xi, eta_0);
-        u_solver.solve_x_dir(vector_rhs.x(), vector_sol_tmp.x());
-        v_solver.solve_x_dir(vector_rhs.y(), vector_sol_tmp.y());
-        w_solver.solve_x_dir(vector_rhs.z(), vector_sol_tmp.z());
-        compute_vector_summatory(eta_1, vector_sol_tmp, eta_0);
+        // ============================================================================
+        // ===========================MOMENTUM EQUATION SOLVE==========================
+        // ============================================================================
+        vector_rhs = xi - eta;
+        velocity_solver.solve(vector_rhs, vector_intermediate_solution, x_vector_handler);
+        eta += vector_intermediate_solution;
 
-        compute_vector_difference(vector_rhs, eta_1, zeta_0);
-        u_solver.solve_y_dir(vector_rhs.x(), vector_sol_tmp.x());
-        v_solver.solve_y_dir(vector_rhs.y(), vector_sol_tmp.y());
-        w_solver.solve_y_dir(vector_rhs.z(), vector_sol_tmp.z());
-        compute_vector_summatory(zeta_1, vector_sol_tmp, zeta_0);
+        vector_rhs = eta - zeta;
+        velocity_solver.solve(vector_rhs, vector_intermediate_solution, y_vector_handler);
+        zeta += vector_intermediate_solution;
 
-        compute_vector_difference(vector_rhs, zeta_1, u_0);
-        u_solver.solve_z_dir(vector_rhs.x(), vector_sol_tmp.x());
-        v_solver.solve_z_dir(vector_rhs.y(), vector_sol_tmp.y());
-        w_solver.solve_z_dir(vector_rhs.z(), vector_sol_tmp.z());
-        compute_vector_summatory(u_1, vector_sol_tmp, u_0);
+        vector_rhs = zeta - velocity_solution;
+        velocity_solver.solve(vector_rhs, vector_intermediate_solution, z_vector_handler);
+        velocity_solution += vector_intermediate_solution;
 
+        // ============================================================================
+        // ===========================PRESSURE EQUATION SOLVE==========================
+        // ============================================================================
+        compute_rhs_pressure();
+        pressure_solver.solve(rhs, psi, x_scalar_handler);
+        pressure_solver.solve(psi, phi, y_scalar_handler);
+        pressure_solver.solve(phi, other_phi, z_scalar_handler);
 
-    // ============================================================================
-    // PRESSURE EQUATION SOLVE
-    // ============================================================================
-        compute_scalar_rhs_pressure_1();
-        p_solver.solve_x_dir(rhs, psi);
-        p_solver.solve_y_dir(psi, phi);
-        p_solver.solve_z_dir(phi, other_phi);
-
-
-
-    // ============================================================================
-    // UPDATE PRESSURE AND VELOCITY FIELDS
-    // ============================================================================
-       update_pressure_and_velocity_fields();
+        // ============================================================================
+        // =====================UPDATE PRESSURE====================
+        // ============================================================================
+        pressure_solution += other_phi;
     }
 };
