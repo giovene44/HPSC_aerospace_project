@@ -1,7 +1,7 @@
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Wextra -O2
-DEBUG_FLAGS = -std=c++11 -Wall -Wextra -g -O0
+CXXFLAGS = -std=c++14 -Wall -Wextra -O2
+DEBUG_FLAGS = -std=c++14 -Wall -Wextra -g -O0
 
 # Directories
 INCLUDE_DIR = inc

@@ -74,6 +74,7 @@ public:
     }
     // initialization methods:
     void initialize_gamma_field();
+    void parse_input(const std::string &input_file);
 
     // output should be passed by reference and should be allocated in the costructor of the class "!!!"    IMPORTANT
     // Function declarations only; implementations moved to the .cpp file
@@ -103,7 +104,7 @@ public:
     // ============================================================================
     Grid grid; // Grid geometry and domain decomposition
 
-    float dt; // Time step
+    Real dt; // Time step
 
     Dim Nx; // Grid points in x
     Dim Ny; // Grid points in y
