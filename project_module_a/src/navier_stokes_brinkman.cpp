@@ -70,6 +70,26 @@ void NavierStokesBrinkmann::compute_vector_difference(VectorVariable &output, co
     }
 }
 
+
+void NavierStokesBrinkmann::compute_vector_summatory(VectorVariable &output, const VectorVariable &v1, const VectorVariable &v2)
+{
+    // output must be preallocated and have matching dimensions
+    for (int a = 0; a < output.size(); ++a)
+    {
+        for (int i = 0; i < Nx; ++i)
+        {
+            for (int j = 0; j < Ny; ++j)
+            {
+                for (int k = 0; k < Nz; ++k)
+                {
+                    output.set(a, i, j, k) =
+                        v1.value(a, i, j, k) + v2.value(a, i, j, k);
+                }
+            }
+        }
+    }
+}
+
 void NavierStokesBrinkmann::compute_gradient_pressure_field()
 {
     for (Dim comp = 0; comp < gradient_pressure.size(); ++comp)
@@ -153,40 +173,7 @@ void NavierStokesBrinkmann::compute_vector_xi()
     }
 }
 
-void NavierStokesBrinkmann::compute_vector_gamma_D_term(int direction)
-{
-    for (Dim comp = 0; comp < 3; ++comp)
-    {
-        for (Dim idx = 0; idx < vector_gamma_D_term.elements_per_component(); ++idx)
-        {
-            Real D_term = 0.0f;
-            if (direction == 0)
-            {
-                D_term = eta_0.second_derivative(comp, 0, idx); // ∂xx η
-            }
-            else if (direction == 1)
-            {
-                D_term = zeta_0.second_derivative(comp, 1, idx); // ∂yy ζ
-            }
-            else if (direction == 2)
-            {
-                D_term = u_0.second_derivative(comp, 2, idx); // ∂zz u
-            }
-            Real gamma_val = gamma_field.get(idx);
-            vector_gamma_D_term.set(comp, idx) = gamma_val * D_term;
-        }
-    }
-}
 
-// ----------------------------------------------------------------------------
-// Purpose:
-//   Compute the right-hand side vector for the momentum equation by
-//   calculating the difference between two input vector fields.
-// ----------------------------------------------------------------------------
-void NavierStokesBrinkmann::compute_vector_rhs(const VectorVariable &vector1, const VectorVariable &vector2)
-{
-    compute_vector_difference(vector_rhs, vector1, vector2);
-}
 
 void NavierStokesBrinkmann::compute_scalar_rhs_pressure_1()
 {
@@ -205,3 +192,71 @@ void NavierStokesBrinkmann::compute_scalar_rhs_pressure_1()
         }
     }
 }
+
+void NavierStokesBrinkmann::update_pressure_and_velocity_fields()
+{
+    // Update pressure field
+    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+    {
+        pressure_solution.set(idx) += other_phi.get(idx);
+    }
+
+    // Update velocity field
+    compute_gradient_pressure_field();
+    for (int comp = 0; comp < velocity_solution.size(); ++comp)
+    {
+        for (Dim idx = 0; idx < velocity_solution.elements_per_component(); ++idx)
+        {
+            Real grad_p = gradient_pressure.value(comp, idx);
+            velocity_solution.set(comp, idx) =
+                u_1.value(comp, idx) - (dt / compute_beta(idx)) * grad_p;
+        }
+    }
+}
+
+void NavierStokesBrinkmann::solve()
+{
+
+    for (Real t = 0.0f; t < T; t += dt)
+    {
+    // ============================================================================
+    // MOMENTUM EQUATION SOLVE
+    // ============================================================================
+        compute_vector_g();
+        compute_vector_xi();
+
+        compute_vector_difference(vector_rhs, xi, eta_0);
+        u_solver.solve_x_dir(vector_rhs.x(), vector_sol_tmp.x());
+        v_solver.solve_x_dir(vector_rhs.y(), vector_sol_tmp.y());
+        w_solver.solve_x_dir(vector_rhs.z(), vector_sol_tmp.z());
+        compute_vector_summatory(eta_1, vector_sol_tmp, eta_0);
+
+        compute_vector_difference(vector_rhs, eta_1, zeta_0);
+        u_solver.solve_y_dir(vector_rhs.x(), vector_sol_tmp.x());
+        v_solver.solve_y_dir(vector_rhs.y(), vector_sol_tmp.y());
+        w_solver.solve_y_dir(vector_rhs.z(), vector_sol_tmp.z());
+        compute_vector_summatory(zeta_1, vector_sol_tmp, zeta_0);
+
+        compute_vector_difference(vector_rhs, zeta_1, u_0);
+        u_solver.solve_z_dir(vector_rhs.x(), vector_sol_tmp.x());
+        v_solver.solve_z_dir(vector_rhs.y(), vector_sol_tmp.y());
+        w_solver.solve_z_dir(vector_rhs.z(), vector_sol_tmp.z());
+        compute_vector_summatory(u_1, vector_sol_tmp, u_0);
+
+
+    // ============================================================================
+    // PRESSURE EQUATION SOLVE
+    // ============================================================================
+        compute_scalar_rhs_pressure_1();
+        p_solver.solve_x_dir(rhs, psi);
+        p_solver.solve_y_dir(psi, phi);
+        p_solver.solve_z_dir(phi, other_phi);
+
+
+
+    // ============================================================================
+    // UPDATE PRESSURE AND VELOCITY FIELDS
+    // ============================================================================
+       update_pressure_and_velocity_fields();
+    }
+};

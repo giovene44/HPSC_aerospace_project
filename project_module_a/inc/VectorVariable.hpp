@@ -208,6 +208,20 @@ public:
         return out;
     }
 
+    inline ScalarVariable &component(int axes)
+    {
+        if (axes < 0 || axes >= static_cast<int>(size()))
+            throw std::out_of_range("axes index out of range");
+        return data[axes];
+    }
+
+   
+
+    // Convenient named accessors
+    inline ScalarVariable &x() { return component(0); }
+    inline ScalarVariable &y() { return component(1); }
+    inline ScalarVariable &z() { return component(2); }
+
 private:
     std::vector<ScalarVariable> data;
     Dim Nx, Ny, Nz;

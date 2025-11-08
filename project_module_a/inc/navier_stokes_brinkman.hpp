@@ -42,6 +42,7 @@ public:
           g(Nx, Ny, Nz, dx, dy, dz),
           vector_gamma_D_term(Nx, Ny, Nz, dx, dy, dz),
           vector_rhs(Nx, Ny, Nz, dx, dy, dz),
+            vector_sol_tmp(Nx, Ny, Nz, dx, dy, dz),
           u_1(Nx, Ny, Nz, dx, dy, dz),
           xi(Nx, Ny, Nz, dx, dy, dz),
           eta_0(Nx, Ny, Nz, dx, dy, dz),
@@ -54,7 +55,7 @@ public:
           psi(Nx, Ny, Nz, dx, dy, dz),
           phi(Nx, Ny, Nz, dx, dy, dz),
           other_phi(Nx, Ny, Nz, dx, dy, dz),
-          sol_linear_system(Nx, Ny, Nz, dx, dy, dz),
+          sol_tmp(Nx, Ny, Nz, dx, dy, dz),
           a(Nx, Ny, Nz, dx, dy, dz),
           b(Nx, Ny, Nz, dx, dy, dz),
           c(Nx, Ny, Nz, dx, dy, dz),
@@ -63,14 +64,14 @@ public:
           p_solver(Nx, Ny, Nz, dx, dy, dz, gamma_field),
           u_solver(Nx, Ny, Nz, dx, dy, dz, gamma_field),
           v_solver(Nx, Ny, Nz, dx, dy, dz, gamma_field),
-          w_solver(Nx, Ny, Nz, dx, dy, dz, gamma_field)
+          w_solver(Nx, Ny, Nz, dx, dy, dz, gamma_field),
+          T(100*dt)
 
     {
         
-        // ✅ First initialize gamma_field completely
+        // ✅ First initialize 
         initialize_gamma_field();
-
-        
+        // Initialize other fields as necessary as k_field
         
     }
     // initialization methods:
@@ -79,6 +80,7 @@ public:
     // output should be passed by reference and should be allocated in the costructor of the class "!!!"    IMPORTANT
     // Function declarations only; implementations moved to the .cpp file
     void compute_vector_difference(VectorVariable &output, const VectorVariable &v1, const VectorVariable &v2);
+    void compute_vector_summatory(VectorVariable &output, const VectorVariable &v1, const VectorVariable &v2);
 
     Real compute_beta(Dim i, Dim j, Dim k) const;
     Real compute_beta(Dim index) const;
@@ -90,9 +92,13 @@ public:
     void compute_vector_g();
     void compute_vector_xi();
     void compute_gradient_pressure_field();
-    void compute_vector_gamma_D_term(int direction);
-    void compute_vector_rhs(const VectorVariable &vector1, const VectorVariable &vector2);
+    
     void compute_scalar_rhs_pressure_1();
+
+    void update_pressure_and_velocity_fields();
+    void solve();
+
+
 
     // ============================================================================
     // GRID, MATERIAL, AND TIME INFORMATION
@@ -108,6 +114,8 @@ public:
     Real dx = 1.0f; // Grid spacing in x
     Real dy = 1.0f; // Grid spacing in y
     Real dz = 1.0f; // Grid spacing in z
+
+    Real dt,T;
 
     // ============================================================================
     // SOLVER CLASS
@@ -134,6 +142,7 @@ public:
     VectorVariable g;
     VectorVariable vector_gamma_D_term; // γ·D term in the momentum equation
     VectorVariable vector_rhs;          // RHS of the momentum equation
+    VectorVariable vector_sol_tmp;     // Temporary RHS storage
     VectorVariable u_1;                 // Velocity field
     VectorVariable xi;                  // x-direction solve intermediate
     VectorVariable eta_0;               // y-direction solve intermediate
@@ -150,7 +159,7 @@ public:
     ScalarVariable phi;       // Pressure correction
     ScalarVariable other_phi; // Additional scalar field for iterative updates
 
-    ScalarVariable sol_linear_system; // Temporary solution of scalar linear system
+    ScalarVariable sol_tmp; // Temporary solution of scalar linear system
     ScalarVariable a;                 // Tridiagonal coefficient a (lower diag)
     ScalarVariable b;                 // Tridiagonal coefficient b (main diag)
     ScalarVariable c;                 // Tridiagonal coefficient c (upper diag)
