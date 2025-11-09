@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.10.23)  9 NOV 2025 14:55
+This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.10.23)  9 NOV 2025 19:37
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -841,80 +841,85 @@ Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input 
 ]
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 55.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 57.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
+<img/boundary.jpeg, id=78, 1606.0pt x 1241.63875pt>
+File: img/boundary.jpeg Graphic file (type jpg)
+<use img/boundary.jpeg>
+Package pdftex.def Info: img/boundary.jpeg  used on input line 57.
+(pdftex.def)             Requested size: 233.48892pt x 180.51613pt.
 File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
 <use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 55.
+Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 57.
 (pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 55.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 57.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
  [4
 
-]
+ <./img/boundary.jpeg>]
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 63.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 65.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-<img/2DGrid.png, id=83, 461.92575pt x 239.6955pt>
+<img/2DGrid.png, id=84, 461.92575pt x 239.6955pt>
 File: img/2DGrid.png Graphic file (type png)
 <use img/2DGrid.png>
-Package pdftex.def Info: img/2DGrid.png  used on input line 63.
+Package pdftex.def Info: img/2DGrid.png  used on input line 65.
 (pdftex.def)             Requested size: 231.92793pt x 120.34851pt.
 File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
 <use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 63.
+Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 65.
 (pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 63.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 65.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
  [5
 
  <./img/2DGrid.png>]
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 80.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 82.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
 File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
 <use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 80.
+Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 82.
 (pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 80.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 82.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
  [6
 
 ]
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 84.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 86.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
 File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
 <use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 84.
+Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 86.
 (pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 84.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 86.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
  [7
 
 ]
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 88.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 90.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
 File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
 <use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 88.
+Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 90.
 (pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 88.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 90.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
  [8
 
@@ -937,18 +942,18 @@ Package rerunfilecheck Info: File `presentation.out' has not changed.
 (rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 25012 strings out of 474116
- 499440 string characters out of 5743681
+ 25019 strings out of 474116
+ 499607 string characters out of 5743681
  1940187 words of memory out of 5000000
- 46852 multiletter control sequences out of 15000+600000
+ 46859 multiletter control sequences out of 15000+600000
  564732 words of font info for 60 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  128i,18n,123p,1449b,903s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmss10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmss12.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmss8.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmssbx10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/symbols/msam10.pfb>
-Output written on presentation.pdf (8 pages, 1303769 bytes).
+Output written on presentation.pdf (8 pages, 1413620 bytes).
 PDF statistics:
- 176 PDF objects out of 1000 (max. 8388607)
+ 177 PDF objects out of 1000 (max. 8388607)
  94 compressed objects within 1 object stream
  17 named destinations out of 1000 (max. 500000)
- 146 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 151 words of extra memory for PDF output out of 10000 (max. 10000000)
 
