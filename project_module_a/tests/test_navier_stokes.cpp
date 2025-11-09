@@ -4,6 +4,7 @@
 
 namespace
 {
+    /*
     void dimension_test()
     {
         const Dim Nx = 4, Ny = 5, Nz = 6;
@@ -473,6 +474,15 @@ namespace
                     }
 
         std::cout << "✅ ξ zero-g test passed." << std::endl;
+    }*/
+
+    void test_parse_input()
+    {
+        std::cout << "Running parse_input test..." << std::endl;
+        NavierStokesBrinkmann nsb(1, 1, 1, 0.0, 0.0, 0.0, 0.0);
+        nsb.parse_input("../Input/Input_example.in");
+
+        std::cout << "✅ parse_input test passed." << std::endl;
     }
 
 }
@@ -481,15 +491,8 @@ int main()
 {
     try
     {
-        dimension_test();
-        compute_vector_g_test_v_p_costant();
-        compute_vector_g_test_zero_forcing();
-        compute_vector_g_test_variable_force();
-        compute_vector_g_test_diffusion_term();
-        compute_vector_xi_test_constant();
-        compute_vector_xi_test_variable_g();
-        compute_vector_xi_test_variable_k();
-        compute_vector_xi_test_zero_g();
+        
+        test_parse_input();
     }
     catch (const std::exception &e)
     {

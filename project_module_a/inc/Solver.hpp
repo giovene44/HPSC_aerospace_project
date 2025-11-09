@@ -304,4 +304,17 @@ public:
     void set_gamma(ScalarVariable &g) { gamma_field = g; }
     VectorVariable &set_u_boundary() { return u_boundary;}
 };
+
+// =============================================================================================
+// This has to be deleted, since it has been added just to make the code compile.
+// =============================================================================================
+template <typename StrideFunc>
+void Solver::solve(ScalarVariable &rhs,
+                   ScalarVariable &solution,
+                   const DimensionsHandlerScalar<StrideFunc> &dim_handler)
+{
+    (void)rhs;
+    (void)solution;
+    (void)dim_handler;
+}
 #endif // SOLVER_HPP

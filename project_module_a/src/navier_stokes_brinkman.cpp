@@ -11,57 +11,19 @@ void NavierStokesBrinkmann::parse_input(const std::string &input_file)
     if (!file.is_open())
     {
         std::cerr << "Error - Cannot open file " << input_file << std::endl;
+        return;
     }
-
-    // Lambda function used just to read the input file
-    auto next_value = [&](auto &var) {
-        std::string line;
-        while (std::getline(file, line)) {
-            if (line.empty() || line[0] == '#') continue;
-            std::istringstream iss(line);
-            iss >> var;
-            return;
-        }
-    };
-
-    std::string u0_init_file, p0_init_file, k_file;
-
-    // ========= Mesh dimensions ==========
-    next_value(Nx);
-    next_value(Ny);
-    next_value(Nz);
-
-    // ========== Time parameters ==========
-    next_value(dt);
-    next_value(T);
-
-    // ========== Spatial parameters ==========
-    next_value(dx);
-    next_value(dy);
-    next_value(dz);
-
-    // ========= Initial values ==========
-    next_value(u0_init_file);
-    next_value(p0_init_file);
-    next_value(k_file);
-}
-
-
-void NavierStokesBrinkmann::parse_input(const std::string &input_file)
-{
-    std::ifstream file(input_file);
-    if (!file.is_open())
+    std::string token;
+    auto next_value = [&](auto &var)
     {
-        std::cerr << "Error - Cannot open file " << input_file << std::endl;
-    }
-
-    // Lambda function used just to read the input file
-    auto next_value = [&](auto &var) {
-        std::string line;
-        while (std::getline(file, line)) {
-            if (line.empty() || line[0] == '#') continue;
-            std::istringstream iss(line);
-            iss >> var;
+        while (file >> token)
+        {
+            if (token[0] == '#')
+            {
+                file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                continue;
+            }
+            std::istringstream(token) >> var;
             return;
         }
     };
@@ -86,6 +48,18 @@ void NavierStokesBrinkmann::parse_input(const std::string &input_file)
     next_value(u0_init_file);
     next_value(p0_init_file);
     next_value(k_file);
+
+    // ========= OUTPUT ==========
+    std::cout << "\n===== Input Parameters Loaded =====\n";
+    std::cout << "Mesh points (Nx, Ny, Nz): " << Nx << ", " << Ny << ", " << Nz << std::endl;
+    std::cout << "Time step size (dt):       " << dt << std::endl;
+    std::cout << "Total simulation time (T): " << T << std::endl;
+    std::cout << "Finite diff step (dx,dy,dz): "
+              << dx << ", " << dy << ", " << dz << std::endl;
+    std::cout << "Initial u0 file:           " << u0_init_file << std::endl;
+    std::cout << "Initial p0 file:           " << p0_init_file << std::endl;
+    std::cout << "k values file:             " << k_file << std::endl;
+    std::cout << "===================================\n\n";
 }
 
 Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
@@ -181,9 +155,9 @@ void NavierStokesBrinkmann::compute_vector_g()
             Real velocity = u_0.value(comp, idx);
 
             Real g_val =
-                forcing                                                  // f
-                - p_grad                                                 // -∇p
-                + Real(0.5) * nu_val * laplacian                         // + (ν/2)(∇²η + ∇²ζ + ∇²u)
+                forcing                                      // f
+                - p_grad                                     // -∇p
+                + Real(0.5) * nu_val * laplacian             // + (ν/2)(∇²η + ∇²ζ + ∇²u)
                 - (nu_val / (Real(2.0) * k_val)) * velocity; // - (ν/(2k))u₀
 
             // -----------------------------------------------------------------
@@ -252,8 +226,7 @@ void NavierStokesBrinkmann::solve()
     pressure_solver.set_p_boundary() = p_0;
     velocity_solution = u_0;
     pressure_solution = p_0;
-    // output method 
-
+    // output method
 
     for (Real t = 0.0f; t < T; t += dt)
     {
