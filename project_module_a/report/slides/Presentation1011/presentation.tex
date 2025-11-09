@@ -18,17 +18,36 @@
 \end{frame}
 
 
-\begin{frame}{Input Handling}
-    We have defined a class structure to handle input data:
-    \begin{itemize}
-        \item \texttt{InputReader} class to read and parse input files.
-        \item \texttt{GridGenerator} class to compute the computational grid and split it into blocks.
-        \item \texttt{ViscosityCalculator} class to read and compute viscosity $\kappa$ values.
-    \end{itemize} 
+\begin{frame}{Slide 1}
+    Content for slide 1 goes here.
 \end{frame}
 
-\begin{frame}{Slide 2}
-    Content for slide 2 goes here.
+\begin{frame}{Input File}
+\textbf{Structure of the input file:}
+\begin{itemize}
+    \item \textbf{Mesh points:} Number of points in X, Y, Z directions
+    \begin{itemize}
+        \item Example: \texttt{50 50 50} $\Rightarrow Nx=50, Ny=50, Nz=50$
+    \end{itemize}
+    
+    \item \textbf{Time parameters:}
+    \begin{itemize}
+        \item \texttt{dt} - Time step size, e.g., \texttt{0.01}
+        \item \texttt{T}  - Total simulation time, e.g., \texttt{10.0}
+    \end{itemize}
+    
+    \item \textbf{Spatial step sizes:}
+    \begin{itemize}
+        \item \texttt{dx dy dz} - Grid spacing in X, Y, Z, e.g., \texttt{0.5 0.5 0.5}
+    \end{itemize}
+    
+    \item \textbf{Initial conditions files:}
+    \begin{itemize}
+        \item \texttt{u0\_init\_file} - File with initial velocity values
+        \item \texttt{p0\_init\_file} - File with initial pressure values
+        \item \texttt{k\_file} - File with permeability values
+    \end{itemize}
+\end{itemize}
 \end{frame}
 
 \begin{frame}{Slide 3}

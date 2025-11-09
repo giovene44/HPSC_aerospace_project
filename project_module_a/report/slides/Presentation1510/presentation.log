@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.10.23)  9 NOV 2025 12:33
+This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.10.23)  9 NOV 2025 14:54
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -799,59 +799,44 @@ Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input lin
 {/usr/local/texlive/2024/texmf-var/fonts/map/pdftex/updmap/pdftex.map} <./beamerthemepolimi_img/bgphoto_cut.jpg> <./beamerthemepolimi_img/logo_centrato_COL_negativo.png> <./beamerthemepolimi_img/decoration.pdf>]
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 46.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 48.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-LaTeX Font Info:    Trying to load font information for U+msa on input line 46.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 48.
  (/usr/local/texlive/2024/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 46.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 48.
  (/usr/local/texlive/2024/texmf-dist/tex/latex/amsfonts/umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 )
-LaTeX Font Info:    Trying to load font information for OT1+mathkerncmss on input line 46.
+LaTeX Font Info:    Trying to load font information for OT1+mathkerncmss on input line 48.
  (/usr/local/texlive/2024/texmf-dist/tex/latex/sansmathaccent/ot1mathkerncmss.fd
 File: ot1mathkerncmss.fd 2020/01/31 Fontinst v1.933 font definitions for OT1/mathkerncmss.
 )
 File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
 <use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 46.
+Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 48.
 (pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 46.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 48.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
  [2
 
  <./beamerthemepolimi_img/logo_bandiera.png>]
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 76.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 59.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
 File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
 <use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 76.
+Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 59.
 (pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 76.
+Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 59.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
  [3
-
-]
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
-<use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 87.
-(pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
-<use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input line 87.
-(pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
-<use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input line 87.
-(pdftex.def)             Requested size: 124.62083pt x 7.0pt.
- [4
 
 ]
 \tf@nav=\write6
@@ -872,18 +857,18 @@ Package rerunfilecheck Info: File `presentation.out' has not changed.
 (rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 24850 strings out of 474116
- 494854 string characters out of 5743681
- 1940187 words of memory out of 5000000
- 46693 multiletter control sequences out of 15000+600000
- 569970 words of font info for 79 fonts, out of 8000000 for 9000
+ 24790 strings out of 474116
+ 493509 string characters out of 5743681
+ 1936187 words of memory out of 5000000
+ 46638 multiletter control sequences out of 15000+600000
+ 566019 words of font info for 64 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  128i,18n,123p,1449b,903s stack positions out of 10000i,1000n,20000p,200000b,200000s
-</usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmss10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmss12.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmss8.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmssbx10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/symbols/msam10.pfb>
-Output written on presentation.pdf (4 pages, 1282600 bytes).
+</usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmss10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmss12.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmss8.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmssbx10.pfb>
+Output written on presentation.pdf (3 pages, 1241514 bytes).
 PDF statistics:
- 125 PDF objects out of 1000 (max. 8388607)
- 62 compressed objects within 1 object stream
- 9 named destinations out of 1000 (max. 500000)
+ 100 PDF objects out of 1000 (max. 8388607)
+ 46 compressed objects within 1 object stream
+ 7 named destinations out of 1000 (max. 500000)
  63 words of extra memory for PDF output out of 10000 (max. 10000000)
 
