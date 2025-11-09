@@ -19,36 +19,40 @@
 \end{frame}
 
 
-\begin{frame}{Slide 1}
-    Content for slide 1 goes here.
+\begin{frame}{Classes}
+\item \textbf{Classes composition:}
+
+  \begin{center}
+        \includegraphics[width=0.9\textwidth,height=0.75\textheight,keepaspectratio]{img/UML.jpg}
+    \end{center}
 \end{frame}
 
 \begin{frame}{Input File}
-    \textbf{Structure of the input file:}
+\textbf{Structure of the input file:}
+\begin{itemize}
+    \item \textbf{Mesh points:} Number of points in X, Y, Z directions
     \begin{itemize}
-        \item \textbf{Mesh points:} Number of points in X, Y, Z directions
-              \begin{itemize}
-                  \item Example: \texttt{50 50 50} $\Rightarrow Nx=50, Ny=50, Nz=50$
-              \end{itemize}
-
-        \item \textbf{Time parameters:}
-              \begin{itemize}
-                  \item \texttt{dt} - Time step size, e.g., \texttt{0.01}
-                  \item \texttt{T}  - Total simulation time, e.g., \texttt{10.0}
-              \end{itemize}
-
-        \item \textbf{Spatial step sizes:}
-              \begin{itemize}
-                  \item \texttt{dx dy dz} - Grid spacing in X, Y, Z, e.g., \texttt{0.5 0.5 0.5}
-              \end{itemize}
-
-        \item \textbf{Initial conditions files:}
-              \begin{itemize}
-                  \item \texttt{u0\_init\_file} - File with initial velocity values
-                  \item \texttt{p0\_init\_file} - File with initial pressure values
-                  \item \texttt{k\_file} - File with permeability values
-              \end{itemize}
+        \item Example: \texttt{50 50 50} $\Rightarrow Nx=50, Ny=50, Nz=50$
     \end{itemize}
+
+    \item \textbf{Time parameters:}
+    \begin{itemize}
+        \item \texttt{dt} - Time step size, e.g., \texttt{0.01}
+        \item \texttt{T}  - Total simulation time, e.g., \texttt{10.0}
+    \end{itemize}
+
+    \item \textbf{Spatial step sizes:}
+    \begin{itemize}
+        \item \texttt{dx dy dz} - Grid spacing in X, Y, Z, e.g., \texttt{0.5 0.5 0.5}
+    \end{itemize}
+
+    \item \textbf{Initial conditions files:}
+    \begin{itemize}
+        \item \texttt{u0\_init\_file} - File with initial velocity values
+        \item \texttt{p0\_init\_file} - File with initial pressure values
+        \item \texttt{k\_file} - File with permeability values
+    \end{itemize}
+\end{itemize}
 \end{frame}
 
 \begin{frame}{Boundary conditions analysis}
@@ -113,6 +117,8 @@
             r_{N,y} - 2 c u_{ex}
         \end{bmatrix}
     $$
+
+
 \end{frame}
 
 \begin{frame}{Boundary Conditions: Indexing Pattern}
