@@ -24,34 +24,34 @@
 \end{frame}
 
 \begin{frame}{Input File}
-\textbf{Structure of the input file:}
-\begin{itemize}
-    \item \textbf{Mesh points:} Number of points in X, Y, Z directions
+    \textbf{Structure of the input file:}
     \begin{itemize}
-        \item Example: \texttt{50 50 50} $\Rightarrow Nx=50, Ny=50, Nz=50$
+        \item \textbf{Mesh points:} Number of points in X, Y, Z directions
+              \begin{itemize}
+                  \item Example: \texttt{50 50 50} $\Rightarrow Nx=50, Ny=50, Nz=50$
+              \end{itemize}
+
+        \item \textbf{Time parameters:}
+              \begin{itemize}
+                  \item \texttt{dt} - Time step size, e.g., \texttt{0.01}
+                  \item \texttt{T}  - Total simulation time, e.g., \texttt{10.0}
+              \end{itemize}
+
+        \item \textbf{Spatial step sizes:}
+              \begin{itemize}
+                  \item \texttt{dx dy dz} - Grid spacing in X, Y, Z, e.g., \texttt{0.5 0.5 0.5}
+              \end{itemize}
+
+        \item \textbf{Initial conditions files:}
+              \begin{itemize}
+                  \item \texttt{u0\_init\_file} - File with initial velocity values
+                  \item \texttt{p0\_init\_file} - File with initial pressure values
+                  \item \texttt{k\_file} - File with permeability values
+              \end{itemize}
     \end{itemize}
-    
-    \item \textbf{Time parameters:}
-    \begin{itemize}
-        \item \texttt{dt} - Time step size, e.g., \texttt{0.01}
-        \item \texttt{T}  - Total simulation time, e.g., \texttt{10.0}
-    \end{itemize}
-    
-    \item \textbf{Spatial step sizes:}
-    \begin{itemize}
-        \item \texttt{dx dy dz} - Grid spacing in X, Y, Z, e.g., \texttt{0.5 0.5 0.5}
-    \end{itemize}
-    
-    \item \textbf{Initial conditions files:}
-    \begin{itemize}
-        \item \texttt{u0\_init\_file} - File with initial velocity values
-        \item \texttt{p0\_init\_file} - File with initial pressure values
-        \item \texttt{k\_file} - File with permeability values
-    \end{itemize}
-\end{itemize}
 \end{frame}
 
-\begin{frame}{Boundary conditions implementation}
+\begin{frame}{Boundary conditions analysis}
     \begin{center}
         \includegraphics[width=0.9\textwidth,height=0.75\textheight,keepaspectratio]{img/boundary.jpeg}
     \end{center}
@@ -63,66 +63,79 @@
 
     when solving for the component parallel to the decomposition direction:
     $$
-    \begin{bmatrix}
-    1 & 0 & 0 & \cdots & 0 \\
-    a & b & c & \ddots & \vdots \\
-    0 & a & \ddots & \ddots & 0 \\
-    \vdots & \ddots & \ddots & b & c \\
-    0 & \cdots & 0 & 0 & 1
-    \end{bmatrix}
-    \begin{bmatrix}
-    \eta_{1,x} \\
-    \eta_{2,x} \\
-    \vdots \\
-    \eta_{N-1,x} \\
-    \eta_{N,x}
-    \end{bmatrix}
-    =
-    \begin{bmatrix}
-    u_{0,j,k} + \left. \frac{\partial u}{\partial x} \right|_{(0,j,k)} \frac{\Delta x}{2} \\
-    r_{2,x} \\
-    \vdots \\
-    r_{N-1,x} \\
-    \text{BC value}
-    \end{bmatrix}
+        \begin{bmatrix}
+            1      & 0      & 0      & \cdots & 0      \\
+            a      & b      & c      & \ddots & \vdots \\
+            0      & a      & \ddots & \ddots & 0      \\
+            \vdots & \ddots & \ddots & b      & c      \\
+            0      & \cdots & 0      & 0      & 1
+        \end{bmatrix}
+        \begin{bmatrix}
+            \eta_{1,x}   \\
+            \eta_{2,x}   \\
+            \vdots       \\
+            \eta_{N-1,x} \\
+            \eta_{N,x}
+        \end{bmatrix}
+        =
+        \begin{bmatrix}
+            u_{0,j,k} + \left. \frac{\partial u}{\partial x} \right|_{(0,j,k)} \frac{\Delta x}{2} \\
+            r_{2,x}                                                                               \\
+            \vdots                                                                                \\
+            r_{N-1,x}                                                                             \\
+            \text{BC value}
+        \end{bmatrix}
     $$
 
     when solving for a component perpendicular to the decomposition direction:
 
     $$
-    \begin{bmatrix}
-    1 & 0 & 0 & \cdots & 0 \\
-    a & b & c & \ddots & \vdots \\
-    0 & a & \ddots & \ddots & 0 \\
-    \vdots & \ddots & a & b & c \\
-    0 & \cdots & 0 & a & b-c
-    \end{bmatrix}
-    \begin{bmatrix}
-    \eta_{1,y} \\
-    \eta_{2,y} \\
-    \vdots \\
-    \eta_{N-1,y} \\
-    \eta_{N,y}
-    \end{bmatrix}
-    =
-    \begin{bmatrix}
-    \text{BC value} \\
-    r_{2,y} \\
-    \vdots \\
-    r_{N-1,y} \\
-    r_{N,y} - 2 c u_{ex}
-    \end{bmatrix}
+        \begin{bmatrix}
+            1      & 0      & 0      & \cdots & 0      \\
+            a      & b      & c      & \ddots & \vdots \\
+            0      & a      & \ddots & \ddots & 0      \\
+            \vdots & \ddots & a      & b      & c      \\
+            0      & \cdots & 0      & a      & b-c
+        \end{bmatrix}
+        \begin{bmatrix}
+            \eta_{1,y}   \\
+            \eta_{2,y}   \\
+            \vdots       \\
+            \eta_{N-1,y} \\
+            \eta_{N,y}
+        \end{bmatrix}
+        =
+        \begin{bmatrix}
+            \text{BC value} \\
+            r_{2,y}         \\
+            \vdots          \\
+            r_{N-1,y}       \\
+            r_{N,y} - 2 c u_{ex}
+        \end{bmatrix}
     $$
-    
-    
 \end{frame}
 
-\begin{frame}{Boundary conditions implementation}
-    \begin{figure}
-        \centering
-        \includegraphics[width=\textwidth,height=0.5\textheight,keepaspectratio]{img/2DGrid.png}
-    \end{figure}
+\begin{frame}{Boundary Conditions: Indexing Pattern}
 
+    We found a structural pattern in our staggered grid that simplifies boundary condition (BC) logic.
+    Let \textbf{$x_0$} be the solving direction and \textbf{$x_1$} and \textbf{$x_2$}, with indices \textbf{$i_1$} and
+    \textbf{$i_2$}, the first and second direction along which the solver iterates. Then:
+
+    \begin{columns}
+        \begin{column}{0.6\textwidth}
+            \begin{itemize}
+                \item \textbf{Normal Component:} $i_1$ is \textbf{even} AND $i_2$ is \textbf{even}.
+                \item \textbf{Tangential Component:} $i_1$ is \textbf{odd} OR $i_2$ is \textbf{odd}.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.4\textwidth}
+            \centering
+            \includegraphics[width=\textwidth, keepaspectratio]{img/block_solver.png}
+        \end{column}
+    \end{columns}
+    This pattern holds for all \textbf{three velocity components} and allows for a \textbf{systematic implementation} of BCs.
+    The logic is implemented in the code simply by modifying the \textbf{stride computation} for each direction, a task easily programmed
+    with templates.
 \end{frame}
 
 \begin{frame}{Future workflow}
@@ -133,7 +146,7 @@
             \item Convergence study
         \end{itemize}
     \end{block}
-    
+
     \begin{block}{Parallelization Strategy}
         \begin{itemize}
             \item Vectorization of the sequential code
