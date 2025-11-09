@@ -3,6 +3,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage{algorithm}
 \usepackage{ifxetex}
+\usepackage{amsmath}
 \ifxetex
     \usepackage{fontspec}
     \setsansfont{Arial}[Scale=0.8]
@@ -52,6 +53,66 @@
 
 \begin{frame}{Slide 3}
     Content for slide 3 goes here.
+\end{frame}
+
+\begin{frame}[shrink]{Velocity Boundary Conditions}
+    For each of the three steps of the algorithm for momentum equation,
+    the Dirichlet Boundary Conditions are applied in the following way:
+
+    when solving for the component parallel to the decomposition direction:
+    $$
+    \begin{bmatrix}
+    1 & 0 & 0 & \cdots & 0 \\
+    a & b & c & \ddots & \vdots \\
+    0 & a & \ddots & \ddots & 0 \\
+    \vdots & \ddots & \ddots & b & c \\
+    0 & \cdots & 0 & 0 & 1
+    \end{bmatrix}
+    \begin{bmatrix}
+    \eta_{1,x} \\
+    \eta_{2,x} \\
+    \vdots \\
+    \eta_{N-1,x} \\
+    \eta_{N,x}
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+    u_{0,j,k} + \left. \frac{\partial u}{\partial x} \right|_{(0,j,k)} \frac{\Delta x}{2} \\
+    r_{2,x} \\
+    \vdots \\
+    r_{N-1,x} \\
+    \text{BC value}
+    \end{bmatrix}
+    $$
+
+    when solving for a component perpendicular to the decomposition direction:
+
+    $$
+    \begin{bmatrix}
+    1 & 0 & 0 & \cdots & 0 \\
+    a & b & c & \ddots & \vdots \\
+    0 & a & \ddots & \ddots & 0 \\
+    \vdots & \ddots & a & b & c \\
+    0 & \cdots & 0 & a & b-c
+    \end{bmatrix}
+    \begin{bmatrix}
+    \eta_{1,y} \\
+    \eta_{2,y} \\
+    \vdots \\
+    \eta_{N-1,y} \\
+    \eta_{N,y}
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+    \text{BC value} \\
+    r_{2,y} \\
+    \vdots \\
+    r_{N-1,y} \\
+    r_{N,y} - 2 c u_{ex}
+    \end{bmatrix}
+    $$
+    
+    
 \end{frame}
 
 \begin{frame}{Boundary conditions implementation}
