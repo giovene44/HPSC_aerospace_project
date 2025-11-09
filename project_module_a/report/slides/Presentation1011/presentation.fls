@@ -375,6 +375,9 @@ INPUT .\beamerthemepolimi_img\decoration.pdf
 OUTPUT presentation.xdv
 INPUT .\beamerthemepolimi_img\logo_bandiera.png
 INPUT .\beamerthemepolimi_img\logo_bandiera.png
+INPUT .\img\UML.jpg
+INPUT .\img\UML.jpg
+INPUT .\img\UML.jpg
 INPUT .\beamerthemepolimi_img\decoration.pdf
 INPUT .\beamerthemepolimi_img\decoration.pdf
 INPUT .\beamerthemepolimi_img\logo_bandiera.png
