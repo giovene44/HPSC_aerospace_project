@@ -215,7 +215,7 @@ void NavierStokesBrinkmann::solve()
         return i + j * Nx;
     };
 
-     DimensionsHandlerScalar<decltype(stride_x)> x_scalar_handler(Nx, Ny, Nz, dx, stride_x);
+    DimensionsHandlerScalar<decltype(stride_x)> x_scalar_handler(Nx, Ny, Nz, dx, stride_x);
     DimensionsHandlerScalar<decltype(stride_y)> y_scalar_handler(Nx, Ny, Nz, dy, stride_y);
     DimensionsHandlerScalar<decltype(stride_z)> z_scalar_handler(Nx, Ny, Nz, dz, stride_z);
 
@@ -240,24 +240,24 @@ void NavierStokesBrinkmann::solve()
         // ===========================MOMENTUM EQUATION SOLVE==========================
         // ============================================================================
         vector_rhs = xi - eta;
-        velocity_solver.solve(vector_rhs, vector_intermediate_solution, x_vector_handler);
+        velocity_solver.solve<decltype(stride_x), 0>(vector_rhs, vector_intermediate_solution, x_vector_handler);
         eta += vector_intermediate_solution;
 
         vector_rhs = eta - zeta;
-        velocity_solver.solve(vector_rhs, vector_intermediate_solution, y_vector_handler);
+        velocity_solver.solve<decltype(stride_y), 1>(vector_rhs, vector_intermediate_solution, y_vector_handler);
         zeta += vector_intermediate_solution;
 
         vector_rhs = zeta - velocity_solution;
-        velocity_solver.solve(vector_rhs, vector_intermediate_solution, z_vector_handler);
+        velocity_solver.solve<decltype(stride_z), 2>(vector_rhs, vector_intermediate_solution, z_vector_handler);
         velocity_solution += vector_intermediate_solution;
 
         // ============================================================================
         // ===========================PRESSURE EQUATION SOLVE==========================
         // ============================================================================
         compute_rhs_pressure();
-        pressure_solver.solve_pressure(rhs, psi, x_scalar_handler);
-        pressure_solver.solve_pressure(psi, phi, y_scalar_handler);
-        pressure_solver.solve_pressure(phi, other_phi, z_scalar_handler);
+        pressure_solver.solve_pressure<decltype(stride_x), 0>(rhs, psi, x_scalar_handler);
+        pressure_solver.solve_pressure<decltype(stride_y), 1>(psi, phi, y_scalar_handler);
+        pressure_solver.solve_pressure<decltype(stride_z), 2>(phi, other_phi, z_scalar_handler);
 
         // ============================================================================
         // =====================UPDATE PRESSURE====================

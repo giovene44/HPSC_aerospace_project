@@ -25,7 +25,7 @@ public:
         : Nx(Nx_), Ny(Ny_), Nz(Nz_),
           dx(dx_), dy(dy_), dz(dz_) {};
 
-    template <typename StrideFunc>
+    template <typename StrideFunc, Dim direction>
     void solve(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar<StrideFunc> &dim_handler);
 
 protected:
@@ -82,26 +82,57 @@ inline Solver::~Solver() {}
 class PressureSolver : public Solver
 {
 private:
-    template <typename StrideFunc>
-    void apply_bc(ScalarVariable &rhs, const DimensionsHandlerScalar<StrideFunc> &dim_handler)
+    template <Dim direction>
+    void apply_bc(ScalarVariable &rhs)
     {
-        // Implementation of Neumann boundary condition
-        for (Dim inedx_1 = 0; inedx_1 < dim_handler.N2; ++inedx_1)
+        if constexpr (direction == 0) // X direction
         {
-            for (Dim inedx_2 = 0; inedx_2 < dim_handler.N3; ++inedx_2)
+            // Implementation of Neumann boundary condition
+            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
             {
-                Dim stride = dim_handler.stride(inedx_1, inedx_2);
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
+                {
+                    // Lower boundary (index 0)
+                    rhs.set(0, index_1, index_2) = rhs.get(0, index_1, index_2) - Real(2.0) / Nx * p_boundary.get(0, index_1, index_2); // ∂p/∂n = f at "left" boundary
 
-                // Lower boundary (index 0)
-                rhs.set(stride) = rhs.get(stride) - Real(2.0) / dim_handler.dN1 * p_boundary.get(stride); // ∂p/∂n = f at "left" boundary
-
-                // Upper boundary (index N1-1)
-                rhs.set(stride + dim_handler.N1 - 1) = rhs.get(stride + dim_handler.N1 - 1) + Real(2.0) / dim_handler.dN1 * p_boundary.get(stride + dim_handler.N1 - 1); // ∂p/∂n = f at "right" boundary
+                    // Upper boundary (index N1-1)
+                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) + Real(2.0) / Nx * p_boundary.get(Nx - 1, index_1, index_2); // ∂p/∂n = f at "right" boundary
+                }
             }
         }
-    }
+        else if constexpr (direction == 1) // Y direction
+        {
+            // Implementation of Neumann boundary condition
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
+                {
+                    // Lower boundary (index 0)
+                    rhs.set(index_1, 0, index_2) = rhs.get(index_1, 0, index_2) - Real(2.0) / Ny * p_boundary.get(index_1, 0, index_2); // ∂p/∂n = f at "bottom" boundary
 
-    template <typename StrideFunc>
+                    // Upper boundary (index N1-1)
+                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2) + Real(2.0) / Ny * p_boundary.get(index_1, Ny - 1, index_2); // ∂p/∂n = f at "top" boundary
+                }
+            }
+        }
+        else if constexpr (direction == 2) // Z direction
+        {
+            // Implementation of Neumann boundary condition
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Ny; ++index_2)
+                {
+                    // Lower boundary (index 0)
+                    rhs.set(index_1, index_2, 0) = rhs.get(index_1, index_2, 0) - Real(2.0) / Nz * p_boundary.get(index_1, index_2, 0); // ∂p/∂n = f at "front" boundary
+
+                    // Upper boundary (index N1-1)
+                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1) + Real(2.0) / Nz * p_boundary.get(index_1, index_2, Nz - 1); // ∂p/∂n = f at "back" boundary
+                }
+            }
+        }
+    };
+
+    template <Dim direction, typename StrideFunc>
     void block_solver(const ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar<StrideFunc> &dim_handler)
     {
         // ----------------------------------------------------------------------------
@@ -120,31 +151,76 @@ private:
         b[dim_handler.N1 - 1] = Real(1.0) + Real(1.0) / (dim_handler.dN1 * dim_handler.dN1);
         c[dim_handler.N1 - 1] = Real(0.0);
 
-        for (Dim inedx_1 = 0; inedx_1 < dim_handler.N2; ++inedx_1)
+        if constexpr (direction == 0) // X direction
         {
-            for (Dim inedx_2 = 0; inedx_2 < dim_handler.N3; ++inedx_2)
+            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
             {
-
-                Dim stride = dim_handler.stride(inedx_1, inedx_2);
-
-                // d = rhs
-                for (Dim index_0 = 0; index_0 < dim_handler.N1; ++index_0)
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
-                    d[index_0] = p_boundary.get(stride + index_0);
+                    // d = rhs
+                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
+                    {
+                        d[index_0] = p_boundary.get(index_0, index_1, index_2);
+                    }
+
+                    // Solve the tridiagonal system
+                    thomas_algorithm(a, b, c, d, x);
+
+                    // Store the solution
+                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
+                    {
+                        solution.set(index_0, index_1, index_2) = x[index_0];
+                    }
                 }
-
-                // Solve the tridiagonal system
-                thomas_algorithm(a, b, c, d, x);
-
-                // Store the solution
-                for (Dim index_0 = 0; index_0 < dim_handler.N1; ++index_0)
+            }
+        }
+        else if constexpr (direction == 1) // Y direction
+        {
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
-                    solution.set(stride + index_0) = x[index_0];
+                    // d = rhs
+                    for (Dim index_0 = 0; index_0 < Ny; ++index_0)
+                    {
+                        d[index_0] = p_boundary.get(index_0, index_1, index_2);
+                    }
+
+                    // Solve the tridiagonal system
+                    thomas_algorithm(a, b, c, d, x);
+
+                    // Store the solution
+                    for (Dim index_0 = 0; index_0 < Ny; ++index_0)
+                    {
+                        solution.set(index_0, index_1, index_2) = x[index_0];
+                    }
+                }
+            }
+        }
+        else if constexpr (direction == 2) // Z direction
+        {
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Ny; ++index_2)
+                {
+                    // d = rhs
+                    for (Dim index_0 = 0; index_0 < Nz; ++index_0)
+                    {
+                        d[index_0] = p_boundary.get(index_0, index_1, index_2);
+                    }
+
+                    // Solve the tridiagonal system
+                    thomas_algorithm(a, b, c, d, x);
+
+                    // Store the solution
+                    for (Dim index_0 = 0; index_0 < Nz; ++index_0)
+                    {
+                        solution.set(index_0, index_1, index_2) = x[index_0];
+                    }
                 }
             }
         }
     };
-
     ScalarVariable &p_boundary;
 
 public:
@@ -152,11 +228,11 @@ public:
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_), p_boundary(p_boundary_)
     {
     }
-    template <typename StrideFunc>
+    template <typename StrideFunc, Dim direction>
     void solve_pressure(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar<StrideFunc> &dim_handler)
     {
-        apply_bc(rhs, dim_handler);
-        block_solver(rhs, solution, dim_handler);
+        apply_bc<direction>(rhs); // <-- CORRECTED: Removed dim_handler
+        block_solver<direction, StrideFunc>(rhs, solution, dim_handler);
     };
     ScalarVariable &set_p_boundary() { return p_boundary; }
 };
@@ -175,7 +251,7 @@ class VelocitySolver : public Solver
 private:
     ScalarVariable &gamma_field;
 
-    template <typename StrideFunc>
+    template <Dim direction, typename StrideFunc>
     void block_solver(const VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector<StrideFunc> &dim_handler)
     {
         Dim N1 = dim_handler.N1;
@@ -194,79 +270,213 @@ private:
 
         // Here we consider only the even indices in 2nd direction
         // where normal components are considered
-        for (Dim inedx_1 = 0; inedx_1 < N2; ++inedx_1)
+        if constexpr (direction == 0) // X direction
         {
-            for (Dim inedx_2 = 0; inedx_2 < N3; ++inedx_2)
+            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
             {
-
-                Dim stride = dim_handler.stride(inedx_1, inedx_2);
-
-                for (Dim index_0 = 1; index_0 < N1 - 1; ++index_0)
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
-                    d[index_0] = rhs.value(dim_handler.Comp1,stride + index_0);
+                    for (Dim index_0 = 1; index_0 < Nx - 1; ++index_0)
+                    {
+                        d[index_0] = rhs.value(direction, index_0, index_1, index_2);
 
-                    Real gamma_val = -gamma_field.get(stride + index_0);
+                        Real gamma_val = -gamma_field.get(index_0, index_1, index_2);
 
-                    a[index_0] = gamma_val / (dN1 * dN1);
-                    b[index_0] = 1.0f - (2.0f * gamma_val) / (dN1 * dN1);
-                    c[index_0] = gamma_val / (dN1 * dN1);
+                        a[index_0] = gamma_val / (dx * dx);
+                        b[index_0] = 1.0f - (2.0f * gamma_val) / (dx * dx);
+                        c[index_0] = gamma_val / (dx * dx);
+                    }
+
+                    // Solve the tridiagonal system
+                    thomas_algorithm(a, b, c, d, x);
+
+                    // Store the solution
+                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
+                    {
+                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
+                    }
+
+                    a[Nx - 1] = -gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx);
+                    b[Nx - 1] = 1.0f + (3.0f * gamma_field.get(Nx - 1, index_1, index_2)) / (dx * dx);
+
+                    for (Dim index_0 = 1; index_0 < Nx - 1; ++index_0)
+                    {
+                        d[index_0] = u_boundary.value(direction, index_0, index_1, index_2);
+                    }
+
+                    // Solve the tridiagonal system
+                    thomas_algorithm(a, b, c, d, x);
+
+                    // Store the solution
+                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
+                    {
+                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
+                    }
                 }
-
-                // Solve the tridiagonal system
-                thomas_algorithm(a, b, c, d, x);
-
-                // Store the solution
-                for (Dim index_0 = 0; index_0 < N1; ++index_0)
+            }
+        }
+        else if constexpr (direction == 1) // Y direction
+        {
+            // Similar implementation for Y direction
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
-                    solution.set(dim_handler.Comp1, stride + index_0) = x[index_0];
+                    for (Dim index_0 = 1; index_0 < Ny - 1; ++index_0)
+                    {
+                        d[index_0] = rhs.value(direction, index_0, index_1, index_2);
+
+                        Real gamma_val = -gamma_field.get(index_0, index_1, index_2);
+
+                        a[index_0] = gamma_val / (dy * dy);
+                        b[index_0] = 1.0f - (2.0f * gamma_val) / (dy * dy);
+                        c[index_0] = gamma_val / (dy * dy);
+                    }
+
+                    // Solve the tridiagonal system
+                    thomas_algorithm(a, b, c, d, x);
+
+                    // Store the solution
+                    for (Dim index_0 = 0; index_0 < Ny; ++index_0)
+                    {
+                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
+                    }
+
+                    a[Ny - 1] = -gamma_field.get(index_1, Ny - 1, index_2) / (dy * dy);
+                    b[Ny - 1] = 1.0f + (3.0f * gamma_field.get(index_1, Ny - 1, index_2)) / (dy * dy);
+
+                    for (Dim index_0 = 1; index_0 < Ny - 1; ++index_0)
+                    {
+                        d[index_0] = u_boundary.value(direction, index_0, index_1, index_2);
+                    }
+
+                    // Solve the tridiagonal system
+                    thomas_algorithm(a, b, c, d, x);
+
+                    // Store the solution
+                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
+                    {
+                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
+                    }
                 }
-
-                a[N1 - 1] = -gamma_field.get(stride + N1 - 1) / (dN1 * dN1);
-                b[N1 - 1] = 1.0f + (3.0f * gamma_field.get(stride + N1 - 1)) / (dN1 * dN1);
-
-                for (Dim index_0 = 1; index_0 < N1 - 1; ++index_0)
+            }
+        }
+        else if constexpr (direction == 2) // Z direction
+        {
+            // Similar implementation for Z direction
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
-                    d[index_0] = u_boundary.value(dim_handler.Comp1, stride + index_0);
-                }
+                    for (Dim index_0 = 1; index_0 < Nz - 1; ++index_0)
+                    {
+                        d[index_0] = rhs.value(direction, index_0, index_1, index_2);
 
-                // Solve the tridiagonal system
-                thomas_algorithm(a, b, c, d, x);
+                        Real gamma_val = -gamma_field.get(index_0, index_1, index_2);
 
-                // Store the solution
-                for (Dim index_0 = 0; index_0 < N1; ++index_0)
-                {
-                    solution.set(dim_handler.Comp1, stride + index_0) = x[index_0];
+                        a[index_0] = gamma_val / (dz * dz);
+                        b[index_0] = 1.0f - (2.0f * gamma_val) / (dz * dz);
+                        c[index_0] = gamma_val / (dz * dz);
+                    }
+
+                    // Solve the tridiagonal system
+                    thomas_algorithm(a, b, c, d, x);
+
+                    // Store the solution
+                    for (Dim index_0 = 0; index_0 < Nz; ++index_0)
+                    {
+                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
+                    }
+
+                    a[Nz - 1] = -gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz);
+                    b[Nz - 1] = 1.0f + (3.0f * gamma_field.get(index_1, index_2, Nz - 1)) / (dz * dz);
+
+                    for (Dim index_0 = 1; index_0 < Nz - 1; ++index_0)
+                    {
+                        d[index_0] = u_boundary.value(direction, index_0, index_1, index_2);
+                    }
+
+                    // Solve the tridiagonal system
+                    thomas_algorithm(a, b, c, d, x);
+
+                    // Store the solution
+                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
+                    {
+                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
+                    }
                 }
             }
         }
     };
 
-    template <typename StrideFunc>
+    template <typename StrideFunc, Dim direction>
     void apply_bc(VectorVariable &rhs, const DimensionsHandlerVector<StrideFunc> &dim_handler)
     {
+
         // Here we consider only the even indices in 2nd direction
         // where we have normal components on even 3rd direction and tangent components on odd 3rd direction
-        for (Dim inedx_1 = 0; inedx_1 < dim_handler.N2; ++inedx_1)
+
+        if constexpr (direction == 0)
         {
-            for (Dim inedx_2 = 0; inedx_2 < dim_handler.N3; ++inedx_2)
+            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
             {
-                Dim stride = dim_handler.stride(inedx_1, inedx_2);
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
+                {
+                    // on comp1 we have normal components
+                    rhs.set(direction, 0, index_1, index_2) = u_boundary.value(direction, 0, index_1, index_2) - (u_boundary.first_derivative(1, 1, 0, index_1, index_2) + u_boundary.first_derivative(2, 2, 0, index_1, index_2)) * dx * Real(0.5);
+                    rhs.set(direction, Nx - 1, index_1, index_2) = u_boundary.value(direction, Nx - 1, index_1, index_2);
 
-                // on comp1 we have normal components
-                rhs.set(dim_handler.Comp1, stride) = u_boundary.value(dim_handler.Comp1, stride) - (u_boundary.first_derivative(dim_handler.Comp2, dim_handler.Comp2, stride) + u_boundary.first_derivative(dim_handler.Comp3,dim_handler.Comp3, stride)) * dim_handler.dN1 * Real(0.5);
-                rhs.set(dim_handler.Comp1, stride + dim_handler.N1 - 1) = u_boundary.value(dim_handler.Comp1, stride + dim_handler.N1 - 1);
+                    // on comp2 we have tangent components
+                    rhs.set(1, 0, index_1, index_2) = u_boundary.value(1, 0, index_1, index_2);
+                    rhs.set(1, Nx - 1, index_1, index_2) = rhs.value(1, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx) * u_boundary.value(1, Nx - 1, index_1, index_2);
 
-                // on comp2 we have tangent components
-                rhs.set(dim_handler.Comp2, stride) = u_boundary.value(dim_handler.Comp2, stride);
-                rhs.set(dim_handler.Comp2, stride + dim_handler.N1 - 1) = rhs.value(dim_handler.Comp2, stride + dim_handler.N1 - 1) + Real(2.0) * gamma_field.get(stride + dim_handler.N1 - 1) / (dim_handler.dN1 * dim_handler.dN1) * u_boundary.value(dim_handler.Comp2, stride + dim_handler.N1 - 1);
-
-                // on comp3 we have tangent components
-                rhs.set(dim_handler.Comp3, stride) = u_boundary.value(dim_handler.Comp3, stride);
-                rhs.set(dim_handler.Comp3, stride + dim_handler.N1 - 1) = rhs.value(dim_handler.Comp3, stride + dim_handler.N1 - 1) + Real(2.0) * gamma_field.get(stride + dim_handler.N1 - 1) / (dim_handler.dN1 * dim_handler.dN1) * u_boundary.value(dim_handler.Comp3, stride + dim_handler.N1 - 1); //TOD: modify u_boundary to a function and add 0.5
-                
+                    // on comp3 we have tangent components
+                    rhs.set(2, 0, index_1, index_2) = u_boundary.value(2, 0, index_1, index_2);
+                    rhs.set(2, Nx - 1, index_1, index_2) = rhs.value(2, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx) * u_boundary.value(2, Nx - 1, index_1, index_2);
+                }
             }
         }
-    }
+        else if constexpr (direction == 1)
+        {
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
+                {
+                    // on comp2 we have normal components
+                    rhs.set(direction, index_1, 0, index_2) = u_boundary.value(direction, index_1, 0, index_2) - (u_boundary.first_derivative(0, 0, index_1, 0, index_2) + u_boundary.first_derivative(2, 2, index_1, 0, index_2)) * dy * Real(0.5);
+                    rhs.set(direction, index_1, Ny - 1, index_2) = u_boundary.value(direction, index_1, Ny - 1, index_2);
+
+                    // on comp1 we have tangent components
+                    rhs.set(0, index_1, 0, index_2) = u_boundary.value(0, index_1, 0, index_2);
+                    rhs.set(0, index_1, Ny - 1, index_2) = rhs.value(0, index_1, Ny - 1, index_2) + Real(2.0) * gamma_field.get(index_1, Ny - 1, index_2) / (dy * dy) * u_boundary.value(0, index_1, Ny - 1, index_2);
+
+                    // on comp3 we have tangent components
+                    rhs.set(2, index_1, 0, index_2) = u_boundary.value(2, index_1, 0, index_2);
+                    rhs.set(2, index_1, Ny - 1, index_2) = rhs.value(2, index_1, Ny - 1, index_2) + Real(2.0) * gamma_field.get(index_1, Ny - 1, index_2) / (dy * dy) * u_boundary.value(2, index_1, Ny - 1, index_2);
+                }
+            }
+        }
+        else if constexpr (direction == 2)
+        {
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Ny; ++index_2)
+                {
+                    // on comp3 we have normal components
+                    rhs.set(direction, index_1, index_2, 0) = u_boundary.value(direction, index_1, index_2, 0) - (u_boundary.first_derivative(0, 0, index_1, index_2, 0) + u_boundary.first_derivative(1, 1, index_1, index_2, 0)) * dz * Real(0.5);
+                    rhs.set(direction, index_1, index_2, Nz - 1) = u_boundary.value(direction, index_1, index_2, Nz - 1);
+
+                    // on comp1 we have tangent components
+                    rhs.set(0, index_1, index_2, 0) = u_boundary.value(0, index_1, index_2, 0);
+                    rhs.set(0, index_1, index_2, Nz - 1) = rhs.value(0, index_1, index_2, Nz - 1) + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) * u_boundary.value(0, index_1, index_2, Nz - 1);
+
+                    // on comp2 we have tangent components
+                    rhs.set(1, index_1, index_2, 0) = u_boundary.value(1, index_1, index_2, 0);
+                    rhs.set(1, index_1, index_2, Nz - 1) = rhs.value(1, index_1, index_2, Nz - 1) + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) * u_boundary.value(1, index_1, index_2, Nz - 1);
+                }
+            }
+        }
+    };
 
     VectorVariable &u_boundary;
 
@@ -275,26 +485,14 @@ public:
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_), gamma_field(gam), u_boundary(u_bnd)
     {
     }
-    template <typename StrideFunc>
+    
+    template <typename StrideFunc, Dim direction>
     void solve(VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector<StrideFunc> &dim_handler)
     {
-        apply_bc(rhs, dim_handler);
-        block_solver(rhs, solution, dim_handler);
+        apply_bc<StrideFunc, direction>(rhs, dim_handler);
+        block_solver<direction, StrideFunc>(rhs, solution, dim_handler);
     };
     void set_gamma(ScalarVariable &g) { gamma_field = g; }
     VectorVariable &set_u_boundary() { return u_boundary; }
 };
-
-// =============================================================================================
-// This has to be deleted, since it has been added just to make the code compile.
-// =============================================================================================
-template <typename StrideFunc>
-void Solver::solve(ScalarVariable &rhs,
-                   ScalarVariable &solution,
-                   const DimensionsHandlerScalar<StrideFunc> &dim_handler)
-{
-    (void)rhs;
-    (void)solution;
-    (void)dim_handler;
-}
 #endif // SOLVER_HPP
