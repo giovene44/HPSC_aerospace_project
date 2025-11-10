@@ -195,7 +195,7 @@ private:
 
         // Here we consider only the even indices in 2nd direction
         // where normal components are considered
-        for (Dim inedx_1 = 0; inedx_1 < N2; ++ ++inedx_1)
+        for (Dim inedx_1 = 0; inedx_1 < N2; ++inedx_1)
         {
             for (Dim inedx_2 = 0; inedx_2 < N3; ++inedx_2)
             {
@@ -204,7 +204,7 @@ private:
 
                 for (Dim index_0 = 1; index_0 < N1 - 1; ++index_0)
                 {
-                    d[index_0] = u_boundary.value(dim_handler.Comp1,stride + index_0);
+                    d[index_0] = rhs.value(dim_handler.Comp1,stride + index_0);
 
                     Real gamma_val = -gamma_field.get(stride + index_0);
 
@@ -221,17 +221,6 @@ private:
                 {
                     solution.set(dim_handler.Comp1, stride + index_0) = x[index_0];
                 }
-            }
-        }
-
-        // Here we consider only the odd indices in 2nd direction
-        // where tangential components are considered
-        for (Dim inedx_1 = 1; inedx_1 < N2; ++ ++inedx_1)
-        {
-            for (Dim inedx_2 = 0; inedx_2 < N3; ++inedx_2)
-            {
-
-                Dim stride = dim_handler.stride(inedx_1, inedx_2);
 
                 a[N1 - 1] = -gamma_field.get(stride + N1 - 1) / (dN1 * dN1);
                 b[N1 - 1] = 1.0f + (3.0f * gamma_field.get(stride + N1 - 1)) / (dN1 * dN1);
@@ -258,33 +247,24 @@ private:
     {
         // Here we consider only the even indices in 2nd direction
         // where we have normal components on even 3rd direction and tangent components on odd 3rd direction
-        for (Dim inedx_1 = 0; inedx_1 < dim_handler.N2; ++++inedx_1)
-        {
-            for (Dim inedx_2 = 0; inedx_2 < dim_handler.N3; ++++inedx_2)
-            {
-                Dim stride_comp1 = dim_handler.stride(inedx_1, inedx_2);
-
-                // on comp1 we have normal components
-                rhs.set(dim_handler.Comp1, stride_comp1 + 0) = u_boundary.value(dim_handler.Comp1, stride_comp1 + 0) - (u_boundary.first_derivative(dim_handler.Comp2, dim_handler.Comp2, stride_comp1 + 0) + u_boundary.first_derivative(dim_handler.Comp3,dim_handler.Comp3, stride_comp1 + 0)) * dim_handler.dN1 * Real(0.5);
-                rhs.set(dim_handler.Comp1, stride_comp1 + dim_handler.N1 - 1) = u_boundary.value(dim_handler.Comp1, stride_comp1 + dim_handler.N1 - 1);
-
-                // on comp2 we have tangent components
-                Dim stride_comp2 = dim_handler.stride(inedx_1, ++inedx_2);
-                rhs.set(dim_handler.Comp2, stride_comp2 + 0) = u_boundary.value(dim_handler.Comp2, stride_comp2 + 0);
-                rhs.set(dim_handler.Comp2, stride_comp2 + dim_handler.N1 - 1) = rhs.value(dim_handler.Comp2, stride_comp2 + dim_handler.N1 - 1) + Real(2.0) / (dim_handler.dN1 * dim_handler.dN1) * u_boundary.value(dim_handler.Comp2, stride_comp2 + dim_handler.N1 - 1);
-            }
-        }
-
-        // Here we consider only the odd indices in 2nd direction
-        // where tangential components are considered
-        for (Dim inedx_1 = 1; inedx_1 < dim_handler.N2; ++ ++inedx_1)
+        for (Dim inedx_1 = 0; inedx_1 < dim_handler.N2; ++inedx_1)
         {
             for (Dim inedx_2 = 0; inedx_2 < dim_handler.N3; ++inedx_2)
             {
                 Dim stride = dim_handler.stride(inedx_1, inedx_2);
 
-                rhs.set(dim_handler.Comp3, stride + 0) = u_boundary.value(dim_handler.Comp3, stride + 0);
-                rhs.set(dim_handler.Comp3, stride + dim_handler.N1 - 1) = rhs.value(dim_handler.Comp3, stride + dim_handler.N1 - 1) + Real(2.0) / (dim_handler.dN1 * dim_handler.dN1) * u_boundary.value(dim_handler.Comp3, stride + dim_handler.N1 - 1);
+                // on comp1 we have normal components
+                rhs.set(dim_handler.Comp1, stride) = u_boundary.value(dim_handler.Comp1, stride) - (u_boundary.first_derivative(dim_handler.Comp2, dim_handler.Comp2, stride) + u_boundary.first_derivative(dim_handler.Comp3,dim_handler.Comp3, stride)) * dim_handler.dN1 * Real(0.5);
+                rhs.set(dim_handler.Comp1, stride + dim_handler.N1 - 1) = u_boundary.value(dim_handler.Comp1, stride + dim_handler.N1 - 1);
+
+                // on comp2 we have tangent components
+                rhs.set(dim_handler.Comp2, stride) = u_boundary.value(dim_handler.Comp2, stride);
+                rhs.set(dim_handler.Comp2, stride + dim_handler.N1 - 1) = rhs.value(dim_handler.Comp2, stride + dim_handler.N1 - 1) + Real(2.0) * gamma_field.get(stride + dim_handler.N1 - 1) / (dim_handler.dN1 * dim_handler.dN1) * u_boundary.value(dim_handler.Comp2, stride + dim_handler.N1 - 1);
+
+                // on comp3 we have tangent components
+                rhs.set(dim_handler.Comp3, stride) = u_boundary.value(dim_handler.Comp3, stride);
+                rhs.set(dim_handler.Comp3, stride + dim_handler.N1 - 1) = rhs.value(dim_handler.Comp3, stride + dim_handler.N1 - 1) + Real(2.0) * gamma_field.get(stride + dim_handler.N1 - 1) / (dim_handler.dN1 * dim_handler.dN1) * u_boundary.value(dim_handler.Comp3, stride + dim_handler.N1 - 1); //TOD: modify u_boundary to a function and add 0.5
+                
             }
         }
     }

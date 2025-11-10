@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999996 (MiKTeX 24.4) (preloaded format=xelatex 2025.10.14)  9 NOV 2025 22:23
+This is XeTeX, Version 3.141592653-2.6-0.999996 (MiKTeX 24.4) (preloaded format=xelatex 2025.10.14)  10 NOV 2025 08:59
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -1048,28 +1048,6 @@ File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type bmp)
 [7
 
 ]
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type bmp)
-<beamerthemepolimi_img/logo_bandiera.png>
-
-
-File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
-<use beamerthemepolimi_img/decoration.pdf>
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type bmp)
-<beamerthemepolimi_img/logo_bandiera.png>
-[8
-
-]
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type bmp)
-<beamerthemepolimi_img/logo_bandiera.png>
-
-
-File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
-<use beamerthemepolimi_img/decoration.pdf>
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type bmp)
-<beamerthemepolimi_img/logo_bandiera.png>
-[9
-
-]
 \tf@nav=\write6
 \openout6 = `presentation.nav'.
 
@@ -1088,12 +1066,12 @@ Package rerunfilecheck Info: File `presentation.out' has not changed.
 (rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 27237 strings out of 409034
- 576767 string characters out of 5756840
+ 27213 strings out of 409034
+ 576279 string characters out of 5756840
  1946560 words of memory out of 5000000
- 49377 multiletter control sequences out of 15000+600000
+ 49353 multiletter control sequences out of 15000+600000
  565072 words of font info for 100 fonts, out of 8000000 for 9000
  1348 hyphenation exceptions out of 8191
  128i,16n,123p,1481b,880s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on presentation.xdv (9 pages, 91340 bytes).
+Output written on presentation.xdv (7 pages, 79232 bytes).
