@@ -214,7 +214,8 @@ void NavierStokesBrinkmann::solve()
     {
         return i + j * Nx;
     };
-    DimensionsHandlerScalar<decltype(stride_x)> x_scalar_handler(Nx, Ny, Nz, dx, stride_x);
+
+     DimensionsHandlerScalar<decltype(stride_x)> x_scalar_handler(Nx, Ny, Nz, dx, stride_x);
     DimensionsHandlerScalar<decltype(stride_y)> y_scalar_handler(Nx, Ny, Nz, dy, stride_y);
     DimensionsHandlerScalar<decltype(stride_z)> z_scalar_handler(Nx, Ny, Nz, dz, stride_z);
 
@@ -254,9 +255,9 @@ void NavierStokesBrinkmann::solve()
         // ===========================PRESSURE EQUATION SOLVE==========================
         // ============================================================================
         compute_rhs_pressure();
-        pressure_solver.solve(rhs, psi, x_scalar_handler);
-        pressure_solver.solve(psi, phi, y_scalar_handler);
-        pressure_solver.solve(phi, other_phi, z_scalar_handler);
+        pressure_solver.solve_pressure(rhs, psi, x_scalar_handler);
+        pressure_solver.solve_pressure(psi, phi, y_scalar_handler);
+        pressure_solver.solve_pressure(phi, other_phi, z_scalar_handler);
 
         // ============================================================================
         // =====================UPDATE PRESSURE====================

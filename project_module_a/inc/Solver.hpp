@@ -93,10 +93,10 @@ private:
                 Dim stride = dim_handler.stride(inedx_1, inedx_2);
 
                 // Lower boundary (index 0)
-                rhs.set(stride + 0) = rhs - Real(2.0) / dim_handler.dN1 * p_boundary.get(stride + 0); // ∂p/∂n = f at "left" boundary
+                rhs.set(stride) = rhs.get(stride) - Real(2.0) / dim_handler.dN1 * p_boundary.get(stride); // ∂p/∂n = f at "left" boundary
 
                 // Upper boundary (index N1-1)
-                rhs.set(stride + dim_handler.N1 - 1) = rhs + Real(2.0) / dim_handler.dN1 * p_boundary.get(stride + dim_handler.N1 - 1); // ∂p/∂n = f at "right" boundary
+                rhs.set(stride + dim_handler.N1 - 1) = rhs.get(stride + dim_handler.N1 - 1) + Real(2.0) / dim_handler.dN1 * p_boundary.get(stride + dim_handler.N1 - 1); // ∂p/∂n = f at "right" boundary
             }
         }
     }
@@ -153,13 +153,12 @@ public:
     {
     }
     template <typename StrideFunc>
-    void solve_pressure(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar<StrideFunc> &dim_handler) 
+    void solve_pressure(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar<StrideFunc> &dim_handler)
     {
         apply_bc(rhs, dim_handler);
         block_solver(rhs, solution, dim_handler);
     };
-    ScalarVariable &set_p_boundary() { return p_boundary;}
-    
+    ScalarVariable &set_p_boundary() { return p_boundary; }
 };
 // =============================================================================================
 // =============================================================================================
@@ -227,7 +226,7 @@ private:
 
                 for (Dim index_0 = 1; index_0 < N1 - 1; ++index_0)
                 {
-                    d[index_0] = u_boundary.value(dim_handler.Comp1,stride + index_0);
+                    d[index_0] = u_boundary.value(dim_handler.Comp1, stride + index_0);
                 }
 
                 // Solve the tridiagonal system
@@ -270,6 +269,7 @@ private:
     }
 
     VectorVariable &u_boundary;
+
 public:
     VelocitySolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, ScalarVariable &gam, VectorVariable &u_bnd)
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_), gamma_field(gam), u_boundary(u_bnd)
@@ -282,7 +282,7 @@ public:
         block_solver(rhs, solution, dim_handler);
     };
     void set_gamma(ScalarVariable &g) { gamma_field = g; }
-    VectorVariable &set_u_boundary() { return u_boundary;}
+    VectorVariable &set_u_boundary() { return u_boundary; }
 };
 
 // =============================================================================================
