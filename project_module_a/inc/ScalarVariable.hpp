@@ -6,8 +6,6 @@
 #include <iostream>
 #include <stdexcept>
 
-
-
 class ScalarVariable
 {
 public:
@@ -52,6 +50,16 @@ public:
         for (Dim index = 0; index < Nx * Ny * Nz; ++index)
         {
             result.set(index) = this->get(index) + other.get(index);
+        }
+        return result;
+    }
+
+    ScalarVariable operator-(const ScalarVariable &other) const
+    {
+        ScalarVariable result(Nx, Ny, Nz, dx, dy, dz);
+        for (Dim index = 0; index < Nx * Ny * Nz; ++index)
+        {
+            result.set(index) = this->get(index) - other.get(index);
         }
         return result;
     }
