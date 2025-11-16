@@ -56,6 +56,7 @@ public:
     // initialization methods:
     void initialize_gamma_field();
     void parse_input(const std::string &input_file);
+    void initialize_k_field(); 
 
     Real compute_beta(Dim i, Dim j, Dim k) const;
     Real compute_beta(Dim index) const;

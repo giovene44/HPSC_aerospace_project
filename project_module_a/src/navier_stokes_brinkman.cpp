@@ -110,6 +110,7 @@ void NavierStokesBrinkmann::initialize_gamma_field()
     }
 }
 
+
 void NavierStokesBrinkmann::compute_vector_g()
 {
     // -------------------------------------------------------------------------
