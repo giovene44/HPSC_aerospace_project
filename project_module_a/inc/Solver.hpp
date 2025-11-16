@@ -276,6 +276,7 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
+                    // Set up interior points
                     for (Dim index_0 = 1; index_0 < Nx - 1; ++index_0)
                     {
                         d[index_0] = rhs.value(direction, index_0, index_1, index_2);
@@ -287,22 +288,22 @@ private:
                         c[index_0] = gamma_val / (dx * dx);
                     }
 
-                    // Solve the tridiagonal system
-                    thomas_algorithm(a, b, c, d, x);
+                    // Set up boundary conditions in matrix coefficients
+                    // When direction == 0, we're solving for x-component (normal on x-boundaries)
+                    // Left boundary (index 0): normal component uses incompressibility (rhs already set by apply_bc)
+                    // Use identity row: 1*u_0 = rhs (which contains the incompressibility-based value)
+                    a[0] = Real(0.0);
+                    b[0] = Real(1.0);
+                    c[0] = Real(0.0);
+                    d[0] = rhs.value(direction, 0, index_1, index_2);
 
-                    // Store the solution
-                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
-                    {
-                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
-                    }
-
-                    a[Nx - 1] = -gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx);
-                    b[Nx - 1] = 1.0f + (3.0f * gamma_field.get(Nx - 1, index_1, index_2)) / (dx * dx);
-
-                    for (Dim index_0 = 1; index_0 < Nx - 1; ++index_0)
-                    {
-                        d[index_0] = u_boundary.value(direction, index_0, index_1, index_2);
-                    }
+                    // Right boundary (index Nx-1): normal component uses identity row
+                    // According to slide 14: "Normal component: as on left side for tangent components"
+                    // This means identity row (1 on diagonal, b.c. value in rhs, already set by apply_bc)
+                    a[Nx - 1] = Real(0.0);
+                    b[Nx - 1] = Real(1.0);
+                    c[Nx - 1] = Real(0.0);
+                    d[Nx - 1] = rhs.value(direction, Nx - 1, index_1, index_2);
 
                     // Solve the tridiagonal system
                     thomas_algorithm(a, b, c, d, x);
@@ -322,41 +323,42 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
+                    // Set up interior points
+                    // Note: index_0 is y-index, index_1 is x-index, index_2 is z-index
+                    // VectorVariable::value expects (axes, x, y, z), so we use (direction, index_1, index_0, index_2)
                     for (Dim index_0 = 1; index_0 < Ny - 1; ++index_0)
                     {
-                        d[index_0] = rhs.value(direction, index_0, index_1, index_2);
+                        d[index_0] = rhs.value(direction, index_1, index_0, index_2);
 
-                        Real gamma_val = -gamma_field.get(index_0, index_1, index_2);
+                        Real gamma_val = -gamma_field.get(index_1, index_0, index_2);
 
                         a[index_0] = gamma_val / (dy * dy);
                         b[index_0] = 1.0f - (2.0f * gamma_val) / (dy * dy);
                         c[index_0] = gamma_val / (dy * dy);
                     }
 
+                    // Set up boundary conditions in matrix coefficients
+                    // When direction == 1, we're solving for y-component (normal on y-boundaries)
+                    // Left boundary (index 0): normal component uses incompressibility (rhs already set by apply_bc)
+                    a[0] = Real(0.0);
+                    b[0] = Real(1.0);
+                    c[0] = Real(0.0);
+                    d[0] = rhs.value(direction, index_1, 0, index_2);
+
+                    // Right boundary (index Ny-1): normal component uses identity row
+                    a[Ny - 1] = Real(0.0);
+                    b[Ny - 1] = Real(1.0);
+                    c[Ny - 1] = Real(0.0);
+                    d[Ny - 1] = rhs.value(direction, index_1, Ny - 1, index_2);
+
                     // Solve the tridiagonal system
                     thomas_algorithm(a, b, c, d, x);
 
                     // Store the solution
+                    // solution.set expects (axes, x, y, z), so we use (direction, index_1, index_0, index_2)
                     for (Dim index_0 = 0; index_0 < Ny; ++index_0)
                     {
-                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
-                    }
-
-                    a[Ny - 1] = -gamma_field.get(index_1, Ny - 1, index_2) / (dy * dy);
-                    b[Ny - 1] = 1.0f + (3.0f * gamma_field.get(index_1, Ny - 1, index_2)) / (dy * dy);
-
-                    for (Dim index_0 = 1; index_0 < Ny - 1; ++index_0)
-                    {
-                        d[index_0] = u_boundary.value(direction, index_0, index_1, index_2);
-                    }
-
-                    // Solve the tridiagonal system
-                    thomas_algorithm(a, b, c, d, x);
-
-                    // Store the solution
-                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
-                    {
-                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
+                        solution.set(direction, index_1, index_0, index_2) = x[index_0];
                     }
                 }
             }
@@ -368,41 +370,42 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
+                    // Set up interior points
+                    // Note: index_0 is z-index, index_1 is x-index, index_2 is y-index
+                    // VectorVariable::value expects (axes, x, y, z), so we use (direction, index_1, index_2, index_0)
                     for (Dim index_0 = 1; index_0 < Nz - 1; ++index_0)
                     {
-                        d[index_0] = rhs.value(direction, index_0, index_1, index_2);
+                        d[index_0] = rhs.value(direction, index_1, index_2, index_0);
 
-                        Real gamma_val = -gamma_field.get(index_0, index_1, index_2);
+                        Real gamma_val = -gamma_field.get(index_1, index_2, index_0);
 
                         a[index_0] = gamma_val / (dz * dz);
                         b[index_0] = 1.0f - (2.0f * gamma_val) / (dz * dz);
                         c[index_0] = gamma_val / (dz * dz);
                     }
 
+                    // Set up boundary conditions in matrix coefficients
+                    // When direction == 2, we're solving for z-component (normal on z-boundaries)
+                    // Left boundary (index 0): normal component uses incompressibility (rhs already set by apply_bc)
+                    a[0] = Real(0.0);
+                    b[0] = Real(1.0);
+                    c[0] = Real(0.0);
+                    d[0] = rhs.value(direction, index_1, index_2, 0);
+
+                    // Right boundary (index Nz-1): normal component uses identity row
+                    a[Nz - 1] = Real(0.0);
+                    b[Nz - 1] = Real(1.0);
+                    c[Nz - 1] = Real(0.0);
+                    d[Nz - 1] = rhs.value(direction, index_1, index_2, Nz - 1);
+
                     // Solve the tridiagonal system
                     thomas_algorithm(a, b, c, d, x);
 
                     // Store the solution
+                    // solution.set expects (axes, x, y, z), so we use (direction, index_1, index_2, index_0)
                     for (Dim index_0 = 0; index_0 < Nz; ++index_0)
                     {
-                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
-                    }
-
-                    a[Nz - 1] = -gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz);
-                    b[Nz - 1] = 1.0f + (3.0f * gamma_field.get(index_1, index_2, Nz - 1)) / (dz * dz);
-
-                    for (Dim index_0 = 1; index_0 < Nz - 1; ++index_0)
-                    {
-                        d[index_0] = u_boundary.value(direction, index_0, index_1, index_2);
-                    }
-
-                    // Solve the tridiagonal system
-                    thomas_algorithm(a, b, c, d, x);
-
-                    // Store the solution
-                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
-                    {
-                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
+                        solution.set(direction, index_1, index_2, index_0) = x[index_0];
                     }
                 }
             }
