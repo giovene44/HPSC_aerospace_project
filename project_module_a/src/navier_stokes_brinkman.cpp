@@ -110,7 +110,6 @@ void NavierStokesBrinkmann::initialize_gamma_field()
     }
 }
 
-
 void NavierStokesBrinkmann::compute_vector_g()
 {
     // -------------------------------------------------------------------------
@@ -232,6 +231,8 @@ void NavierStokesBrinkmann::solve()
 
     for (Real t = 0.0f; t < T; t += dt)
     {
+
+        printf("Time step at t = %.4f\n", t);
         pressure_predictor = pressure_solution + other_phi;
 
         compute_vector_g();
