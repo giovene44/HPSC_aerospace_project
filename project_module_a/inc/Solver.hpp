@@ -272,140 +272,284 @@ private:
         // where normal components are considered
         if constexpr (direction == 0) // X direction
         {
+            // Comp1 = 0 (x-component, normal on x-boundaries)
+            // Comp2 = 1 (y-component, tangent on x-boundaries)
+            // Comp3 = 2 (z-component, tangent on x-boundaries)
+            Dim Comp1 = dim_handler.Comp1; // 0 (x)
+            Dim Comp2 = dim_handler.Comp2; // 1 (y)
+            Dim Comp3 = dim_handler.Comp3; // 2 (z)
+
             for (Dim index_1 = 0; index_1 < Ny; ++index_1)
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
-                    // Set up interior points
+                    // Solve for Comp1 (x-component, normal on x-boundaries)
                     for (Dim index_0 = 1; index_0 < Nx - 1; ++index_0)
                     {
-                        d[index_0] = rhs.value(direction, index_0, index_1, index_2);
-
+                        d[index_0] = rhs.value(Comp1, index_0, index_1, index_2);
                         Real gamma_val = -gamma_field.get(index_0, index_1, index_2);
-
                         a[index_0] = gamma_val / (dx * dx);
                         b[index_0] = 1.0f - (2.0f * gamma_val) / (dx * dx);
                         c[index_0] = gamma_val / (dx * dx);
                     }
-
-                    // Set up boundary conditions in matrix coefficients
-                    // When direction == 0, we're solving for x-component (normal on x-boundaries)
-                    // Left boundary (index 0): normal component uses incompressibility (rhs already set by apply_bc)
-                    // Use identity row: 1*u_0 = rhs (which contains the incompressibility-based value)
+                    // Left boundary: identity row (incompressibility handled in rhs by apply_bc)
                     a[0] = Real(0.0);
                     b[0] = Real(1.0);
                     c[0] = Real(0.0);
-                    d[0] = rhs.value(direction, 0, index_1, index_2);
-
-                    // Right boundary (index Nx-1): normal component uses identity row
-                    // According to slide 14: "Normal component: as on left side for tangent components"
-                    // This means identity row (1 on diagonal, b.c. value in rhs, already set by apply_bc)
+                    d[0] = rhs.value(Comp1, 0, index_1, index_2);
+                    // Right boundary: identity row
                     a[Nx - 1] = Real(0.0);
                     b[Nx - 1] = Real(1.0);
                     c[Nx - 1] = Real(0.0);
-                    d[Nx - 1] = rhs.value(direction, Nx - 1, index_1, index_2);
-
-                    // Solve the tridiagonal system
+                    d[Nx - 1] = rhs.value(Comp1, Nx - 1, index_1, index_2);
                     thomas_algorithm(a, b, c, d, x);
-
-                    // Store the solution
                     for (Dim index_0 = 0; index_0 < Nx; ++index_0)
                     {
-                        solution.set(direction, index_0, index_1, index_2) = x[index_0];
+                        solution.set(Comp1, index_0, index_1, index_2) = x[index_0];
+                    }
+
+                    // Solve for Comp2 (y-component, tangent on x-boundaries)
+                    for (Dim index_0 = 1; index_0 < Nx - 1; ++index_0)
+                    {
+                        d[index_0] = rhs.value(Comp2, index_0, index_1, index_2);
+                        Real gamma_val = -gamma_field.get(index_0, index_1, index_2);
+                        a[index_0] = gamma_val / (dx * dx);
+                        b[index_0] = 1.0f - (2.0f * gamma_val) / (dx * dx);
+                        c[index_0] = gamma_val / (dx * dx);
+                    }
+                    // Left boundary: identity row
+                    a[0] = Real(0.0);
+                    b[0] = Real(1.0);
+                    c[0] = Real(0.0);
+                    d[0] = rhs.value(Comp2, 0, index_1, index_2);
+                    // Right boundary: ghost node elimination
+                    Real gamma_N = -gamma_field.get(Nx - 1, index_1, index_2);
+                    Real c_val = gamma_N / (dx * dx);
+                    a[Nx - 1] = gamma_N / (dx * dx);
+                    b[Nx - 1] = Real(1.0) - (Real(2.0) * gamma_N) / (dx * dx) - c_val; // b - c
+                    c[Nx - 1] = Real(0.0);
+                    d[Nx - 1] = rhs.value(Comp2, Nx - 1, index_1, index_2);
+                    thomas_algorithm(a, b, c, d, x);
+                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
+                    {
+                        solution.set(Comp2, index_0, index_1, index_2) = x[index_0];
+                    }
+
+                    // Solve for Comp3 (z-component, tangent on x-boundaries)
+                    for (Dim index_0 = 1; index_0 < Nx - 1; ++index_0)
+                    {
+                        d[index_0] = rhs.value(Comp3, index_0, index_1, index_2);
+                        Real gamma_val = -gamma_field.get(index_0, index_1, index_2);
+                        a[index_0] = gamma_val / (dx * dx);
+                        b[index_0] = 1.0f - (2.0f * gamma_val) / (dx * dx);
+                        c[index_0] = gamma_val / (dx * dx);
+                    }
+                    // Left boundary: identity row
+                    a[0] = Real(0.0);
+                    b[0] = Real(1.0);
+                    c[0] = Real(0.0);
+                    d[0] = rhs.value(Comp3, 0, index_1, index_2);
+                    // Right boundary: ghost node elimination
+                    gamma_N = -gamma_field.get(Nx - 1, index_1, index_2);
+                    c_val = gamma_N / (dx * dx);
+                    a[Nx - 1] = gamma_N / (dx * dx);
+                    b[Nx - 1] = Real(1.0) - (Real(2.0) * gamma_N) / (dx * dx) - c_val; // b - c
+                    c[Nx - 1] = Real(0.0);
+                    d[Nx - 1] = rhs.value(Comp3, Nx - 1, index_1, index_2);
+                    thomas_algorithm(a, b, c, d, x);
+                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
+                    {
+                        solution.set(Comp3, index_0, index_1, index_2) = x[index_0];
                     }
                 }
             }
         }
         else if constexpr (direction == 1) // Y direction
         {
-            // Similar implementation for Y direction
+            // Comp1 = 1 (y-component, normal on y-boundaries)
+            // Comp2 = 0 (x-component, tangent on y-boundaries)
+            // Comp3 = 2 (z-component, tangent on y-boundaries)
+            Dim Comp1 = dim_handler.Comp1; // 1 (y)
+            Dim Comp2 = dim_handler.Comp2; // 0 (x)
+            Dim Comp3 = dim_handler.Comp3; // 2 (z)
+
             for (Dim index_1 = 0; index_1 < Nx; ++index_1)
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
-                    // Set up interior points
+                    // Solve for Comp1 (y-component, normal on y-boundaries)
                     // Note: index_0 is y-index, index_1 is x-index, index_2 is z-index
-                    // VectorVariable::value expects (axes, x, y, z), so we use (direction, index_1, index_0, index_2)
                     for (Dim index_0 = 1; index_0 < Ny - 1; ++index_0)
                     {
-                        d[index_0] = rhs.value(direction, index_1, index_0, index_2);
-
+                        d[index_0] = rhs.value(Comp1, index_1, index_0, index_2);
                         Real gamma_val = -gamma_field.get(index_1, index_0, index_2);
-
                         a[index_0] = gamma_val / (dy * dy);
                         b[index_0] = 1.0f - (2.0f * gamma_val) / (dy * dy);
                         c[index_0] = gamma_val / (dy * dy);
                     }
-
-                    // Set up boundary conditions in matrix coefficients
-                    // When direction == 1, we're solving for y-component (normal on y-boundaries)
-                    // Left boundary (index 0): normal component uses incompressibility (rhs already set by apply_bc)
+                    // Left boundary: identity row (incompressibility handled in rhs by apply_bc)
                     a[0] = Real(0.0);
                     b[0] = Real(1.0);
                     c[0] = Real(0.0);
-                    d[0] = rhs.value(direction, index_1, 0, index_2);
-
-                    // Right boundary (index Ny-1): normal component uses identity row
+                    d[0] = rhs.value(Comp1, index_1, 0, index_2);
+                    // Right boundary: identity row
                     a[Ny - 1] = Real(0.0);
                     b[Ny - 1] = Real(1.0);
                     c[Ny - 1] = Real(0.0);
-                    d[Ny - 1] = rhs.value(direction, index_1, Ny - 1, index_2);
-
-                    // Solve the tridiagonal system
+                    d[Ny - 1] = rhs.value(Comp1, index_1, Ny - 1, index_2);
                     thomas_algorithm(a, b, c, d, x);
-
-                    // Store the solution
-                    // solution.set expects (axes, x, y, z), so we use (direction, index_1, index_0, index_2)
                     for (Dim index_0 = 0; index_0 < Ny; ++index_0)
                     {
-                        solution.set(direction, index_1, index_0, index_2) = x[index_0];
+                        solution.set(Comp1, index_1, index_0, index_2) = x[index_0];
+                    }
+
+                    // Solve for Comp2 (x-component, tangent on y-boundaries)
+                    for (Dim index_0 = 1; index_0 < Ny - 1; ++index_0)
+                    {
+                        d[index_0] = rhs.value(Comp2, index_1, index_0, index_2);
+                        Real gamma_val = -gamma_field.get(index_1, index_0, index_2);
+                        a[index_0] = gamma_val / (dy * dy);
+                        b[index_0] = 1.0f - (2.0f * gamma_val) / (dy * dy);
+                        c[index_0] = gamma_val / (dy * dy);
+                    }
+                    // Left boundary: identity row
+                    a[0] = Real(0.0);
+                    b[0] = Real(1.0);
+                    c[0] = Real(0.0);
+                    d[0] = rhs.value(Comp2, index_1, 0, index_2);
+                    // Right boundary: ghost node elimination
+                    Real gamma_N = -gamma_field.get(index_1, Ny - 1, index_2);
+                    Real c_val = gamma_N / (dy * dy);
+                    a[Ny - 1] = gamma_N / (dy * dy);
+                    b[Ny - 1] = Real(1.0) - (Real(2.0) * gamma_N) / (dy * dy) - c_val; // b - c
+                    c[Ny - 1] = Real(0.0);
+                    d[Ny - 1] = rhs.value(Comp2, index_1, Ny - 1, index_2);
+                    thomas_algorithm(a, b, c, d, x);
+                    for (Dim index_0 = 0; index_0 < Ny; ++index_0)
+                    {
+                        solution.set(Comp2, index_1, index_0, index_2) = x[index_0];
+                    }
+
+                    // Solve for Comp3 (z-component, tangent on y-boundaries)
+                    for (Dim index_0 = 1; index_0 < Ny - 1; ++index_0)
+                    {
+                        d[index_0] = rhs.value(Comp3, index_1, index_0, index_2);
+                        Real gamma_val = -gamma_field.get(index_1, index_0, index_2);
+                        a[index_0] = gamma_val / (dy * dy);
+                        b[index_0] = 1.0f - (2.0f * gamma_val) / (dy * dy);
+                        c[index_0] = gamma_val / (dy * dy);
+                    }
+                    // Left boundary: identity row
+                    a[0] = Real(0.0);
+                    b[0] = Real(1.0);
+                    c[0] = Real(0.0);
+                    d[0] = rhs.value(Comp3, index_1, 0, index_2);
+                    // Right boundary: ghost node elimination
+                    gamma_N = -gamma_field.get(index_1, Ny - 1, index_2);
+                    c_val = gamma_N / (dy * dy);
+                    a[Ny - 1] = gamma_N / (dy * dy);
+                    b[Ny - 1] = Real(1.0) - (Real(2.0) * gamma_N) / (dy * dy) - c_val; // b - c
+                    c[Ny - 1] = Real(0.0);
+                    d[Ny - 1] = rhs.value(Comp3, index_1, Ny - 1, index_2);
+                    thomas_algorithm(a, b, c, d, x);
+                    for (Dim index_0 = 0; index_0 < Ny; ++index_0)
+                    {
+                        solution.set(Comp3, index_1, index_0, index_2) = x[index_0];
                     }
                 }
             }
         }
         else if constexpr (direction == 2) // Z direction
         {
-            // Similar implementation for Z direction
+            // Comp1 = 2 (z-component, normal on z-boundaries)
+            // Comp2 = 0 (x-component, tangent on z-boundaries)
+            // Comp3 = 1 (y-component, tangent on z-boundaries)
+            Dim Comp1 = dim_handler.Comp1; // 2 (z)
+            Dim Comp2 = dim_handler.Comp2; // 0 (x)
+            Dim Comp3 = dim_handler.Comp3; // 1 (y)
+
             for (Dim index_1 = 0; index_1 < Nx; ++index_1)
             {
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
-                    // Set up interior points
+                    // Solve for Comp1 (z-component, normal on z-boundaries)
                     // Note: index_0 is z-index, index_1 is x-index, index_2 is y-index
-                    // VectorVariable::value expects (axes, x, y, z), so we use (direction, index_1, index_2, index_0)
                     for (Dim index_0 = 1; index_0 < Nz - 1; ++index_0)
                     {
-                        d[index_0] = rhs.value(direction, index_1, index_2, index_0);
-
+                        d[index_0] = rhs.value(Comp1, index_1, index_2, index_0);
                         Real gamma_val = -gamma_field.get(index_1, index_2, index_0);
-
                         a[index_0] = gamma_val / (dz * dz);
                         b[index_0] = 1.0f - (2.0f * gamma_val) / (dz * dz);
                         c[index_0] = gamma_val / (dz * dz);
                     }
-
-                    // Set up boundary conditions in matrix coefficients
-                    // When direction == 2, we're solving for z-component (normal on z-boundaries)
-                    // Left boundary (index 0): normal component uses incompressibility (rhs already set by apply_bc)
+                    // Left boundary: identity row (incompressibility handled in rhs by apply_bc)
                     a[0] = Real(0.0);
                     b[0] = Real(1.0);
                     c[0] = Real(0.0);
-                    d[0] = rhs.value(direction, index_1, index_2, 0);
-
-                    // Right boundary (index Nz-1): normal component uses identity row
+                    d[0] = rhs.value(Comp1, index_1, index_2, 0);
+                    // Right boundary: identity row
                     a[Nz - 1] = Real(0.0);
                     b[Nz - 1] = Real(1.0);
                     c[Nz - 1] = Real(0.0);
-                    d[Nz - 1] = rhs.value(direction, index_1, index_2, Nz - 1);
-
-                    // Solve the tridiagonal system
+                    d[Nz - 1] = rhs.value(Comp1, index_1, index_2, Nz - 1);
                     thomas_algorithm(a, b, c, d, x);
-
-                    // Store the solution
-                    // solution.set expects (axes, x, y, z), so we use (direction, index_1, index_2, index_0)
                     for (Dim index_0 = 0; index_0 < Nz; ++index_0)
                     {
-                        solution.set(direction, index_1, index_2, index_0) = x[index_0];
+                        solution.set(Comp1, index_1, index_2, index_0) = x[index_0];
+                    }
+
+                    // Solve for Comp2 (x-component, tangent on z-boundaries)
+                    for (Dim index_0 = 1; index_0 < Nz - 1; ++index_0)
+                    {
+                        d[index_0] = rhs.value(Comp2, index_1, index_2, index_0);
+                        Real gamma_val = -gamma_field.get(index_1, index_2, index_0);
+                        a[index_0] = gamma_val / (dz * dz);
+                        b[index_0] = 1.0f - (2.0f * gamma_val) / (dz * dz);
+                        c[index_0] = gamma_val / (dz * dz);
+                    }
+                    // Left boundary: identity row
+                    a[0] = Real(0.0);
+                    b[0] = Real(1.0);
+                    c[0] = Real(0.0);
+                    d[0] = rhs.value(Comp2, index_1, index_2, 0);
+                    // Right boundary: ghost node elimination
+                    Real gamma_N = -gamma_field.get(index_1, index_2, Nz - 1);
+                    Real c_val = gamma_N / (dz * dz);
+                    a[Nz - 1] = gamma_N / (dz * dz);
+                    b[Nz - 1] = Real(1.0) - (Real(2.0) * gamma_N) / (dz * dz) - c_val; // b - c
+                    c[Nz - 1] = Real(0.0);
+                    d[Nz - 1] = rhs.value(Comp2, index_1, index_2, Nz - 1);
+                    thomas_algorithm(a, b, c, d, x);
+                    for (Dim index_0 = 0; index_0 < Nz; ++index_0)
+                    {
+                        solution.set(Comp2, index_1, index_2, index_0) = x[index_0];
+                    }
+
+                    // Solve for Comp3 (y-component, tangent on z-boundaries)
+                    for (Dim index_0 = 1; index_0 < Nz - 1; ++index_0)
+                    {
+                        d[index_0] = rhs.value(Comp3, index_1, index_2, index_0);
+                        Real gamma_val = -gamma_field.get(index_1, index_2, index_0);
+                        a[index_0] = gamma_val / (dz * dz);
+                        b[index_0] = 1.0f - (2.0f * gamma_val) / (dz * dz);
+                        c[index_0] = gamma_val / (dz * dz);
+                    }
+                    // Left boundary: identity row
+                    a[0] = Real(0.0);
+                    b[0] = Real(1.0);
+                    c[0] = Real(0.0);
+                    d[0] = rhs.value(Comp3, index_1, index_2, 0);
+                    // Right boundary: ghost node elimination
+                    gamma_N = -gamma_field.get(index_1, index_2, Nz - 1);
+                    c_val = gamma_N / (dz * dz);
+                    a[Nz - 1] = gamma_N / (dz * dz);
+                    b[Nz - 1] = Real(1.0) - (Real(2.0) * gamma_N) / (dz * dz) - c_val; // b - c
+                    c[Nz - 1] = Real(0.0);
+                    d[Nz - 1] = rhs.value(Comp3, index_1, index_2, Nz - 1);
+                    thomas_algorithm(a, b, c, d, x);
+                    for (Dim index_0 = 0; index_0 < Nz; ++index_0)
+                    {
+                        solution.set(Comp3, index_1, index_2, index_0) = x[index_0];
                     }
                 }
             }
