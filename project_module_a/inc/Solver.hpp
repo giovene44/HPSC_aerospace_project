@@ -351,7 +351,9 @@ private:
         Dim N2 = dim_handler.N2;
         Dim N3 = dim_handler.N3;
         Real dN1 = dim_handler.dN1;
-        auto stride_func = dim_handler.stride;
+        Dim Comp1 = dim_handler.Comp1;
+        Dim Comp2 = dim_handler.Comp2;
+        Dim Comp3 = dim_handler.Comp3;
 
         std::vector<Real> a(N1, Real(0.0));
         std::vector<Real> b(N1, Real(1.0));
@@ -365,13 +367,6 @@ private:
         // where normal components are considered
         if constexpr (direction == 0) // X direction
         {
-            // Comp1 = 0 (x-component, normal on x-boundaries)
-            // Comp2 = 1 (y-component, tangent on x-boundaries)
-            // Comp3 = 2 (z-component, tangent on x-boundaries)
-            Dim Comp1 = dim_handler.Comp1; // 0 (x)
-            Dim Comp2 = dim_handler.Comp2; // 1 (y)
-            Dim Comp3 = dim_handler.Comp3; // 2 (z)
-
             for (Dim index_1 = 0; index_1 < Ny; ++index_1)
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
@@ -467,13 +462,6 @@ private:
         }
         else if constexpr (direction == 1) // Y direction
         {
-            // Comp1 = 1 (y-component, normal on y-boundaries)
-            // Comp2 = 0 (x-component, tangent on y-boundaries)
-            // Comp3 = 2 (z-component, tangent on y-boundaries)
-            Dim Comp1 = dim_handler.Comp1; // 1 (y)
-            Dim Comp2 = dim_handler.Comp2; // 0 (x)
-            Dim Comp3 = dim_handler.Comp3; // 2 (z)
-
             for (Dim index_1 = 0; index_1 < Nx; ++index_1)
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
@@ -569,13 +557,6 @@ private:
         }
         else if constexpr (direction == 2) // Z direction
         {
-            // Comp1 = 2 (z-component, normal on z-boundaries)
-            // Comp2 = 0 (x-component, tangent on z-boundaries)
-            // Comp3 = 1 (y-component, tangent on z-boundaries)
-            Dim Comp1 = dim_handler.Comp1; // 2 (z)
-            Dim Comp2 = dim_handler.Comp2; // 0 (x)
-            Dim Comp3 = dim_handler.Comp3; // 1 (y)
-
             for (Dim index_1 = 0; index_1 < Nx; ++index_1)
             {
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)

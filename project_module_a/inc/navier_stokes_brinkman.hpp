@@ -1,5 +1,7 @@
 #include <string>
 #include <cmath>
+#include <functional>
+#include <vector>
 #include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
 #include "Solver.hpp"
@@ -21,12 +23,17 @@ public:
     };
 
 public:
-    NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz, const Real dt, const Real T, const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f)
+    NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz,
+                          const Real dt, const Real T,
+                          std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_func,
+                          std::function<Real(Real, Real, Real)> k_func,
+                          const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f, Real Re = 100.0f)
         : Nx(Nx), Ny(Ny), Nz(Nz), dt(dt), dx(dx), dy(dy), dz(dz),
           u_0(Nx, Ny, Nz, dx, dy, dz),
           p_0(Nx, Ny, Nz, dx, dy, dz),
-          f(Nx, Ny, Nz, dx, dy, dz),
-          nu(Nx, Ny, Nz, dx, dy, dz),
+          forcing_function(forcing_func),
+          k_function(k_func),
+          Re(Re),
           k_field(Nx, Ny, Nz, dx, dy, dz),
           gamma_field(Nx, Ny, Nz, dx, dy, dz),
           g(Nx, Ny, Nz, dx, dy, dz),
@@ -48,15 +55,14 @@ public:
           T(T)
 
     {
-
-        // ✅ First initialize
+        nu = 1.0f / Re;
+        initialize_k_field();
         initialize_gamma_field();
-        // Initialize other fields as necessary as k_field
     }
     // initialization methods:
     void initialize_gamma_field();
     void parse_input(const std::string &input_file);
-    void initialize_k_field(); 
+    void initialize_k_field();
 
     Real compute_beta(Dim i, Dim j, Dim k) const;
     Real compute_beta(Dim index) const;
@@ -65,7 +71,7 @@ public:
     Real compute_gamma(Dim index) const;
 
     // methods inside the iteration:
-    void compute_vector_g();
+    void compute_vector_g(Real t);
     void compute_vector_xi();
 
     void compute_rhs_pressure();
@@ -99,10 +105,12 @@ public:
     // ============================================================================
     // PHYSICAL AND MATERIAL FIELDS
     // ============================================================================
-    VectorVariable u_0;         // Velocity field
-    ScalarVariable p_0;         // Pressure field
-    VectorVariable f;           // Forcing term (can vary in space)
-    ScalarVariable nu;          // Kinematic viscosity (can vary in space)
+    VectorVariable u_0;                                                        // Velocity field
+    ScalarVariable p_0;                                                        // Pressure field
+    std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_function; // Forcing term (can vary in space)
+    std::function<Real(Real, Real, Real)> k_function;                          // Forcing term (can vary in space)
+    Real Re;
+    Real nu;                    // Kinematic viscosity (can vary in space)
     ScalarVariable k_field;     // Brinkman permeability or resistance term
     ScalarVariable gamma_field; // Gamma field for Brinkman term
 
@@ -111,12 +119,12 @@ public:
     //    Used to solve the three components of momentum
     // ============================================================================
     VectorVariable g;
-    VectorVariable vector_rhs;                         // RHS of the momentum equation
-    VectorVariable vector_intermediate_solution;       // solution of linear equation, it's a delta between 
-                                                       // the previous timestamp variable and the new one
-    VectorVariable xi;                                 // x-direction solve intermediate
-    VectorVariable eta;                                // y-direction solve intermediate
-    VectorVariable zeta;                               // z-direction solve intermediate
+    VectorVariable vector_rhs;                   // RHS of the momentum equation
+    VectorVariable vector_intermediate_solution; // solution of linear equation, it's a delta between
+                                                 // the previous timestamp variable and the new one
+    VectorVariable xi;                           // x-direction solve intermediate
+    VectorVariable eta;                          // y-direction solve intermediate
+    VectorVariable zeta;                         // z-direction solve intermediate
 
     // ============================================================================
     // SCALAR LINEAR SOLVER VARIABLES (PRESSURE EQUATION AND OTHER SCALARS)
