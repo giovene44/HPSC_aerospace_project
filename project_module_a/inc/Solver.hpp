@@ -251,6 +251,66 @@ class VelocitySolver : public Solver
 private:
     ScalarVariable &gamma_field;
 
+    template <Dim direction>
+    bool is_known_face(Dim index_1, Dim index_2) const
+    {
+        if constexpr (direction == 0)
+        {
+            return (index_1 == 0 || index_1 == Ny - 1 || index_2 == 0 || index_2 == Nz - 1);
+        }
+        else if constexpr (direction == 1)
+        {
+            return (index_1 == 0 || index_1 == Nx - 1 || index_2 == 0 || index_2 == Nz - 1);
+        }
+        else // direction == 2
+        {
+            return (index_1 == 0 || index_1 == Nx - 1 || index_2 == 0 || index_2 == Ny - 1);
+        }
+    }
+
+    template <Dim direction, typename StrideFunc>
+    bool handle_known_face(const DimensionsHandlerVector<StrideFunc> &dim_handler, VectorVariable &solution, Dim index_1, Dim index_2)
+    {
+        if (!is_known_face<direction>(index_1, index_2))
+        {
+            return false;
+        }
+
+        Dim Comp1 = dim_handler.Comp1;
+        Dim Comp2 = dim_handler.Comp2;
+        Dim Comp3 = dim_handler.Comp3;
+
+        if constexpr (direction == 0)
+        {
+            for (Dim index_0 = 0; index_0 < Nx; ++index_0)
+            {
+                solution.set(Comp1, index_0, index_1, index_2) = u_boundary.value(Comp1, index_0, index_1, index_2);
+                solution.set(Comp2, index_0, index_1, index_2) = u_boundary.value(Comp2, index_0, index_1, index_2);
+                solution.set(Comp3, index_0, index_1, index_2) = u_boundary.value(Comp3, index_0, index_1, index_2);
+            }
+        }
+        else if constexpr (direction == 1)
+        {
+            for (Dim index_0 = 0; index_0 < Ny; ++index_0)
+            {
+                solution.set(Comp1, index_1, index_0, index_2) = u_boundary.value(Comp1, index_1, index_0, index_2);
+                solution.set(Comp2, index_1, index_0, index_2) = u_boundary.value(Comp2, index_1, index_0, index_2);
+                solution.set(Comp3, index_1, index_0, index_2) = u_boundary.value(Comp3, index_1, index_0, index_2);
+            }
+        }
+        else // direction == 2
+        {
+            for (Dim index_0 = 0; index_0 < Nz; ++index_0)
+            {
+                solution.set(Comp1, index_1, index_2, index_0) = u_boundary.value(Comp1, index_1, index_2, index_0);
+                solution.set(Comp2, index_1, index_2, index_0) = u_boundary.value(Comp2, index_1, index_2, index_0);
+                solution.set(Comp3, index_1, index_2, index_0) = u_boundary.value(Comp3, index_1, index_2, index_0);
+            }
+        }
+
+        return true;
+    }
+
     template <Dim direction, typename StrideFunc>
     void block_solver(const VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector<StrideFunc> &dim_handler)
     {
@@ -283,6 +343,9 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
+                    if (handle_known_face<direction>(dim_handler, solution, index_1, index_2))
+                        continue;
+
                     // Solve for Comp1 (x-component, normal on x-boundaries)
                     for (Dim index_0 = 1; index_0 < Nx - 1; ++index_0)
                     {
@@ -377,6 +440,9 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
+                    if (handle_known_face<direction>(dim_handler, solution, index_1, index_2))
+                        continue;
+
                     // Solve for Comp1 (y-component, normal on y-boundaries)
                     // Note: index_0 is y-index, index_1 is x-index, index_2 is z-index
                     for (Dim index_0 = 1; index_0 < Ny - 1; ++index_0)
@@ -472,6 +538,9 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
+                    if (handle_known_face<direction>(dim_handler, solution, index_1, index_2))
+                        continue;
+
                     // Solve for Comp1 (z-component, normal on z-boundaries)
                     // Note: index_0 is z-index, index_1 is x-index, index_2 is y-index
                     for (Dim index_0 = 1; index_0 < Nz - 1; ++index_0)
