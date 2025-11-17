@@ -253,8 +253,6 @@ void NavierStokesBrinkmann::solve()
     DimensionsHandlerVector<decltype(stride_y)> y_vector_handler(Nx, Ny, Nz, 1, 0, 2, dy, stride_y);
     DimensionsHandlerVector<decltype(stride_z)> z_vector_handler(Nx, Ny, Nz, 2, 0, 1, dz, stride_z);
 
-    velocity_solver.set_u_boundary() = u_0;
-    pressure_solver.set_p_boundary() = p_0;
     velocity_solution = u_0;
     pressure_solution = p_0;
     // output method
