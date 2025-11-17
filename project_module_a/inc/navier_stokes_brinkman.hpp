@@ -24,14 +24,16 @@ public:
 
 public:
     NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz,
-                                 const Real dt, const Real T,
-                                 std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_func,
-                                 const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f)
+                          const Real dt, const Real T,
+                          std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_func,
+                          std::function<Real(Real, Real, Real)> k_func,
+                          const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f, Real Re = 100.0f)
         : Nx(Nx), Ny(Ny), Nz(Nz), dt(dt), dx(dx), dy(dy), dz(dz),
           u_0(Nx, Ny, Nz, dx, dy, dz),
           p_0(Nx, Ny, Nz, dx, dy, dz),
           forcing_function(forcing_func),
-          nu(Nx, Ny, Nz, dx, dy, dz),
+          k_function(k_func),
+          Re(Re),
           k_field(Nx, Ny, Nz, dx, dy, dz),
           gamma_field(Nx, Ny, Nz, dx, dy, dz),
           g(Nx, Ny, Nz, dx, dy, dz),
@@ -53,6 +55,9 @@ public:
           T(T)
 
     {
+        nu = 1.0f / Re;
+        initialize_k_field();
+        initialize_gamma_field();
     }
     // initialization methods:
     void initialize_gamma_field();
@@ -100,10 +105,12 @@ public:
     // ============================================================================
     // PHYSICAL AND MATERIAL FIELDS
     // ============================================================================
-    VectorVariable u_0;         // Velocity field
-    ScalarVariable p_0;         // Pressure field
-    std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_function;         // Forcing term (can vary in space)
-    ScalarVariable nu;          // Kinematic viscosity (can vary in space)
+    VectorVariable u_0;                                                        // Velocity field
+    ScalarVariable p_0;                                                        // Pressure field
+    std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_function; // Forcing term (can vary in space)
+    std::function<Real(Real, Real, Real)> k_function;                          // Forcing term (can vary in space)
+    Real Re;
+    Real nu;                    // Kinematic viscosity (can vary in space)
     ScalarVariable k_field;     // Brinkman permeability or resistance term
     ScalarVariable gamma_field; // Gamma field for Brinkman term
 

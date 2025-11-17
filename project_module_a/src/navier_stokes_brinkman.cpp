@@ -68,7 +68,7 @@ Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
 
-    Real nu_val = nu.get(i, j, k);
+    Real nu_val = nu;
     return 1.0f + (dt * nu_val) / (2.0f * k_val);
 }
 
@@ -86,7 +86,7 @@ Real NavierStokesBrinkmann::compute_gamma(Dim i, Dim j, Dim k) const
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
 
-    Real nu_val = nu.get(i, j, k);
+    Real nu_val = nu;
     Real beta = 1.0f + (dt * nu_val) / (2.0f * k_val);
     return (dt * nu_val) / (2.0f * beta);
 }
@@ -107,6 +107,23 @@ void NavierStokesBrinkmann::initialize_gamma_field()
         Dim j = (idx / Nx) % Ny;
         Dim k = idx / (Nx * Ny);
         gamma_field.set(idx) = compute_gamma(i, j, k);
+    }
+}
+
+void NavierStokesBrinkmann::initialize_k_field()
+{
+    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+    {
+        Dim i = idx % Nx;
+        Dim j = (idx / Nx) % Ny;
+        Dim k = idx / (Nx * Ny);
+
+        // Convert grid indices to physical coordinates
+        Real x = i * dx;
+        Real y = j * dy;
+        Real z = k * dz;
+
+        k_field.set(idx) = k_function(x, y, z);
     }
 }
 
@@ -138,7 +155,7 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // -----------------------------------------------------------------
             // Physical properties
             // -----------------------------------------------------------------
-            Real nu_val = nu.get(idx);                       // local kinematic viscosity ν
+            Real nu_val = nu;                                // local kinematic viscosity ν
             Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k //TODO:SET WHEN READING IS BETTER
 
             // -----------------------------------------------------------------
