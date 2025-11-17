@@ -1,0 +1,3 @@
+[submodule "project_module_a/muparserx"]
+	path = project_module_a/muparserx
+	url = https://github.com/beltoforion/muparserx.git
