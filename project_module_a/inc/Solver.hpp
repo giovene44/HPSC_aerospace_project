@@ -6,6 +6,7 @@
 #include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
 #include "DimensionHandler.hpp"
+#include "BoundaryFunctions.hpp"
 
 class Solver
 {
@@ -221,10 +222,10 @@ private:
             }
         }
     };
-    ScalarVariable &p_boundary;
+    BoundaryFunctions &p_boundary;
 
 public:
-    PressureSolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, ScalarVariable &p_boundary_)
+    PressureSolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, BoundaryFunctions &p_boundary_)
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_), p_boundary(p_boundary_)
     {
     }
@@ -234,7 +235,7 @@ public:
         apply_bc<direction>(rhs); // <-- CORRECTED: Removed dim_handler
         block_solver<direction, StrideFunc>(rhs, solution, dim_handler);
     };
-    ScalarVariable &set_p_boundary() { return p_boundary; }
+    BoundaryFunctions &set_p_boundary() { return p_boundary; }
 };
 // =============================================================================================
 // =============================================================================================
@@ -675,10 +676,10 @@ private:
         }
     };
 
-    VectorVariable &u_boundary;
+    BoundaryFunctions &u_boundary;
 
 public:
-    VelocitySolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, ScalarVariable &gam, VectorVariable &u_bnd)
+    VelocitySolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, ScalarVariable &gam, BoundaryFunctions &u_bnd)
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_), gamma_field(gam), u_boundary(u_bnd)
     {
     }
@@ -690,6 +691,6 @@ public:
         block_solver<direction, StrideFunc>(rhs, solution, dim_handler);
     };
     void set_gamma(ScalarVariable &g) { gamma_field = g; }
-    VectorVariable &set_u_boundary() { return u_boundary; }
+    BoundaryFunctions &set_u_boundary() { return u_boundary; }
 };
 #endif // SOLVER_HPP
