@@ -110,7 +110,7 @@ void NavierStokesBrinkmann::initialize_gamma_field()
     }
 }
 
-void NavierStokesBrinkmann::compute_vector_g()
+void NavierStokesBrinkmann::compute_vector_g(Real t)
 {
     // -------------------------------------------------------------------------
     // Purpose:
@@ -144,7 +144,20 @@ void NavierStokesBrinkmann::compute_vector_g()
             // -----------------------------------------------------------------
             // Forcing and pressure gradient
             // -----------------------------------------------------------------
-            Real forcing = f.value(comp, idx); // external forcing term
+            // Convert linear index to 3D coordinates
+
+            Dim i = idx % Nx;
+            Dim j = (idx / Nx) % Ny;
+            Dim k = idx / (Nx * Ny);
+
+            // Convert grid indices to physical coordinates
+            Real x = i * dx;
+            Real y = j * dy;
+            Real z = k * dz;
+
+            // Evaluate forcing function
+            std::vector<Real> forcing_vec = forcing_function(x, y, z, t);
+            Real forcing = forcing_vec[comp];
 
             // -----------------------------------------------------------------
             // Assemble RHS term
@@ -235,7 +248,7 @@ void NavierStokesBrinkmann::solve()
         printf("Time step at t = %.4f\n", t);
         pressure_predictor = pressure_solution + other_phi;
 
-        compute_vector_g();
+        compute_vector_g(t);
         compute_vector_xi();
 
         // ============================================================================

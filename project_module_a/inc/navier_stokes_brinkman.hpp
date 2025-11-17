@@ -1,5 +1,7 @@
 #include <string>
 #include <cmath>
+#include <functional>
+#include <vector>
 #include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
 #include "Solver.hpp"
@@ -21,11 +23,14 @@ public:
     };
 
 public:
-    NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz, const Real dt, const Real T, const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f)
+    NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz,
+                                 const Real dt, const Real T,
+                                 std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_func,
+                                 const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f)
         : Nx(Nx), Ny(Ny), Nz(Nz), dt(dt), dx(dx), dy(dy), dz(dz),
           u_0(Nx, Ny, Nz, dx, dy, dz),
           p_0(Nx, Ny, Nz, dx, dy, dz),
-          f(Nx, Ny, Nz, dx, dy, dz),
+          forcing_function(forcing_func),
           nu(Nx, Ny, Nz, dx, dy, dz),
           k_field(Nx, Ny, Nz, dx, dy, dz),
           gamma_field(Nx, Ny, Nz, dx, dy, dz),
@@ -61,7 +66,7 @@ public:
     Real compute_gamma(Dim index) const;
 
     // methods inside the iteration:
-    void compute_vector_g();
+    void compute_vector_g(Real t);
     void compute_vector_xi();
 
     void compute_rhs_pressure();
@@ -97,7 +102,7 @@ public:
     // ============================================================================
     VectorVariable u_0;         // Velocity field
     ScalarVariable p_0;         // Pressure field
-    VectorVariable f;           // Forcing term (can vary in space)
+    std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_function;         // Forcing term (can vary in space)
     ScalarVariable nu;          // Kinematic viscosity (can vary in space)
     ScalarVariable k_field;     // Brinkman permeability or resistance term
     ScalarVariable gamma_field; // Gamma field for Brinkman term

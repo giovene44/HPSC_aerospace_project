@@ -28,11 +28,16 @@ int main()
     Real t0 = 0.0;
 
     // Initial conditions
-
+    auto forcing_func = [mms](Real x, Real y, Real z, Real t) -> std::vector<Real> {
+        return mms.forcing(x, y, z, t);
+    };
+    
     // ===============================================================
     // 3) SOLVER INITIALIZATION
     // ===============================================================
-    NavierStokesBrinkmann solver(Nx, Ny, Nz, dt, T_final, dx, dy, dz);
+    NavierStokesBrinkmann solver(Nx, Ny, Nz, dt, T_final,
+        forcing_func,
+         dx, dy, dz);
 
     // viscosity field ν = 1/Re
     for (Dim k = 0; k < Nz; ++k)
@@ -48,58 +53,6 @@ int main()
     // 5) RUN SOLVER
     // ===============================================================
     solver.solve();
-
-    // ===============================================================
-    // 6) COMPUTE L2 ERROR AGAINST STORED EXACT SOLUTION
-    // ===============================================================
-    Real err_u = 0.0, err_p = 0.0;
-    Real norm_u = 0.0, norm_p = 0.0;
-
-    const VectorVariable &uE = mms.get_u_exact();
-    const ScalarVariable &pE = mms.get_p_exact();
-
-    for (Dim k = 0; k < Nz; ++k)
-        for (Dim j = 0; j < Ny; ++j)
-            for (Dim i = 0; i < Nx; ++i)
-            {
-                // Exact MMS fields
-                Real uxE = uE.value(0, i, j, k);
-                Real uyE = uE.value(1, i, j, k);
-                Real uzE = uE.value(2, i, j, k);
-                Real p_exact = pE.get(i, j, k);
-
-                // Numerical solution
-                Real ux = solver.velocity_solution.value(0, i, j, k);
-                Real uy = solver.velocity_solution.value(1, i, j, k);
-                Real uz = solver.velocity_solution.value(2, i, j, k);
-                Real p_num = solver.pressure_solution.get(i, j, k);
-
-                // Accumulate error
-                err_u += (ux - uxE) * (ux - uxE) +
-                         (uy - uyE) * (uy - uyE) +
-                         (uz - uzE) * (uz - uzE);
-
-                norm_u += uxE * uxE + uyE * uyE + uzE * uzE;
-
-                err_p += (p_num - p_exact) * (p_num - p_exact);
-                norm_p += p_exact * p_exact;
-            }
-
-    err_u = std::sqrt(err_u);
-    err_p = std::sqrt(err_p);
-    norm_u = std::sqrt(norm_u);
-    norm_p = std::sqrt(norm_p);
-
-    Real rel_err_u = err_u / norm_u;
-    Real rel_err_p = err_p / norm_p;
-
-    std::cout << "\n=============================\n";
-    std::cout << "   MMS Accuracy Results\n";
-    std::cout << "=============================\n";
-    std::cout << "Velocity L2 error     = " << err_u << "\n";
-    std::cout << "Velocity L2 relative  = " << rel_err_u << "\n";
-    std::cout << "Pressure L2 error     = " << err_p << "\n";
-    std::cout << "Pressure L2 relative  = " << rel_err_p << "\n";
-
     return 0;
 }
+   

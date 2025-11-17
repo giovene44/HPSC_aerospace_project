@@ -16,20 +16,11 @@ public:
         : Nx(Nx_), Ny(Ny_), Nz(Nz_),
           dx(dx_), dy(dy_), dz(dz_),
           x0(x0), y0(y0), z0(z0),
-          Re(reynolds_number),
-          u_exact(Nx_, Ny_, Nz_, dx, dy, dz), // <--- allocate exact velocity field
-          p_exact(Nx_, Ny_, Nz_, dx, dy, dz)  // <--- allocate exact pressure field
+          Re(reynolds_number)
     {
     }
 
-    // =========================
-    // ACCESSORS
-    // =========================
-    const VectorVariable &get_u_exact() const { return u_exact; }
-    const ScalarVariable &get_p_exact() const { return p_exact; }
-
-    void setRe(Real r) { Re = r; }
-    Real getRe() const { return Re; }
+    
 
     // =====================================================================
     //  Pointwise MMS functions
@@ -109,10 +100,4 @@ private:
 
     // Physical parameter
     Real Re;
-
-    // ================================
-    // STORED EXACT MMS FIELDS
-    // ================================
-    VectorVariable u_exact; // size: (3, Nx, Ny, Nz)
-    ScalarVariable p_exact; // size: (Nx, Ny, Nz)
 };
