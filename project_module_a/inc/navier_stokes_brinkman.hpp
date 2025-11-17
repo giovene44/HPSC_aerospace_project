@@ -48,15 +48,11 @@ public:
           T(T)
 
     {
-
-        // ✅ First initialize
-        initialize_gamma_field();
-        // Initialize other fields as necessary as k_field
     }
     // initialization methods:
     void initialize_gamma_field();
     void parse_input(const std::string &input_file);
-    void initialize_k_field(); 
+    void initialize_k_field();
 
     Real compute_beta(Dim i, Dim j, Dim k) const;
     Real compute_beta(Dim index) const;
@@ -111,12 +107,12 @@ public:
     //    Used to solve the three components of momentum
     // ============================================================================
     VectorVariable g;
-    VectorVariable vector_rhs;                         // RHS of the momentum equation
-    VectorVariable vector_intermediate_solution;       // solution of linear equation, it's a delta between 
-                                                       // the previous timestamp variable and the new one
-    VectorVariable xi;                                 // x-direction solve intermediate
-    VectorVariable eta;                                // y-direction solve intermediate
-    VectorVariable zeta;                               // z-direction solve intermediate
+    VectorVariable vector_rhs;                   // RHS of the momentum equation
+    VectorVariable vector_intermediate_solution; // solution of linear equation, it's a delta between
+                                                 // the previous timestamp variable and the new one
+    VectorVariable xi;                           // x-direction solve intermediate
+    VectorVariable eta;                          // y-direction solve intermediate
+    VectorVariable zeta;                         // z-direction solve intermediate
 
     // ============================================================================
     // SCALAR LINEAR SOLVER VARIABLES (PRESSURE EQUATION AND OTHER SCALARS)
