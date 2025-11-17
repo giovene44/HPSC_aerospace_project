@@ -1,7 +1,7 @@
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2
-DEBUG_FLAGS = -std=c++17 -Wall -Wextra -g -O0
+CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -I$(INCLUDE_DIR) -Imuparserx/include
+DEBUG_FLAGS = -std=c++17 -Wall -Wextra -g -O0 -I$(INCLUDE_DIR) -Imuparserx/include
 
 # Directories
 INCLUDE_DIR = inc
@@ -9,6 +9,11 @@ SRC_DIR = src
 BUILD_DIR = build
 BIN_DIR = bin
 TEST_DIR = tests
+
+# ---------------------------------------------------------------------------
+# muParserX sources
+# ---------------------------------------------------------------------------
+MUPARSERX_SRC = $(wildcard muparserx/src/*.cpp)
 
 # ---------------------------------------------------------------------------
 # Sources
@@ -43,19 +48,19 @@ directories:
 # ---------------------------------------------------------------------------
 # Main solver build
 # ---------------------------------------------------------------------------
-$(MAIN_BIN): $(SRC_FILES) | directories
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) $(SRC_FILES) -o $@
+$(MAIN_BIN): $(SRC_FILES) $(MUPARSERX_SRC) | directories
+	$(CXX) $(CXXFLAGS) $(SRC_FILES) $(MUPARSERX_SRC) -o $@
 	@echo "✅ Build complete: $@"
 
 # ---------------------------------------------------------------------------
 # Test builds (release and debug)
 # ---------------------------------------------------------------------------
-$(BIN_DIR)/%: $(TEST_DIR)/%.cpp $(SRC_NO_MAIN) | directories
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) $(SRC_NO_MAIN) $< -o $@
+$(BIN_DIR)/%: $(TEST_DIR)/%.cpp $(SRC_NO_MAIN) $(MUPARSERX_SRC) | directories
+	$(CXX) $(CXXFLAGS) $(SRC_NO_MAIN) $(MUPARSERX_SRC) $< -o $@
 	@echo "✅ Test build complete: $@"
 
-$(BIN_DIR)/%_debug: $(TEST_DIR)/%.cpp $(SRC_NO_MAIN) | directories
-	$(CXX) $(DEBUG_FLAGS) -I$(INCLUDE_DIR) $(SRC_NO_MAIN) $< -o $@
+$(BIN_DIR)/%_debug: $(TEST_DIR)/%.cpp $(SRC_NO_MAIN) $(MUPARSERX_SRC) | directories
+	$(CXX) $(DEBUG_FLAGS) $(SRC_NO_MAIN) $(MUPARSERX_SRC) $< -o $@
 	@echo "🐞 Debug test build complete: $@"
 
 debug: directories $(TEST_DEBUG_BINS)
@@ -98,7 +103,7 @@ help:
 	@echo "Available targets:"
 	@echo "  all          - Build main program and all tests"
 	@echo "  run          - Run main program"
-	@echo "  run-tests    - Run all test binaries or one test (make run-tests TEST=test_name)"
+	@echo "  run-tests    - Run all tests or one test (make run-tests TEST=test_name)"
 	@echo "  debug        - Build all tests in debug mode"
 	@echo "  run-debug    - Run debug tests"
 	@echo "  clean        - Remove build artifacts"
