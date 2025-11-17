@@ -14,3 +14,10 @@ project_module_a/report/slides/presentation.aux
 .vscode/settings.json
 .vscode/settings.json
 .vscode/
+project_module_a/error_vs_N.png
+.gitignore
+.gitignore
+project_module_a/error_vs_dt.png
+.gitignore
+project_module_a/error_vs_N.dat
+project_module_a/error_vs_dt.dat
