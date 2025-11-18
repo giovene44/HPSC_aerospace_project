@@ -8,8 +8,7 @@ using namespace mup;
 class BoundaryFunctions
 {
 public:
-    BoundaryFunctions(std::string input_file)
-    {
+    void setParsing(std::string input_file){
         std::ifstream file(input_file);
         if (!file.is_open())
         {
@@ -34,7 +33,6 @@ public:
         p.DefineVar("y", Variable(&yval));
         p.DefineVar("z", Variable(&zval));
         p.DefineVar("t", Variable(&tval));
-
     }
 
     template<Dim component = 0>
@@ -55,6 +53,13 @@ public:
         
         return p.Eval().GetFloat();
     }
+
+    template<Dim component = 0>
+    Real first_derivative(Real x_, Real y_, Real z_, Real t_, Real d)
+    {   
+        return (value<component>(x_ + d, y_, z_, t_) - value<component>(x_ - d, y_, z_, t_)) / (2.0 * d);
+    }
+
 
 private:
     ParserX p;

@@ -50,8 +50,8 @@ public:
           phi(Nx, Ny, Nz, dx, dy, dz),
           other_phi(Nx, Ny, Nz, dx, dy, dz),
           pressure_solution(Nx, Ny, Nz, dx, dy, dz),
-          velocity_solver(Nx, Ny, Nz, dx, dy, dz, gamma_field, u_0),
-          pressure_solver(Nx, Ny, Nz, dx, dy, dz, p_0),
+          velocity_solver(Nx, Ny, Nz, dx, dy, dz, dt, gamma_field, u_boundary),
+          pressure_solver(Nx, Ny, Nz, dx, dy, dz, dt, p_boundary),
           T(T)
 
     {
@@ -110,9 +110,11 @@ public:
     std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_function; // Forcing term (can vary in space)
     std::function<Real(Real, Real, Real)> k_function;                          // Forcing term (can vary in space)
     Real Re;
-    Real nu;                    // Kinematic viscosity (can vary in space)
-    ScalarVariable k_field;     // Brinkman permeability or resistance term
-    ScalarVariable gamma_field; // Gamma field for Brinkman term
+    Real nu;                      // Kinematic viscosity (can vary in space)
+    ScalarVariable k_field;       // Brinkman permeability or resistance term
+    ScalarVariable gamma_field;   // Gamma field for Brinkman term
+    BoundaryFunctions p_boundary; // Boundary condition for pressure
+    BoundaryFunctions u_boundary; // Boundary condition for velocity
 
     // ============================================================================
     // VECTOR LINEAR SOLVER VARIABLES (MOMENTUM EQUATION)
@@ -141,4 +143,11 @@ public:
     // ============================================================================
     VectorVariable velocity_solution; // Final converged velocity
     ScalarVariable pressure_solution; // Final converged pressure
+
+    // ============================================================================
+    // INPUT FILES
+    // ============================================================================
+    std::string u_boundary_file; // Initial condition file for velocity
+    std::string p_boundary_file; // Initial condition file for pressure
+    std::string k_file;          // Initial condition file for permeability or resistance term
 };

@@ -28,8 +28,6 @@ void NavierStokesBrinkmann::parse_input(const std::string &input_file)
         }
     };
 
-    std::string u0_init_file, p0_init_file, k_file;
-
     // ========= Mesh dimensions ==========
     next_value(Nx);
     next_value(Ny);
@@ -45,9 +43,12 @@ void NavierStokesBrinkmann::parse_input(const std::string &input_file)
     next_value(dz);
 
     // ========= Initial values ==========
-    next_value(u0_init_file);
-    next_value(p0_init_file);
+    next_value(u_boundary_file);
+    next_value(p_boundary_file);
     next_value(k_file);
+
+    u_boundary.setParsing(u_boundary_file);
+    p_boundary.setParsing(p_boundary_file);
 
     // ========= OUTPUT ==========
     std::cout << "\n===== Input Parameters Loaded =====\n";
@@ -56,8 +57,8 @@ void NavierStokesBrinkmann::parse_input(const std::string &input_file)
     std::cout << "Total simulation time (T): " << T << std::endl;
     std::cout << "Finite diff step (dx,dy,dz): "
               << dx << ", " << dy << ", " << dz << std::endl;
-    std::cout << "Initial u0 file:           " << u0_init_file << std::endl;
-    std::cout << "Initial p0 file:           " << p0_init_file << std::endl;
+    std::cout << "Initial u0 file:           " << u_boundary_file << std::endl;
+    std::cout << "Initial p0 file:           " << p_boundary_file << std::endl;
     std::cout << "k values file:             " << k_file << std::endl;
     std::cout << "===================================\n\n";
 }
@@ -259,7 +260,6 @@ void NavierStokesBrinkmann::solve()
 
     for (Real t = 0.0f; t < T; t += dt)
     {
-
         printf("Time step at t = %.4f\n", t);
         pressure_predictor = pressure_solution + other_phi;
 
@@ -293,5 +293,7 @@ void NavierStokesBrinkmann::solve()
         // =====================UPDATE PRESSURE====================
         // ============================================================================
         pressure_solution += other_phi;
+        velocity_solver.advance_time();
+        pressure_solver.advance_time();
     }
 };

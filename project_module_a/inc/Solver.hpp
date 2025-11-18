@@ -20,14 +20,20 @@ public:
     Real dy; // Grid spacing in y
     Real dz; // Grid spacing in z
 
+    Real t;
+    Real dt;
+
     // Pure virtual destructor makes the class abstract
     virtual ~Solver() = 0;
-    Solver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_)
+    Solver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, Real dt_)
         : Nx(Nx_), Ny(Ny_), Nz(Nz_),
-          dx(dx_), dy(dy_), dz(dz_) {};
+          dx(dx_), dy(dy_), dz(dz_), dt(dt_) {t=Real(0.0);};
 
     template <typename StrideFunc, Dim direction>
     void solve(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar<StrideFunc> &dim_handler);
+    void advance_time(){
+        t += dt;
+    }
 
 protected:
     // Make available to derived classes
@@ -94,10 +100,10 @@ private:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     // Lower boundary (index 0)
-                    rhs.set(0, index_1, index_2) = rhs.get(0, index_1, index_2) - Real(2.0) / Nx * p_boundary.get(0, index_1, index_2); // ∂p/∂n = f at "left" boundary
+                    rhs.set(0, index_1, index_2) = rhs.get(0, index_1, index_2) - Real(2.0) / Nx * p_boundary.value(0, index_1*dy, index_2*dz, t); // ∂p/∂n = f at "left" boundary
 
                     // Upper boundary (index N1-1)
-                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) + Real(2.0) / Nx * p_boundary.get(Nx - 1, index_1, index_2); // ∂p/∂n = f at "right" boundary
+                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) + Real(2.0) / Nx * p_boundary.value((Nx - 1)*dx, index_1*dy, index_2*dz, t); // ∂p/∂n = f at "right" boundary
                 }
             }
         }
@@ -109,10 +115,10 @@ private:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     // Lower boundary (index 0)
-                    rhs.set(index_1, 0, index_2) = rhs.get(index_1, 0, index_2) - Real(2.0) / Ny * p_boundary.get(index_1, 0, index_2); // ∂p/∂n = f at "bottom" boundary
+                    rhs.set(index_1, 0, index_2) = rhs.get(index_1, 0, index_2) - Real(2.0) / Ny * p_boundary.value(index_1*dx, 0, index_2*dz, t); // ∂p/∂n = f at "bottom" boundary
 
                     // Upper boundary (index N1-1)
-                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2) + Real(2.0) / Ny * p_boundary.get(index_1, Ny - 1, index_2); // ∂p/∂n = f at "top" boundary
+                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2) + Real(2.0) / Ny * p_boundary.value(index_1*dx, (Ny - 1)*dy, index_2*dz, t); // ∂p/∂n = f at "top" boundary
                 }
             }
         }
@@ -124,10 +130,10 @@ private:
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
                     // Lower boundary (index 0)
-                    rhs.set(index_1, index_2, 0) = rhs.get(index_1, index_2, 0) - Real(2.0) / Nz * p_boundary.get(index_1, index_2, 0); // ∂p/∂n = f at "front" boundary
+                    rhs.set(index_1, index_2, 0) = rhs.get(index_1, index_2, 0) - Real(2.0) / Nz * p_boundary.value(index_1*dx, index_2*dy, 0, t); // ∂p/∂n = f at "front" boundary
 
                     // Upper boundary (index N1-1)
-                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1) + Real(2.0) / Nz * p_boundary.get(index_1, index_2, Nz - 1); // ∂p/∂n = f at "back" boundary
+                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1) + Real(2.0) / Nz * p_boundary.value(index_1*dx, index_2*dy, (Nz - 1)*dz, t); // ∂p/∂n = f at "back" boundary
                 }
             }
         }
@@ -161,7 +167,7 @@ private:
                     // d = rhs
                     for (Dim index_0 = 0; index_0 < Nx; ++index_0)
                     {
-                        d[index_0] = p_boundary.get(index_0, index_1, index_2);
+                        d[index_0] = rhs.get(index_0, index_1, index_2);
                     }
 
                     // Solve the tridiagonal system
@@ -184,7 +190,7 @@ private:
                     // d = rhs
                     for (Dim index_0 = 0; index_0 < Ny; ++index_0)
                     {
-                        d[index_0] = p_boundary.get(index_0, index_1, index_2);
+                        d[index_0] = rhs.get(index_0, index_1, index_2);
                     }
 
                     // Solve the tridiagonal system
@@ -207,7 +213,7 @@ private:
                     // d = rhs
                     for (Dim index_0 = 0; index_0 < Nz; ++index_0)
                     {
-                        d[index_0] = p_boundary.get(index_0, index_1, index_2);
+                        d[index_0] = rhs.get(index_0, index_1, index_2);
                     }
 
                     // Solve the tridiagonal system
@@ -225,8 +231,8 @@ private:
     BoundaryFunctions &p_boundary;
 
 public:
-    PressureSolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, BoundaryFunctions &p_boundary_)
-        : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_), p_boundary(p_boundary_)
+    PressureSolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, Real dt_, BoundaryFunctions &p_boundary_)
+        : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), p_boundary(p_boundary_)
     {
     }
     template <typename StrideFunc, Dim direction>
@@ -318,27 +324,36 @@ private:
         {
             for (Dim index_0 = 0; index_0 < Nx; ++index_0)
             {
-                solution.set(Comp1, index_0, index_1, index_2) = u_boundary.value(Comp1, index_0, index_1, index_2);
-                solution.set(Comp2, index_0, index_1, index_2) = u_boundary.value(Comp2, index_0, index_1, index_2);
-                solution.set(Comp3, index_0, index_1, index_2) = u_boundary.value(Comp3, index_0, index_1, index_2);
+                solution.set(Comp1, index_0, index_1, index_2) = u_boundary.value<0>(index_0 * dx, index_1 * dy, index_2 * dz, t) 
+                                                               - u_boundary.value<0>(index_0 * dx, index_1 * dy, index_2 * dz, t-dt);
+                solution.set(Comp2, index_0, index_1, index_2) = u_boundary.value<1>(index_0 * dx, index_1 * dy, index_2 * dz, t) 
+                                                               - u_boundary.value<1>(index_0 * dx, index_1 * dy, index_2 * dz, t-dt);
+                solution.set(Comp3, index_0, index_1, index_2) = u_boundary.value<2>(index_0 * dx, index_1 * dy, index_2 * dz, t) 
+                                                               - u_boundary.value<2>(index_0 * dx, index_1 * dy, index_2 * dz, t-dt);
             }
         }
         else if constexpr (direction == 1)
         {
             for (Dim index_0 = 0; index_0 < Ny; ++index_0)
             {
-                solution.set(Comp1, index_1, index_0, index_2) = u_boundary.value(Comp1, index_1, index_0, index_2);
-                solution.set(Comp2, index_1, index_0, index_2) = u_boundary.value(Comp2, index_1, index_0, index_2);
-                solution.set(Comp3, index_1, index_0, index_2) = u_boundary.value(Comp3, index_1, index_0, index_2);
+                solution.set(Comp1, index_1, index_0, index_2) = u_boundary.value<0>(index_1 * dx, index_0 * dy, index_2 * dz, t)
+                                                               - u_boundary.value<0>(index_1 * dx, index_0 * dy, index_2 * dz, t-dt);
+                solution.set(Comp2, index_1, index_0, index_2) = u_boundary.value<1>(index_1 * dx, index_0 * dy, index_2 * dz, t)
+                                                               - u_boundary.value<1>(index_1 * dx, index_0 * dy, index_2 * dz, t-dt);
+                solution.set(Comp3, index_1, index_0, index_2) = u_boundary.value<2>(index_1 * dx, index_0 * dy, index_2 * dz, t)
+                                                               - u_boundary.value<2>(index_1 * dx, index_0 * dy, index_2 * dz, t-dt);
             }
         }
         else // direction == 2
         {
             for (Dim index_0 = 0; index_0 < Nz; ++index_0)
             {
-                solution.set(Comp1, index_1, index_2, index_0) = u_boundary.value(Comp1, index_1, index_2, index_0);
-                solution.set(Comp2, index_1, index_2, index_0) = u_boundary.value(Comp2, index_1, index_2, index_0);
-                solution.set(Comp3, index_1, index_2, index_0) = u_boundary.value(Comp3, index_1, index_2, index_0);
+                solution.set(Comp1, index_1, index_2, index_0) = u_boundary.value<0>(index_1 * dx, index_2 * dy, index_0 * dz, t)
+                                                               - u_boundary.value<0>(index_1 * dx, index_2 * dy, index_0 * dz, t-dt);
+                solution.set(Comp2, index_1, index_2, index_0) = u_boundary.value<1>(index_1 * dx, index_2 * dy, index_0 * dz, t)
+                                                               - u_boundary.value<1>(index_1 * dx, index_2 * dy, index_0 * dz, t-dt);
+                solution.set(Comp3, index_1, index_2, index_0) = u_boundary.value<2>(index_1 * dx, index_2 * dy, index_0 * dz, t)
+                                                               - u_boundary.value<2>(index_1 * dx, index_2 * dy, index_0 * dz, t-dt);
             }
         }
 
@@ -446,8 +461,8 @@ private:
                         c[0] = Real(0.0);
                         d[0] = rhs.value(Comp3, 0, index_1, index_2);
                         // Right boundary: ghost node elimination
-                        gamma_N = -gamma_field.get(Nx - 1, index_1, index_2);
-                        c_val = gamma_N / (dx * dx);
+                        Real gamma_N = -gamma_field.get(Nx - 1, index_1, index_2);
+                        Real c_val = gamma_N / (dx * dx);
                         a[Nx - 1] = gamma_N / (dx * dx);
                         b[Nx - 1] = Real(1.0) - (Real(2.0) * gamma_N) / (dx * dx) - c_val; // b - c
                         c[Nx - 1] = Real(0.0);
@@ -541,8 +556,8 @@ private:
                         c[0] = Real(0.0);
                         d[0] = rhs.value(Comp3, index_1, 0, index_2);
                         // Right boundary: ghost node elimination
-                        gamma_N = -gamma_field.get(index_1, Ny - 1, index_2);
-                        c_val = gamma_N / (dy * dy);
+                        Real gamma_N = -gamma_field.get(index_1, Ny - 1, index_2);
+                        Real c_val = gamma_N / (dy * dy);
                         a[Ny - 1] = gamma_N / (dy * dy);
                         b[Ny - 1] = Real(1.0) - (Real(2.0) * gamma_N) / (dy * dy) - c_val; // b - c
                         c[Ny - 1] = Real(0.0);
@@ -637,8 +652,8 @@ private:
                         c[0] = Real(0.0);
                         d[0] = rhs.value(Comp3, index_1, index_2, 0);
                         // Right boundary: ghost node elimination
-                        gamma_N = -gamma_field.get(index_1, index_2, Nz - 1);
-                        c_val = gamma_N / (dz * dz);
+                        Real gamma_N = -gamma_field.get(index_1, index_2, Nz - 1);
+                        Real c_val = gamma_N / (dz * dz);
                         a[Nz - 1] = gamma_N / (dz * dz);
                         b[Nz - 1] = Real(1.0) - (Real(2.0) * gamma_N) / (dz * dz) - c_val; // b - c
                         c[Nz - 1] = Real(0.0);
@@ -668,16 +683,22 @@ private:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     // on comp1 we have normal components
-                    rhs.set(direction, 0, index_1, index_2) = u_boundary.value(direction, 0, index_1, index_2) - (u_boundary.first_derivative(1, 1, 0, index_1, index_2) + u_boundary.first_derivative(2, 2, 0, index_1, index_2)) * dx * Real(0.5);
-                    rhs.set(direction, Nx - 1, index_1, index_2) = u_boundary.value(direction, Nx - 1, index_1, index_2);
+                    rhs.set(direction, 0, index_1, index_2) = (u_boundary.value<direction>(0, index_1*dy, index_2*dz, t) - u_boundary.value<direction>(0, index_1*dy, index_2*dz, t-dt)) 
+                                                            - ((u_boundary.first_derivative<1>(0, index_1*dy, index_2*dz, t, dy) - u_boundary.first_derivative<1>(0, index_1*dy, index_2*dz, t-dt, dy)) 
+                                                            + (u_boundary.first_derivative<2>(0, index_1*dy, index_2*dz, t, dz) - u_boundary.first_derivative<2>(0, index_1*dy, index_2*dz, t-dt, dz)))
+                                                            * dx * Real(0.5);
+                    rhs.set(direction, Nx - 1, index_1, index_2) = u_boundary.value<direction>((Nx - 1)*dx, index_1*dy, index_2*dz, t) 
+                                                                 - u_boundary.value<direction>((Nx - 1)*dx, index_1*dy, index_2*dz, t-dt);
 
                     // on comp2 we have tangent components
-                    rhs.set(1, 0, index_1, index_2) = u_boundary.value(1, 0, index_1, index_2);
-                    rhs.set(1, Nx - 1, index_1, index_2) = rhs.value(1, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx) * u_boundary.value(1, Nx - 1, index_1, index_2);
+                    rhs.set(1, 0, index_1, index_2) = u_boundary.value<1>(0, index_1*dy, index_2*dz, t) - u_boundary.value<1>(0, index_1*dy, index_2*dz, t-dt);
+                    rhs.set(1, Nx - 1, index_1, index_2) = rhs.value(1, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx)
+                                                         * (u_boundary.value<1>((Nx - 1)*dx, index_1*dy, index_2*dz, t) - u_boundary.value<1>((Nx - 1)*dx, index_1*dy, index_2*dz, t-dt));
 
                     // on comp3 we have tangent components
-                    rhs.set(2, 0, index_1, index_2) = u_boundary.value(2, 0, index_1, index_2);
-                    rhs.set(2, Nx - 1, index_1, index_2) = rhs.value(2, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx) * u_boundary.value(2, Nx - 1, index_1, index_2);
+                    rhs.set(2, 0, index_1, index_2) = u_boundary.value<2>(0, index_1*dx, index_2*dy, t) - u_boundary.value<2>(0, index_1*dx, index_2*dy, t-dt);
+                    rhs.set(2, Nx - 1, index_1, index_2) = rhs.value(2, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx)
+                                                         * (u_boundary.value<2>((Nx - 1)*dx, index_1*dy, index_2*dz, t) - u_boundary.value<2>((Nx - 1)*dx, index_1*dy, index_2*dz, t-dt));
                 }
             }
         }
@@ -688,16 +709,25 @@ private:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     // on comp2 we have normal components
-                    rhs.set(direction, index_1, 0, index_2) = u_boundary.value(direction, index_1, 0, index_2) - (u_boundary.first_derivative(0, 0, index_1, 0, index_2) + u_boundary.first_derivative(2, 2, index_1, 0, index_2)) * dy * Real(0.5);
-                    rhs.set(direction, index_1, Ny - 1, index_2) = u_boundary.value(direction, index_1, Ny - 1, index_2);
+                    rhs.set(direction, 0, index_1, index_2) = (u_boundary.value<direction>(index_1*dx, 0, index_2*dz, t) - u_boundary.value<direction>(index_1*dx, 0, index_2*dz, t-dt)) 
+                                                            - ((u_boundary.first_derivative<0>(index_1*dx, 0,  index_2*dz, t, dx) - u_boundary.first_derivative<0>(index_1*dx, 0, index_2*dz, t-dt, dx)) 
+                                                            + (u_boundary.first_derivative<2>(index_1*dx, 0, index_2*dz, t, dz) - u_boundary.first_derivative<2>(index_1*dx, 0, index_2*dz, t-dt, dz)))
+                                                            * dx * Real(0.5);
+                    rhs.set(direction, Ny - 1, index_1, index_2) = u_boundary.value<direction>(index_1*dx, (Ny - 1)*dy, index_2*dz, t) 
+                                                                 - u_boundary.value<direction>(index_1*dx, (Ny - 1)*dy, index_2*dz, t-dt);
 
                     // on comp1 we have tangent components
-                    rhs.set(0, index_1, 0, index_2) = u_boundary.value(0, index_1, 0, index_2);
-                    rhs.set(0, index_1, Ny - 1, index_2) = rhs.value(0, index_1, Ny - 1, index_2) + Real(2.0) * gamma_field.get(index_1, Ny - 1, index_2) / (dy * dy) * u_boundary.value(0, index_1, Ny - 1, index_2);
+                    rhs.set(1, 0, index_1, index_2) = u_boundary.value<1>(0, index_1*dy, index_2*dz, t) - u_boundary.value<1>(0, index_1*dy, index_2*dz, t-dt);
+                    rhs.set(1, Nx - 1, index_1, index_2) = rhs.value(1, index_1, Ny - 1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx)
+                                                                         * (u_boundary.value<1>((Nx - 1)*dx, index_1*dy, index_2*dz, t) - u_boundary.value<1>((Nx - 1)*dx, index_1*dy, index_2*dz, t-dt));
 
                     // on comp3 we have tangent components
-                    rhs.set(2, index_1, 0, index_2) = u_boundary.value(2, index_1, 0, index_2);
-                    rhs.set(2, index_1, Ny - 1, index_2) = rhs.value(2, index_1, Ny - 1, index_2) + Real(2.0) * gamma_field.get(index_1, Ny - 1, index_2) / (dy * dy) * u_boundary.value(2, index_1, Ny - 1, index_2);
+                    rhs.set(2, 0, index_1, index_2) = u_boundary.value<2>(index_1*dx, index_2*dy, 0, t)
+                                                    - u_boundary.value<2>(index_1*dx, index_2*dy, 0, t-dt);
+                    rhs.set(2, Nz - 1, index_1, index_2) = rhs.value(2, index_1, index_2, Nz - 1)
+                                                         + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz)
+                                                         * (u_boundary.value<2>(index_1*dx, index_2*dy, (Nz - 1)*dz, t)
+                                                            - u_boundary.value<2>(index_1*dx, index_2*dy, (Nz - 1)*dz, t-dt));
                 }
             }
         }
@@ -708,16 +738,23 @@ private:
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
                     // on comp3 we have normal components
-                    rhs.set(direction, index_1, index_2, 0) = u_boundary.value(direction, index_1, index_2, 0) - (u_boundary.first_derivative(0, 0, index_1, index_2, 0) + u_boundary.first_derivative(1, 1, index_1, index_2, 0)) * dz * Real(0.5);
-                    rhs.set(direction, index_1, index_2, Nz - 1) = u_boundary.value(direction, index_1, index_2, Nz - 1);
+                    rhs.set(direction, index_1, index_2, 0) = (u_boundary.value<direction> (index_1*dx, index_2*dy, 0, t) - u_boundary.value<direction>(index_1*dx, index_2*dy, 0, t-dt))
+                                                            - ((u_boundary.first_derivative<0> (index_1*dx, index_2*dy, 0, t, dx) - u_boundary.first_derivative<0>(index_1*dx, index_2*dy, 0, t-dt, dx))
+                                                            + (u_boundary.first_derivative<1>(index_1*dx, index_2*dy, 0, t, dy) - u_boundary.first_derivative<1>(index_1*dx, index_2*dy, 0, t-dt, dy))) * dz * Real(0.5);
+                    rhs.set(direction, index_1, index_2, Nz - 1) = (u_boundary.value<direction>(index_1*dx, index_2*dy, (Nz - 1)*dz, t)
+                                                                 - u_boundary.value<direction>(index_1*dx, index_2*dy, (Nz - 1)*dz, t-dt));
 
                     // on comp1 we have tangent components
-                    rhs.set(0, index_1, index_2, 0) = u_boundary.value(0, index_1, index_2, 0);
-                    rhs.set(0, index_1, index_2, Nz - 1) = rhs.value(0, index_1, index_2, Nz - 1) + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) * u_boundary.value(0, index_1, index_2, Nz - 1);
+                    rhs.set(0, index_1, index_2, 0) = (u_boundary.value<0>(index_1*dx, index_2*dy, 0, t) - u_boundary.value<0>(index_1*dx, index_2*dy, 0, t-dt));
+                    rhs.set(0, index_1, index_2, Nz - 1) = rhs.value(0, index_1, index_2, Nz - 1)
+                                                         + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) 
+                                                         * (u_boundary.value<0>(index_1*dx, index_2*dy, (Nz - 1)*dz, t) - u_boundary.value<0>(index_1*dx, index_2*dy, (Nz - 1)*dz, t-dt));
 
                     // on comp2 we have tangent components
-                    rhs.set(1, index_1, index_2, 0) = u_boundary.value(1, index_1, index_2, 0);
-                    rhs.set(1, index_1, index_2, Nz - 1) = rhs.value(1, index_1, index_2, Nz - 1) + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) * u_boundary.value(1, index_1, index_2, Nz - 1);
+                    rhs.set(1, index_1, index_2, 0) = (u_boundary.value<1>(index_1*dx, index_2*dy, 0, t) - u_boundary.value<1>(index_1*dx, index_2*dy, 0, t-dt));
+                    rhs.set(1, index_1, index_2, Nz - 1) = rhs.value(1, index_1, index_2, Nz - 1)
+                                                         + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz)
+                                                         * (u_boundary.value<1>(index_1*dx, index_2*dy, (Nz - 1)*dz, t) - u_boundary.value<1>(index_1*dx, index_2*dy, (Nz - 1)*dz, t-dt));
                 }
             }
         }
@@ -726,8 +763,8 @@ private:
     BoundaryFunctions &u_boundary;
 
 public:
-    VelocitySolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, ScalarVariable &gam, BoundaryFunctions &u_bnd)
-        : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_), gamma_field(gam), u_boundary(u_bnd)
+    VelocitySolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, Real dt_, ScalarVariable &gam, BoundaryFunctions &u_bnd)
+        : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), gamma_field(gam), u_boundary(u_bnd)
     {
     }
 
