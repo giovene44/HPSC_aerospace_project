@@ -1,6 +1,6 @@
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -I$(INCLUDE_DIR) -Imuparserx/parser
+CXXFLAGS = -std=c++17 -Wall -Wextra -O3 -I$(INCLUDE_DIR) -Imuparserx/parser
 DEBUG_FLAGS = -std=c++17 -Wall -Wextra -g -O0 -I$(INCLUDE_DIR) -Imuparserx/parser
 
 # Directories

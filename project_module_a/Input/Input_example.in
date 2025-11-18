@@ -11,9 +11,9 @@
 0.5 0.5 0.5
 
 # Initial value for u0
-Input/initial_u0.dat
+../Input/initial_u0.dat
 # Initial value for p0
-Input/initial_p0.dat
+../Input/initial_p0.dat
 
 # File containing k(i,j,k) values
-Input/k_values.dat
+#Input/k_values.dat

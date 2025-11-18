@@ -41,18 +41,22 @@ std::pair<Real, Real> single_run(Real N, Real dt)
         return mms.coefficient(x, y, z);
     };
 
+    std::cout << "Manufactured solution initialized.\n";
+
     // ===============================================================
     // 3) SOLVER INITIALIZATION
     // ===============================================================
     NavierStokesBrinkmann solver(Nx, Ny, Nz, dt, T_final,
                                  forcing_func, k_func,
                                  dx, dy, dz, Re);
-
+    std::cout << "Solver initialized.\n";
+    solver.parse_input("../Input/Input_example.in");
+    std::cout << "Input parsed.\n";
     // ===============================================================
     // 5) RUN SOLVER
     // ===============================================================
     solver.solve();
-
+    std::cout << "Solver run completed.\n";
     // ===============================================================
     // 6) COMPUTE L2 ERROR AGAINST MMS SOLUTION AT t = T_final
     // ===============================================================

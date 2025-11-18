@@ -8,6 +8,7 @@ using namespace mup;
 class BoundaryFunctions
 {
 public:
+
     void setParsing(std::string input_file){
         std::ifstream file(input_file);
         if (!file.is_open())
@@ -15,15 +16,15 @@ public:
             throw std::runtime_error("Unable to open file: " + input_file);
         }
         std::string line;
-        Dim line_count = 0;
+        //std::cout<<"File is open: " << input_file << std::endl;
         while (std::getline(file, line))
         {   
             if (line[0] == '#') // Skip comment lines
                 continue;
-            string_expression[line_count] = line;
-            line_count++;
+            string_expression.emplace_back(line);
+            //std::cout<<"Read line: " << line << std::endl;
         }
-        
+        //std::cout<<"Get all line " << std::endl;
         xval = Value(Real(0.0));
         yval = Value(Real(0.0));
         zval = Value(Real(0.0));
