@@ -27,8 +27,30 @@ public:
                           const Real dt, const Real T,
                           std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_func,
                           std::function<Real(Real, Real, Real)> k_func,
-                          const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f, Real Re = 100.0f)
-        : Nx(Nx), Ny(Ny), Nz(Nz), dt(dt), dx(dx), dy(dy), dz(dz),
+                          const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f,
+                          Real Re = 100.0f)
+        : // ============================
+          // GRID, MATERIAL, AND TIME INFO
+          // ============================
+          grid(),
+          dt(dt),
+          Nx(Nx),
+          Ny(Ny),
+          Nz(Nz),
+          dx(dx),
+          dy(dy),
+          dz(dz),
+          T(T),
+
+          // ============================
+          // SOLVER CLASS
+          // ============================
+          velocity_solver(Nx, Ny, Nz, dx, dy, dz, dt, gamma_field, u_boundary),
+          pressure_solver(Nx, Ny, Nz, dx, dy, dz, dt, p_boundary),
+
+          // ============================
+          // PHYSICAL AND MATERIAL FIELDS
+          // ============================
           u_0(Nx, Ny, Nz, dx, dy, dz),
           p_0(Nx, Ny, Nz, dx, dy, dz),
           forcing_function(forcing_func),
@@ -36,24 +58,42 @@ public:
           Re(Re),
           k_field(Nx, Ny, Nz, dx, dy, dz),
           gamma_field(Nx, Ny, Nz, dx, dy, dz),
+
+          p_boundary(),
+          u_boundary(),
+
+          // ============================
+          // VECTOR LINEAR SOLVER VARIABLES
+          // ============================
           g(Nx, Ny, Nz, dx, dy, dz),
           vector_rhs(Nx, Ny, Nz, dx, dy, dz),
           vector_intermediate_solution(Nx, Ny, Nz, dx, dy, dz),
           xi(Nx, Ny, Nz, dx, dy, dz),
           eta(Nx, Ny, Nz, dx, dy, dz),
           zeta(Nx, Ny, Nz, dx, dy, dz),
+
+          // ============================
+          // SCALAR LINEAR SOLVER VARIABLES
+          // ============================
           pressure_predictor(Nx, Ny, Nz, dx, dy, dz),
           gradient_pressure_predictor(Nx, Ny, Nz, dx, dy, dz),
-          velocity_solution(Nx, Ny, Nz, dx, dy, dz),
           rhs(Nx, Ny, Nz, dx, dy, dz),
           psi(Nx, Ny, Nz, dx, dy, dz),
           phi(Nx, Ny, Nz, dx, dy, dz),
           other_phi(Nx, Ny, Nz, dx, dy, dz),
-          pressure_solution(Nx, Ny, Nz, dx, dy, dz),
-          velocity_solver(Nx, Ny, Nz, dx, dy, dz, dt, gamma_field, u_boundary),
-          pressure_solver(Nx, Ny, Nz, dx, dy, dz, dt, p_boundary),
-          T(T)
 
+          // ============================
+          // FINAL SOLUTION STORAGE
+          // ============================
+          velocity_solution(Nx, Ny, Nz, dx, dy, dz),
+          pressure_solution(Nx, Ny, Nz, dx, dy, dz),
+
+          // ============================
+          // INPUT FILES
+          // ============================
+          u_boundary_file(),
+          p_boundary_file(),
+          k_file()
     {
         nu = 1.0f / Re;
         initialize_k_field();

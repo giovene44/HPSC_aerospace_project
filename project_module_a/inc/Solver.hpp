@@ -275,6 +275,9 @@ private:
             {
                 return (index_1 == 0 || index_2 == Nz - 1);
             }
+            else {
+                throw std::invalid_argument("VelocitySolver::is_known_face: invalid component index");
+            }
         }
         else if constexpr (direction == 1)
         {
@@ -290,6 +293,9 @@ private:
             {
                 return (index_1 == 0 || index_2 == Nz - 1);
             }
+            else {
+                throw std::invalid_argument("VelocitySolver::is_known_face: invalid component index");
+            }
         }
         else // direction == 2
         {
@@ -304,6 +310,9 @@ private:
             else if (component == 2)
             {
                 return (index_1 == 0 || index_2 == 0);
+            }
+            else {
+                throw std::invalid_argument("VelocitySolver::is_known_face: invalid component index");
             }
         }
     }
@@ -364,9 +373,9 @@ private:
     void block_solver(const VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector<StrideFunc> &dim_handler)
     {
         Dim N1 = dim_handler.N1;
-        Dim N2 = dim_handler.N2;
-        Dim N3 = dim_handler.N3;
-        Real dN1 = dim_handler.dN1;
+        // Dim N2 = dim_handler.N2; unused
+        // Dim N3 = dim_handler.N3; unused
+        // Real dN1 = dim_handler.dN1; unused
         Dim Comp1 = dim_handler.Comp1;
         Dim Comp2 = dim_handler.Comp2;
         Dim Comp3 = dim_handler.Comp3;
@@ -669,8 +678,8 @@ private:
         }
     };
 
-    template <typename StrideFunc, Dim direction>
-    void apply_bc(VectorVariable &rhs, const DimensionsHandlerVector<StrideFunc> &dim_handler)
+    template <Dim direction>
+    void apply_bc(VectorVariable &rhs)
     {
 
         // Here we consider only the even indices in 2nd direction
@@ -771,7 +780,7 @@ public:
     template <typename StrideFunc, Dim direction>
     void solve(VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector<StrideFunc> &dim_handler)
     {
-        apply_bc<StrideFunc, direction>(rhs, dim_handler);
+        apply_bc<direction>(rhs);
         block_solver<direction, StrideFunc>(rhs, solution, dim_handler);
     };
     void set_gamma(ScalarVariable &g) { gamma_field = g; }

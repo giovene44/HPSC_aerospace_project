@@ -84,7 +84,7 @@ public:
     // !!! : WE ONLY USE THIS ON THE BOUNDARY CONDITION => IF WE USE OTHERWISE IT IS WRONG
     Real first_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const
     {
-        Real v1, v2, den, val;
+        Real v1(Real(0.0)), v2(Real(0.0)), den(Real(0.0)), val(Real(0.0));
         if (derivation_direction == 0)
         { // x direction
             v1 = value(axes, i, j, k);
@@ -103,6 +103,10 @@ public:
             v2 = value(axes, i, j, k - 1);
             den = dz;
         }
+        else
+        {
+            throw std::invalid_argument("VectorVariable::first_derivative: invalid derivation_direction");
+        }
         val = v1 - v2;
         val /= den;
         return val;
@@ -118,7 +122,7 @@ public:
 
     Real second_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const
     {
-        Real v1, v2, v3, den, val;
+        Real v1(Real(0.0)), v2(Real(0.0)), v3(Real(0.0)), den(Real(0.0)), val(Real(0.0));
         if (derivation_direction == 0)
         { // x direction
             v1 = value(axes, i + 1, j, k);
@@ -139,6 +143,10 @@ public:
             v2 = value(axes, i, j, k);
             v3 = value(axes, i, j, k - 1);
             den = dz * dz;
+        }
+        else
+        {
+            throw std::invalid_argument("VectorVariable::second_derivative: invalid derivation_direction");
         }
         val = v1 - 2 * v2 + v3;
         val /= den;
