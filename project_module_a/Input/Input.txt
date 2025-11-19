@@ -1,3 +1,12 @@
+#Dim of X 
+1.0
+
+#Dim of Y 
+1.0 
+
+#Dim of Z 
+1.0
+
 # Number of mesh points in X, Y, Z directions (Nx, Ny, Nz)
 20 20 20
 
@@ -7,8 +16,6 @@
 # Total simulation time (T)
 1.0
 
-# Finite difference step size (dx, dy, dz)
-0.5 0.5 0.5
 
 # boundary velocity
 ./Input/boundary_u0.dat
