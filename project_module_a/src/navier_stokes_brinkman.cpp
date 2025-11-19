@@ -202,7 +202,7 @@ void NavierStokesBrinkmann::solve()
 
     for (Real t = 0.0f; t < T; t += dt)
     {
-        printf("Time step at t = %.4f\n", t);
+        // printf("Time step at t = %.4f\n", t);
         pressure_predictor = pressure_solution + other_phi;
         // std::cout << "Pressure predictor computed.\n";
         compute_vector_g(t);

@@ -133,92 +133,111 @@ std::pair<Real, Real> single_run(
 
     return std::make_pair(rel_err_u, rel_err_p);
 }
-
 int run_multiple(int num_runs)
 {
-    // ===============================================================
-    // 1) PARSER INPUT INITIALIZATION (MOVED HERE)
-    // ===============================================================
-    ParseInput parser = ParseInput();
-    parser.parse_input("../Input/Input_example.in");
-
-    // Get initial values from the parser
-    Dim N_initial_x = parser.Nx;
-    Dim N_initial_y = parser.Ny;
-    Dim N_initial_z = parser.Nz;
-    Real dt_initial = parser.dt;
-    Real T_final = parser.T;
-
-    std::vector<Real> N_values;
-    std::vector<Real> dt_values;
-    std::vector<Real> errors_0;
-    std::vector<Real> errors_1;
-
-    for (int i = 0; i < num_runs; i++)
+    try
     {
-        // Calculate current grid and time step, halving the spatial step (doubling N) and time step (halving dt)
-        Dim Nx_curr = N_initial_x * std::pow(2, i);
-        Dim Ny_curr = N_initial_y * std::pow(2, i);
-        Dim Nz_curr = N_initial_z * std::pow(2, i);
-        Real dt_curr = dt_initial / std::pow(2, i);
+        // ===============================================================
+        // 1) PARSER INPUT INITIALIZATION (MOVED HERE)
+        // ===============================================================
+        ParseInput &parser = ParseInput::getInstance();
+        // The path is relative to the execution directory. Using "./Input/Input.txt"
+        // assumes the Input folder is a direct subfolder of the execution directory.
+        parser.parse_input("./Input/Input.txt");
 
-        // Calculate current grid spacing (h = L / (N-1), but here we assume dx = dx_initial / 2^i)
-        // This is based on the assumption that N_curr has doubled, so dx_curr must have halved.
-        Real dx_curr = parser.dx / std::pow(2, i);
-        Real dy_curr = parser.dy / std::pow(2, i);
-        Real dz_curr = parser.dz / std::pow(2, i);
+        // Get initial values from the parser (used as base for refinement)
+        Dim N_initial_x = parser.Nx;
+        Dim N_initial_y = parser.Ny;
+        Dim N_initial_z = parser.Nz;
+        Real dt_initial = parser.dt;
+        Real T_final = parser.T;
 
-        std::cout << "\nRunning simulation with (Nx, Ny, Nz) = ("
-                  << Nx_curr << ", " << Ny_curr << ", " << Nz_curr << ") and dt = "
-                  << dt_curr << "\n\n";
+        // Store dx_initial values from the file, used to derive dx_curr
+        Real dx_initial = parser.dx;
+        Real dy_initial = parser.dy;
+        Real dz_initial = parser.dz;
 
-        // Call single_run with the explicitly computed values
-        auto errors = single_run(
-            Nx_curr, Ny_curr, Nz_curr, dt_curr,
-            dx_curr, dy_curr, dz_curr, T_final,
-            parser.u_boundary_file, parser.p_boundary_file);
+        std::vector<Real> N_values;
+        std::vector<Real> dt_values;
+        std::vector<Real> errors_0;
+        std::vector<Real> errors_1;
 
-        // We track the number of grid points (Nx) and the time step (dt) for plotting
-        N_values.push_back(Nx_curr);
-        dt_values.push_back(dt_curr);
-        errors_0.push_back(errors.first);
-        errors_1.push_back(errors.second);
+        for (int i = 0; i < num_runs; i++)
+        {
+            // Calculate refinement factor (2^i)
+            Real refinement_factor = std::pow(2, i);
+
+            // =================================================================
+            // GRID AND TIME CALCULATION: Starting point is correctly i=0 (factor 1)
+            // =================================================================
+            Dim Nx_curr = N_initial_x * refinement_factor;
+            Dim Ny_curr = N_initial_y * refinement_factor;
+            Dim Nz_curr = N_initial_z * refinement_factor;
+
+            Real dt_curr = dt_initial / refinement_factor;
+
+            // dx/dy/dz must be scaled inversely to N_curr (halved when N_curr is doubled)
+            Real dx_curr = dx_initial / refinement_factor;
+            Real dy_curr = dy_initial / refinement_factor;
+            Real dz_curr = dz_initial / refinement_factor;
+
+            std::cout << "\nRunning simulation with (Nx, Ny, Nz) = ("
+                      << Nx_curr << ", " << Ny_curr << ", " << Nz_curr << ") and dt = "
+                      << dt_curr << "\n\n";
+
+            // Call single_run with the explicitly computed values
+            auto errors = single_run(
+                Nx_curr, Ny_curr, Nz_curr, dt_curr,
+                dx_curr, dy_curr, dz_curr, T_final,
+                parser.u_boundary_file, parser.p_boundary_file);
+
+            // We track the number of grid points (Nx) and the time step (dt) for plotting
+            N_values.push_back(Nx_curr);
+            dt_values.push_back(dt_curr);
+            errors_0.push_back(errors.first);
+            errors_1.push_back(errors.second);
+        }
+
+        // Write error vs N (Spatial Convergence)
+        std::ofstream file_N("error_vs_N.dat");
+        file_N << "# N\tUErr\n";
+        for (size_t i = 0; i < N_values.size(); i++)
+        {
+            file_N << N_values[i] << "\t" << errors_0[i] << "\t" << "\n";
+        }
+        file_N.close();
+
+        // Write error vs dt (Temporal Convergence)
+        std::ofstream file_dt("error_vs_dt.dat");
+        file_dt << "# dt\tPerr\n";
+        for (size_t i = 0; i < dt_values.size(); i++)
+        {
+            file_dt << dt_values[i] << "\t" << errors_1[i] << "\n";
+        }
+        file_dt.close();
+
+        std::cout << "\nData files created. Generating plots...\n";
+
+        // Call Python script to generate plots
+        int result = system("python3 utils/plot.py error_vs_N.dat error_vs_N.png");
+        if (result != 0)
+        {
+            std::cerr << "Warning: Failed to plot error_vs_N.dat\n";
+        }
+
+        result = system("python3 utils/plot.py error_vs_dt.dat error_vs_dt.png");
+        if (result != 0)
+        {
+            std::cerr << "Warning: Failed to plot error_vs_dt.dat\n";
+        }
+
+        std::cout << "Plots generated successfully!\n";
+
+        return 0;
     }
-
-    // Write error vs N (Spatial Convergence)
-    std::ofstream file_N("error_vs_N.dat");
-    file_N << "# N\tUErr\n";
-    for (size_t i = 0; i < N_values.size(); i++)
+    catch (const std::runtime_error &e)
     {
-        file_N << N_values[i] << "\t" << errors_0[i] << "\t" << "\n";
+        std::cerr << "FATAL ERROR in run_multiple: " << e.what() << std::endl;
+        return 1; // Return non-zero to indicate application failure
     }
-    file_N.close();
-
-    // Write error vs dt (Temporal Convergence)
-    std::ofstream file_dt("error_vs_dt.dat");
-    file_dt << "# dt\tPerr\n";
-    for (size_t i = 0; i < dt_values.size(); i++)
-    {
-        file_dt << dt_values[i] << "\t" << errors_1[i] << "\n";
-    }
-    file_dt.close();
-
-    std::cout << "\nData files created. Generating plots...\n";
-
-    // Call Python script to generate plots
-    int result = system("python3 utils/plot.py error_vs_N.dat error_vs_N.png");
-    if (result != 0)
-    {
-        std::cerr << "Warning: Failed to plot error_vs_N.dat\n";
-    }
-
-    result = system("python3 utils/plot.py error_vs_dt.dat error_vs_dt.png");
-    if (result != 0)
-    {
-        std::cerr << "Warning: Failed to plot error_vs_dt.dat\n";
-    }
-
-    std::cout << "Plots generated successfully!\n";
-
-    return 0;
 }
