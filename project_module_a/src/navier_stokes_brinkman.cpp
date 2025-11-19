@@ -5,69 +5,6 @@
 #include <fstream>
 #include <sstream>
 
-void NavierStokesBrinkmann::parse_input(const std::string &input_file)
-{
-    std::ifstream file(input_file);
-    if (!file.is_open())
-    {
-        std::cerr << "Error - Cannot open file " << input_file << std::endl;
-        return;
-    }
-    std::string token;
-    auto next_value = [&](auto &var)
-    {
-        while (file >> token)
-        {
-            if (token[0] == '#')
-            {
-                file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                continue;
-            }
-            std::istringstream(token) >> var;
-            return;
-        }
-    };
-
-    // ========= Mesh dimensions ==========
-    next_value(Nx);
-    next_value(Ny);
-    next_value(Nz);
-    //std::cout << "Parsed Nx, Ny, Nz: " << Nx << ", " << Ny << ", " << Nz << std::endl;
-
-    // ========== Time parameters ==========
-    next_value(dt);
-    next_value(T);
-    //std::cout << "Parsed dt, T: " << dt << ", " << T << std::endl;
-
-    // ========== Spatial parameters ==========
-    next_value(dx);
-    next_value(dy);
-    next_value(dz);
-    //std::cout << "Parsed dx, dy, dz: " << dx << ", " << dy << ", " << dz << std::endl;
-
-    // ========= Initial values ==========
-    next_value(u_boundary_file);
-    next_value(p_boundary_file);
-    //std::cout << "Parsed u_boundary_file, p_boundary_file: " << u_boundary_file << ", " << p_boundary_file << std::endl;
-    next_value(k_file);
-    //std::cout << "Parsed k_file: " << k_file << std::endl;
-
-    u_boundary.setParsing(u_boundary_file);
-    p_boundary.setParsing(p_boundary_file);
-    //std::cout << "Boundary conditions parsing completed.\n";
-    // ========= OUTPUT ==========
-    std::cout << "\n===== Input Parameters Loaded =====\n";
-    std::cout << "Mesh points (Nx, Ny, Nz): " << Nx << ", " << Ny << ", " << Nz << std::endl;
-    std::cout << "Time step size (dt):       " << dt << std::endl;
-    std::cout << "Total simulation time (T): " << T << std::endl;
-    std::cout << "Finite diff step (dx,dy,dz): "
-              << dx << ", " << dy << ", " << dz << std::endl;
-    std::cout << "Initial u0 file:           " << u_boundary_file << std::endl;
-    std::cout << "Initial p0 file:           " << p_boundary_file << std::endl;
-    std::cout << "k values file:             " << k_file << std::endl;
-    std::cout << "===================================\n\n";
-}
-
 Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
 {
     Real k_val = k_field.get(i, j, k);
@@ -267,56 +204,56 @@ void NavierStokesBrinkmann::solve()
     {
         printf("Time step at t = %.4f\n", t);
         pressure_predictor = pressure_solution + other_phi;
-        //std::cout << "Pressure predictor computed.\n";
+        // std::cout << "Pressure predictor computed.\n";
         compute_vector_g(t);
-        //std::cout << "Vector g computed.\n";
+        // std::cout << "Vector g computed.\n";
         compute_vector_xi();
-        //std::cout << "Vector xi computed.\n";
+        // std::cout << "Vector xi computed.\n";
 
         // ============================================================================
         // ===========================MOMENTUM EQUATION SOLVE==========================
         // ============================================================================
         vector_rhs = xi - eta;
-        //std::cout << "Vector RHS for x-direction computed.\n";
+        // std::cout << "Vector RHS for x-direction computed.\n";
         velocity_solver.solve<decltype(stride_x), 0>(vector_rhs, vector_intermediate_solution, x_vector_handler);
-        //std::cout << "Velocity intermediate solution for x-direction computed.\n";
+        // std::cout << "Velocity intermediate solution for x-direction computed.\n";
         eta += vector_intermediate_solution;
-        //std::cout << "Eta updated after x-direction solve.\n";
+        // std::cout << "Eta updated after x-direction solve.\n";
 
         vector_rhs = eta - zeta;
-        //std::cout << "Vector RHS for y-direction computed.\n";
+        // std::cout << "Vector RHS for y-direction computed.\n";
         velocity_solver.solve<decltype(stride_y), 1>(vector_rhs, vector_intermediate_solution, y_vector_handler);
-        //std::cout << "Velocity intermediate solution for y-direction computed.\n";
+        // std::cout << "Velocity intermediate solution for y-direction computed.\n";
         zeta += vector_intermediate_solution;
-        //std::cout << "Zeta updated after y-direction solve.\n";
+        // std::cout << "Zeta updated after y-direction solve.\n";
 
         vector_rhs = zeta - velocity_solution;
-        //std::cout << "Vector RHS for z-direction computed.\n";
+        // std::cout << "Vector RHS for z-direction computed.\n";
         velocity_solver.solve<decltype(stride_z), 2>(vector_rhs, vector_intermediate_solution, z_vector_handler);
-        //std::cout << "Velocity intermediate solution for z-direction computed.\n";
+        // std::cout << "Velocity intermediate solution for z-direction computed.\n";
         velocity_solution += vector_intermediate_solution;
-        //std::cout << "Velocity solution updated after z-direction solve.\n";
+        // std::cout << "Velocity solution updated after z-direction solve.\n";
 
         // ============================================================================
         // ===========================PRESSURE EQUATION SOLVE==========================
         // ============================================================================
         compute_rhs_pressure();
-        //std::cout << "RHS for pressure equation computed.\n";
+        // std::cout << "RHS for pressure equation computed.\n";
         pressure_solver.solve_pressure<decltype(stride_x), 0>(rhs, psi, x_scalar_handler);
-        //std::cout << "Pressure intermediate solution for x-direction computed.\n";
+        // std::cout << "Pressure intermediate solution for x-direction computed.\n";
         pressure_solver.solve_pressure<decltype(stride_y), 1>(psi, phi, y_scalar_handler);
-        //std::cout << "Pressure intermediate solution for y-direction computed.\n";
+        // std::cout << "Pressure intermediate solution for y-direction computed.\n";
         pressure_solver.solve_pressure<decltype(stride_z), 2>(phi, other_phi, z_scalar_handler);
-        //std::cout << "Pressure intermediate solution for z-direction computed.\n";
+        // std::cout << "Pressure intermediate solution for z-direction computed.\n";
 
         // ============================================================================
         // =====================UPDATE PRESSURE====================
         // ============================================================================
         pressure_solution += other_phi;
-        //std::cout << "Pressure solution updated.\n";
+        // std::cout << "Pressure solution updated.\n";
         velocity_solver.advance_time();
-        //std::cout << "Velocity solver advanced to next time step.\n";
+        // std::cout << "Velocity solver advanced to next time step.\n";
         pressure_solver.advance_time();
-        //std::cout << "Pressure solver advanced to next time step.\n";
+        // std::cout << "Pressure solver advanced to next time step.\n";
     }
 };
