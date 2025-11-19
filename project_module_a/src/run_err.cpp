@@ -86,6 +86,8 @@ std::pair<Real, Real> single_run(
     Real err_u = 0.0, err_p = 0.0;
     Real norm_u = 0.0, norm_p = 0.0;
 
+    Real dV = dx_in * dy_in * dz_in;
+
     for (Dim k = 0; k < Nz_in; ++k)
         for (Dim j = 0; j < Ny_in; ++j)
             for (Dim i = 0; i < Nx_in; ++i)
@@ -115,10 +117,13 @@ std::pair<Real, Real> single_run(
                 norm_p += pE * pE;
             }
 
-    err_u = std::sqrt(err_u);
-    norm_u = std::sqrt(norm_u);
-    err_p = std::sqrt(err_p);
-    norm_p = std::sqrt(norm_p);
+    //by multiplying by dV we are approximating the integral over the domain
+    //without dV the error would scale with the number of points
+
+    err_u = std::sqrt(err_u*dV);
+    norm_u = std::sqrt(norm_u*dV);
+    err_p = std::sqrt(err_p*dV);
+    norm_p = std::sqrt(norm_p*dV);
 
     Real rel_err_u = err_u / norm_u;
     Real rel_err_p = err_p / norm_p;

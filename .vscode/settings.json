@@ -85,6 +85,9 @@
     "print": "cpp",
     "queue": "cpp",
     "stack": "cpp",
-    "execution": "cpp"
+    "execution": "cpp",
+    "__threading_support": "cpp",
+    "__tree": "cpp",
+    "forward_list": "cpp"
   }
 }
