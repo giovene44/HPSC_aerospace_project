@@ -222,64 +222,61 @@ void NavierStokesBrinkmann::solve()
     DimensionsHandlerVector<decltype(stride_y)> y_vector_handler(Nx, Ny, Nz, 1, 0, 2, dy, stride_y);
     DimensionsHandlerVector<decltype(stride_z)> z_vector_handler(Nx, Ny, Nz, 2, 0, 1, dz, stride_z);
 
+    // Initialize solutions
     velocity_solution = u_0;
     pressure_solution = p_0;
-    // output method
 
+    // Time stepping loop
     for (Real t = 0.0f; t < T; t += dt)
     {
-        // printf("Time step at t = %.4f\n", t);
         pressure_predictor = pressure_solution + other_phi;
-        // std::cout << "Pressure predictor computed.\n";
+
+        // Compute source terms using u_0 (velocity at t^n)
         compute_vector_g(t);
-        // std::cout << "Vector g computed.\n";
         compute_vector_xi();
-        // std::cout << "Vector xi computed.\n";
 
         // ============================================================================
         // ===========================MOMENTUM EQUATION SOLVE==========================
         // ============================================================================
+
+        // Solve X-sweep: (I - gamma*Dxx)(eta^{n+1} - eta^n) = xi^{n+1} - eta^n
         vector_rhs = xi - eta;
-        // std::cout << "Vector RHS for x-direction computed.\n";
         velocity_solver.solve<decltype(stride_x), 0>(vector_rhs, vector_intermediate_solution, x_vector_handler);
-        // std::cout << "Velocity intermediate solution for x-direction computed.\n";
-        eta += vector_intermediate_solution;
-        // std::cout << "Eta updated after x-direction solve.\n";
+        eta += vector_intermediate_solution; // Update eta to n+1
 
+        // Solve Y-sweep: (I - gamma*Dyy)(zeta^{n+1} - zeta^n) = eta^{n+1} - zeta^n
         vector_rhs = eta - zeta;
-        // std::cout << "Vector RHS for y-direction computed.\n";
         velocity_solver.solve<decltype(stride_y), 1>(vector_rhs, vector_intermediate_solution, y_vector_handler);
-        // std::cout << "Velocity intermediate solution for y-direction computed.\n";
-        zeta += vector_intermediate_solution;
-        // std::cout << "Zeta updated after y-direction solve.\n";
+        zeta += vector_intermediate_solution; // Update zeta to n+1
 
+        // Solve Z-sweep: (I - gamma*Dzz)(u^{n+1} - u^n) = zeta^{n+1} - u^n
+        // Note: velocity_solution here holds u^n (from initialization or previous loop)
         vector_rhs = zeta - velocity_solution;
-        // std::cout << "Vector RHS for z-direction computed.\n";
         velocity_solver.solve<decltype(stride_z), 2>(vector_rhs, vector_intermediate_solution, z_vector_handler);
-        // std::cout << "Velocity intermediate solution for z-direction computed.\n";
-        velocity_solution += vector_intermediate_solution;
-        // std::cout << "Velocity solution updated after z-direction solve.\n";
+        velocity_solution += vector_intermediate_solution; // Update velocity_solution to n+1
 
         // ============================================================================
         // ===========================PRESSURE EQUATION SOLVE==========================
         // ============================================================================
         compute_rhs_pressure();
-        // std::cout << "RHS for pressure equation computed.\n";
+
         pressure_solver.solve_pressure<decltype(stride_x), 0>(rhs, psi, x_scalar_handler);
-        // std::cout << "Pressure intermediate solution for x-direction computed.\n";
         pressure_solver.solve_pressure<decltype(stride_y), 1>(psi, phi, y_scalar_handler);
-        // std::cout << "Pressure intermediate solution for y-direction computed.\n";
         pressure_solver.solve_pressure<decltype(stride_z), 2>(phi, other_phi, z_scalar_handler);
-        // std::cout << "Pressure intermediate solution for z-direction computed.\n";
 
         // ============================================================================
         // =====================UPDATE PRESSURE====================
         // ============================================================================
         pressure_solution += other_phi;
-        // std::cout << "Pressure solution updated.\n";
+
         velocity_solver.advance_time();
-        // std::cout << "Velocity solver advanced to next time step.\n";
         pressure_solver.advance_time();
-        // std::cout << "Pressure solver advanced to next time step.\n";
+
+        // -------------------------------------------------------
+        // CRITICAL UPDATE: Advance u_0 to the next time step
+        // -------------------------------------------------------
+        // u_0 must hold the velocity at time 't' for the NEXT iteration's
+        // compute_vector_xi() calculation.
+        u_0 = velocity_solution;
     }
 };

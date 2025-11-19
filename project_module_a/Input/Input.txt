@@ -1,3 +1,6 @@
+#Number of Run
+4
+
 #Dim of X 
 1.0
 
@@ -8,7 +11,7 @@
 1.0
 
 # Number of mesh points in X, Y, Z directions (Nx, Ny, Nz)
-20 20 20
+10 10 10
 
 # Time step size (dt)
 0.0001

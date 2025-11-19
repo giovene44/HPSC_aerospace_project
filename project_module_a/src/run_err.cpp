@@ -133,7 +133,7 @@ std::pair<Real, Real> single_run(
 
     return std::make_pair(rel_err_u, rel_err_p);
 }
-int run_multiple(int num_runs)
+int run_multiple()
 {
     try
     {
@@ -146,6 +146,8 @@ int run_multiple(int num_runs)
         parser.parse_input("./Input/Input.txt");
 
         // Get initial values from the parser (used as base for refinement)
+        int num_runs = parser.num_runs;
+
         Dim N_initial_x = parser.Nx;
         Dim N_initial_y = parser.Ny;
         Dim N_initial_z = parser.Nz;
