@@ -98,9 +98,18 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             Dim k = idx / (Nx * Ny);
 
             // Convert grid indices to physical coordinates
+            // this depends on the component, cause of staggered grid!
             Real x = i * dx;
             Real y = j * dy;
             Real z = k * dz;
+            
+            // Shift by half a cell in the direction of the component:
+            if(comp==0)
+                x += dx/2.0f;
+            else if(comp==1)
+                y += dy/2.0f;
+            else
+                z += dz/2.0f;
 
             // -----------------------------------------------------------------
             // Directional Laplacian terms
