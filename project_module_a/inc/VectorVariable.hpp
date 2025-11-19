@@ -95,6 +95,9 @@ public:
     }
 
     // !!! : WE ONLY USE THIS ON THE BOUNDARY CONDITION => IF WE USE OTHERWISE IT IS WRONG
+    //first order derivative is computed on the pressure nodes!
+    //it is only used to compute the divergence of u which lies on the pressure space (it's a scalar)
+    //this looks like a first order schema but it's not! that's cause we are changing the node!
     Real first_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const
     {
         Real v1(Real(0.0)), v2(Real(0.0)), den(Real(0.0)), val(Real(0.0));
@@ -133,11 +136,21 @@ public:
         return first_derivative(axes, derivation_direction, i, j, k);
     }
 
+    //second order derivative is computed on the velocity nodes! 
+    //on the borders we use a one-sided second order schema.
+    //ENSURE Nx,Ny,Nz>=4 TO AVOID PROBLEMS!
     Real second_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const
     {
         Real v1(Real(0.0)), v2(Real(0.0)), v3(Real(0.0)), den(Real(0.0)), val(Real(0.0));
+        
         if (derivation_direction == 0)
         { // x direction
+            if(i==0){
+                return (2.0*value(axes,i,j,k)-5.0*value(axes,i+1,j,k)+4.0*value(axes,i+2,j,k)-value(axes,i+3,j,k))/(dx*dx);
+            }
+            else if(i==Nx-1){
+                return (2.0*value(axes,i,j,k)-5.0*value(axes,i-1,j,k)+4.0*value(axes,i-2,j,k)-value(axes,i-3,j,k))/(dx*dx);
+            }
             v1 = value(axes, i + 1, j, k);
             v2 = value(axes, i, j, k);
             v3 = value(axes, i - 1, j, k);
@@ -145,6 +158,12 @@ public:
         }
         else if (derivation_direction == 1)
         { // y direction
+            if(j==0){
+                return (2.0*value(axes,i,j,k)-5.0*value(axes,i,j+1,k)+4.0*value(axes,i,j+2,k)-value(axes,i,j+3,k))/(dy*dy);
+            }
+            else if(j==Ny-1){
+                return (2.0*value(axes,i,j,k)-5.0*value(axes,i,j-1,k)+4.0*value(axes,i,j-2,k)-value(axes,i,j-3,k))/(dy*dy);
+            }
             v1 = value(axes, i, j + 1, k);
             v2 = value(axes, i, j, k);
             v3 = value(axes, i, j - 1, k);
@@ -152,6 +171,12 @@ public:
         }
         else if (derivation_direction == 2)
         { // z direction
+            if(k==0){
+                return (2.0*value(axes,i,j,k)-5.0*value(axes,i,j,k+1)+4.0*value(axes,i,j,k+2)-value(axes,i,j,k+3))/(dz*dz);
+            }
+            else if(k==Nz-1){
+                return (2.0*value(axes,i,j,k)-5.0*value(axes,i,j,k-1)+4.0*value(axes,i,j,k-2)-value(axes,i,j,k-3))/(dz*dz);
+            }
             v1 = value(axes, i, j, k + 1);
             v2 = value(axes, i, j, k);
             v3 = value(axes, i, j, k - 1);
