@@ -218,8 +218,6 @@ void NavierStokesBrinkmann::compute_vector_xi()
 
 void NavierStokesBrinkmann::compute_rhs_pressure()
 {
-    ScalarVariable div_u(Nx, Ny, Nz, dx, dy, dz);
-
     for (Dim x = 0; x < Nx; ++x)
     {
         for (Dim y = 0; y < Ny; ++y)
@@ -263,7 +261,7 @@ void NavierStokesBrinkmann::solve()
     pressure_solution = p_0;
     // output method
 
-    for (Real t = 0.0f; t < T; t += dt)
+    for (Real t = 0.0f; t <= T; t += dt)
     {
         printf("Time step at t = %.4f\n", t);
         pressure_predictor = pressure_solution + other_phi;

@@ -28,8 +28,6 @@ std::pair<Real, Real> single_run(Real N, Real dt)
     // ===============================================================
     ManufacturedSolution mms(Nx, Ny, Nz, dx, dy, dz, Re);
 
-    Real t0 = 0.0;
-
     // Initial conditions
     auto forcing_func = [mms](Real x, Real y, Real z, Real t) -> std::vector<Real>
     {
@@ -49,9 +47,9 @@ std::pair<Real, Real> single_run(Real N, Real dt)
     NavierStokesBrinkmann solver(Nx, Ny, Nz, dt, T_final,
                                  forcing_func, k_func,
                                  dx, dy, dz, Re);
-    std::cout << "Solver initialized.\n";
-    solver.parse_input("../Input/Input_example.in");
-    std::cout << "Input parsed.\n";
+    solver.u_boundary.setParsing("../Input/initial_u0.dat");
+    solver.p_boundary.setParsing("../Input/initial_p0.dat");
+    
     // ===============================================================
     // 5) RUN SOLVER
     // ===============================================================
@@ -147,7 +145,7 @@ int run_multiple(int num_runs){
     std::cout << "\nData files created. Generating plots...\n";
     
     // Call Python script to generate plots
-    int result = system("python3 utils/plot.py error_vs_N.dat error_vs_N.png"); 
+    int result = system("python3 ../utils/plot.py error_vs_N.dat error_vs_N.png"); 
     if (result != 0) {
         std::cerr << "Warning: Failed to plot error_vs_N.dat\n";
     }

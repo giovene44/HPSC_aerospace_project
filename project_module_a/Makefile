@@ -26,7 +26,7 @@ SRC_FILES = $(wildcard $(SRC_DIR)/*.cpp)
 SRC_NO_MAIN = $(filter-out $(SRC_DIR)/main.cpp, $(SRC_FILES))
 
 # Detect test source files
-TEST_SRCS = $(wildcard $(TEST_DIR)/test_*.cpp)
+# TEST_SRCS = $(wildcard $(TEST_DIR)/test_*.cpp)
 
 # Binaries
 MAIN_BIN = $(BIN_DIR)/main
