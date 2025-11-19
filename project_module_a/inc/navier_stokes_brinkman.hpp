@@ -27,7 +27,9 @@ public:
                           const Real dt, const Real T,
                           std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_func,
                           std::function<Real(Real, Real, Real)> k_func,
-                          const Real dx = 1.0f, const Real dy = 1.0f, const Real dz = 1.0f,
+                          std::string u_boundary_file,
+                          std::string p_boundary_file,
+                          const Real dx, const Real dy, const Real dz,
                           Real Re = 100.0f)
         : // ============================
           // GRID, MATERIAL, AND TIME INFO
@@ -86,22 +88,17 @@ public:
           // FINAL SOLUTION STORAGE
           // ============================
           velocity_solution(Nx, Ny, Nz, dx, dy, dz),
-          pressure_solution(Nx, Ny, Nz, dx, dy, dz),
+          pressure_solution(Nx, Ny, Nz, dx, dy, dz)
 
-          // ============================
-          // INPUT FILES
-          // ============================
-          u_boundary_file(),
-          p_boundary_file(),
-          k_file()
     {
+        u_boundary.setParsing(u_boundary_file);
+        p_boundary.setParsing(p_boundary_file);
         nu = 1.0f / Re;
         initialize_k_field();
         initialize_gamma_field();
     }
     // initialization methods:
     void initialize_gamma_field();
-    void parse_input(const std::string &input_file);
     void initialize_k_field();
 
     Real compute_beta(Dim i, Dim j, Dim k) const;
@@ -183,11 +180,4 @@ public:
     // ============================================================================
     VectorVariable velocity_solution; // Final converged velocity
     ScalarVariable pressure_solution; // Final converged pressure
-
-    // ============================================================================
-    // INPUT FILES
-    // ============================================================================
-    std::string u_boundary_file; // Initial condition file for velocity
-    std::string p_boundary_file; // Initial condition file for pressure
-    std::string k_file;          // Initial condition file for permeability or resistance term
 };
