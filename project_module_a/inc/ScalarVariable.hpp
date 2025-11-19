@@ -98,6 +98,15 @@ public:
         return data[index];
     }
 
+    /**
+     * @brief Sets all elements in the scalar field to the specified value.
+     * @param value The Real value to assign to all elements.
+     */
+    void set_all(Real value)
+    {
+        std::fill(data.begin(), data.end(), value);
+    }
+
     Real get(Dim i, Dim j, Dim k) const
     {
         return data[i + j * Nx + k * Nx * Ny];

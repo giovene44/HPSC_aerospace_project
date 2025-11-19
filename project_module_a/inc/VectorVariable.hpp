@@ -66,6 +66,19 @@ public:
         return data[axes].get(index);
     }
 
+    /**
+     * @brief Sets all elements in all three vector components (x, y, z) to the specified value.
+     * This is implemented by calling set_all on the internal ScalarVariable objects.
+     * @param value The Real value to assign to all elements.
+     */
+    void set_all(Real value)
+    {
+        for (int a = 0; a < static_cast<int>(data.size()); ++a)
+        {
+            data[a].set_all(value);
+        }
+    }
+
     inline Real &set(int axes, Dim i, Dim j, Dim k) noexcept
     {
         return data[axes].set(i, j, k);

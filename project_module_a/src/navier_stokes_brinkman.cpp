@@ -69,7 +69,6 @@ void NavierStokesBrinkmann::initialize_k_field()
         k_field.set(idx) = k_function(x, y, z);
     }
 }
-
 void NavierStokesBrinkmann::compute_vector_g(Real t)
 {
     // -------------------------------------------------------------------------
@@ -83,10 +82,26 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
     gradient_pressure_predictor.set(1) = pressure_predictor.getGradient_y();
     gradient_pressure_predictor.set(2) = pressure_predictor.getGradient_z();
 
+    // Define a target index for debugging prints to avoid console flood
+    constexpr Dim DEBUG_I = 1;
+    constexpr Dim DEBUG_J = 1;
+    constexpr Dim DEBUG_K = 1;
+    constexpr Dim DEBUG_COMP = 0; // Check the x-component
+
     for (Dim comp = 0; comp < vector_rhs.size(); ++comp)
     {
         for (Dim idx = 0; idx < vector_rhs.elements_per_component(); ++idx)
         {
+            // Convert linear index to 3D coordinates
+            Dim i = idx % Nx;
+            Dim j = (idx / Nx) % Ny;
+            Dim k = idx / (Nx * Ny);
+
+            // Convert grid indices to physical coordinates
+            Real x = i * dx;
+            Real y = j * dy;
+            Real z = k * dz;
+
             // -----------------------------------------------------------------
             // Directional Laplacian terms
             // -----------------------------------------------------------------
@@ -98,40 +113,52 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // -----------------------------------------------------------------
             // Physical properties
             // -----------------------------------------------------------------
-            Real nu_val = nu;                                // local kinematic viscosity ν
-            Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k //TODO:SET WHEN READING IS BETTER
-
-            // -----------------------------------------------------------------
-            // Forcing and pressure gradient
-            // -----------------------------------------------------------------
-            // Convert linear index to 3D coordinates
-
-            Dim i = idx % Nx;
-            Dim j = (idx / Nx) % Ny;
-            Dim k = idx / (Nx * Ny);
-
-            // Convert grid indices to physical coordinates
-            Real x = i * dx;
-            Real y = j * dy;
-            Real z = k * dz;
+            Real nu_val = nu;
+            Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k
 
             // Evaluate forcing function
             std::vector<Real> forcing_vec = forcing_function(x, y, z, t);
             Real forcing = forcing_vec[comp];
 
-            // -----------------------------------------------------------------
-            // Assemble RHS term
-            // -----------------------------------------------------------------
-
             Real p_grad = gradient_pressure_predictor.value(comp, idx);
 
             Real velocity = u_0.value(comp, idx);
 
+            // =================================================================
+            // DEBUGGING OUTPUT
+            // =================================================================
+            if (i == DEBUG_I && j == DEBUG_J && k == DEBUG_K && comp == DEBUG_COMP)
+            {
+                std::cout << "\n--- DEBUG: Time=" << t << ", Index (" << i << "," << j << "," << k << "), Comp=" << comp << " ---\n";
+                std::cout << "k_val (permeability): " << k_val << "\n";
+                std::cout << "Laplacian components:\n";
+                std::cout << "  Dxx_eta: " << dxx_eta << "\n";
+                std::cout << "  Dyy_zeta: " << dyy_zeta << "\n";
+                std::cout << "  Dzz_u: " << dzz_u << "\n";
+                std::cout << "Laplacian sum: " << laplacian << "\n";
+                std::cout << "p_grad: " << p_grad << "\n";
+                std::cout << "Forcing: " << forcing << "\n";
+            }
+            // =================================================================
+
+            // -----------------------------------------------------------------
+            // Assemble RHS term
+            // -----------------------------------------------------------------
             Real g_val =
                 forcing                                      // f
                 - p_grad                                     // -∇p
                 + Real(0.5) * nu_val * laplacian             // + (ν/2)(∇²η + ∇²ζ + ∇²u)
                 - (nu_val / (Real(2.0) * k_val)) * velocity; // - (ν/(2k))u₀
+
+            // =================================================================
+            // DEBUGGING OUTPUT - Final result
+            // =================================================================
+            if (i == DEBUG_I && j == DEBUG_J && k == DEBUG_K && comp == DEBUG_COMP)
+            {
+                std::cout << "g_val (FINAL): " << g_val << "\n";
+                std::cout << "--------------------------------------------------\n";
+            }
+            // =================================================================
 
             // -----------------------------------------------------------------
             // Store result
@@ -140,7 +167,6 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
         }
     }
 }
-
 void NavierStokesBrinkmann::compute_vector_xi()
 {
     for (Dim comp = 0; comp < xi.size(); ++comp)

@@ -152,11 +152,6 @@ int run_multiple(int num_runs)
         Real dt_initial = parser.dt;
         Real T_final = parser.T;
 
-        // Store dx_initial values from the file, used to derive dx_curr
-        Real dx_initial = parser.dx;
-        Real dy_initial = parser.dy;
-        Real dz_initial = parser.dz;
-
         std::vector<Real> N_values;
         std::vector<Real> dt_values;
         std::vector<Real> errors_0;
@@ -180,8 +175,8 @@ int run_multiple(int num_runs)
             Real dx_curr = parser.DimX / (Real)(Nx_curr - 1);
             Real dy_curr = parser.DimY / (Real)(Ny_curr - 1);
             Real dz_curr = parser.DimZ / (Real)(Nz_curr - 1);
-
-            std::cout << "\nRunning simulation with (Nx, Ny, Nz) = ("
+            std::cout << "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
+            std::cout << "Running simulation with (Nx, Ny, Nz) = ("
                       << Nx_curr << ", " << Ny_curr << ", " << Nz_curr << ") and dt = "
                       << dt_curr << "\n\n";
 
