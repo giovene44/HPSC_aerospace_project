@@ -177,9 +177,9 @@ int run_multiple(int num_runs)
             Real dt_curr = dt_initial / refinement_factor;
 
             // dx/dy/dz must be scaled inversely to N_curr (halved when N_curr is doubled)
-            Real dx_curr = dx_initial / refinement_factor;
-            Real dy_curr = dy_initial / refinement_factor;
-            Real dz_curr = dz_initial / refinement_factor;
+            Real dx_curr = parser.DimX / (Real)(Nx_curr - 1);
+            Real dy_curr = parser.DimY / (Real)(Ny_curr - 1);
+            Real dz_curr = parser.DimZ / (Real)(Nz_curr - 1);
 
             std::cout << "\nRunning simulation with (Nx, Ny, Nz) = ("
                       << Nx_curr << ", " << Ny_curr << ", " << Nz_curr << ") and dt = "
