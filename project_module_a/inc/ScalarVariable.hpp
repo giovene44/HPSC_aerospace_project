@@ -17,8 +17,7 @@ public:
     ScalarVariable(const Dim Nx, const Dim Ny, const Dim Nz, const Real dx_, const Real dy_, const Real dz_)
         : Nx(Nx), Ny(Ny), Nz(Nz), dx(dx_), dy(dy_), dz(dz_)
     {
-        size_t total = static_cast<size_t>(Nx) * static_cast<size_t>(Ny) * static_cast<size_t>(Nz);
-        data.assign(total, Real(0));
+        data.assign(Nx * Ny * Nz, Real(0));
     }
 
     ScalarVariable(const ScalarVariable &other)

@@ -190,8 +190,6 @@ void NavierStokesBrinkmann::compute_vector_xi()
 
 void NavierStokesBrinkmann::compute_rhs_pressure()
 {
-    ScalarVariable div_u(Nx, Ny, Nz, dx, dy, dz);
-
     for (Dim x = 0; x < Nx; ++x)
     {
         for (Dim y = 0; y < Ny; ++y)

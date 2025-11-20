@@ -1,115 +1,114 @@
-# Compiler and flags
-CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O3 -I$(INCLUDE_DIR) -Imuparserx/parser
-DEBUG_FLAGS = -std=c++17 -Wall -Wextra -g -O0 -I$(INCLUDE_DIR) -Imuparserx/parser
+# ==========================================
+# 1. CONFIGURAZIONE
+# ==========================================
+CXX      := g++
+CXXFLAGS := -std=c++17 -Wall -Wextra -O2
 
-# Directories
-INCLUDE_DIR = inc
-SRC_DIR = src
-BUILD_DIR = build
-BIN_DIR = bin
-TEST_DIR = tests
+# Directory
+SRC_DIR  := src
+TEST_DIR := tests
+INC_DIR  := inc
+BIN_DIR  := bin
+OBJ_DIR  := obj
 
-# ---------------------------------------------------------------------------
-# muParserX sources
-# ---------------------------------------------------------------------------
-MUPARSERX_SRC = $(wildcard muparserx/parser/*.cpp)
+# --- IMPORTANTE: IL NOME DEL TUO FILE CON IL MAIN ---
+# Inserisci qui il nome esatto del file in src/ che contiene int main()
+MAIN_FILENAME := main.cpp
 
-# ---------------------------------------------------------------------------
-# Sources
-# ---------------------------------------------------------------------------
+# Nomi eseguibili
+MAIN_EXE := $(BIN_DIR)/main_app
+TEST_EXE := $(BIN_DIR)/test_suite
 
-# All source files (including main)
-SRC_FILES = $(wildcard $(SRC_DIR)/*.cpp)
+# ==========================================
+# 2. CONFIGURAZIONE MUPARSERX
+# ==========================================
+MUP_DIR       := muparserx
+MUP_BUILD_DIR := $(MUP_DIR)/build
+MUP_LIB       := $(MUP_BUILD_DIR)/libmuparserx.a
+INCLUDES      := -I$(INC_DIR) -I$(MUP_DIR)/parser
 
-# Exclude main.cpp from being linked into test binaries
-SRC_NO_MAIN = $(filter-out $(SRC_DIR)/main.cpp, $(SRC_FILES))
+# ==========================================
+# 3. LOGICA DI SELEZIONE FILE (IL FILTRO)
+# ==========================================
 
-# Detect test source files
-TEST_SRCS = $(wildcard $(TEST_DIR)/test_*.cpp)
+# 1. Trova TUTTI i file .cpp in src/
+ALL_SRC_FILES := $(wildcard $(SRC_DIR)/*.cpp)
 
-# Binaries
-MAIN_BIN = $(BIN_DIR)/main
-TEST_BINS = $(patsubst $(TEST_DIR)/%.cpp, $(BIN_DIR)/%, $(TEST_SRCS))
-TEST_DEBUG_BINS = $(patsubst $(TEST_DIR)/%.cpp, $(BIN_DIR)/%_debug, $(TEST_SRCS))
+# 2. Definisce il percorso completo del file main
+APP_MAIN_FILE := $(SRC_DIR)/$(MAIN_FILENAME)
 
-# Optional variable to run one test
-TEST ?=
+# 3. Crea una lista dei file "Core" (tutto src tranne il main)
+#    Questi servono SIA all'app CHE ai test
+CORE_SRC_FILES := $(filter-out $(APP_MAIN_FILE), $(ALL_SRC_FILES))
 
-# ---------------------------------------------------------------------------
-# Default target
-# ---------------------------------------------------------------------------
-all: directories $(MAIN_BIN) $(TEST_BINS)
+# 4. Genera liste oggetti
+# Oggetti della logica comune (Header implementati)
+OBJS_CORE := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(CORE_SRC_FILES))
+# Oggetto specifico del main (solo per l'app)
+OBJ_MAIN  := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(APP_MAIN_FILE))
+# Oggetti dei test
+OBJS_TEST := $(patsubst $(TEST_DIR)/%.cpp, $(OBJ_DIR)/test/%.o, $(wildcard $(TEST_DIR)/*.cpp))
 
-directories:
-	@mkdir -p $(BUILD_DIR)
+# ==========================================
+# 4. TARGET PRINCIPALI
+# ==========================================
+
+.PHONY: all main test clean clean-all setup
+
+all: main
+
+# L'APP finale unisce: Oggetto Main + Oggetti Core + Muparserx
+main: setup $(MAIN_EXE)
+
+# I TEST uniscono: Oggetti Test + Oggetti Core + Muparserx (ESCLUSO il main dell'app)
+test: setup $(TEST_EXE)
+
+# ==========================================
+# 5. LINKING
+# ==========================================
+
+$(MAIN_EXE): $(OBJ_MAIN) $(OBJS_CORE) $(MUP_LIB)
+	@echo "[LINK APP] $@"
+	$(CXX) $(OBJ_MAIN) $(OBJS_CORE) $(MUP_LIB) -o $@
+
+$(TEST_EXE): $(OBJS_TEST) $(OBJS_CORE) $(MUP_LIB)
+	@echo "[LINK TEST] $@"
+	$(CXX) $(OBJS_TEST) $(OBJS_CORE) $(MUP_LIB) -o $@
+
+# ==========================================
+# 6. COMPILAZIONE
+# ==========================================
+
+# Compila file src/
+$(OBJ_DIR)/src/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "[CXX SRC] $<"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# Compila file test/
+$(OBJ_DIR)/test/%.o: $(TEST_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "[CXX TEST] $<"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# Compila Muparserx (Submodule)
+$(MUP_LIB):
+	@echo "[SUBMODULE] Building muparserx..."
+	mkdir -p $(MUP_BUILD_DIR)
+	cd $(MUP_BUILD_DIR) && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF
+	cd $(MUP_BUILD_DIR) && make
+
+setup:
 	@mkdir -p $(BIN_DIR)
+	@mkdir -p $(OBJ_DIR)/src
+	@mkdir -p $(OBJ_DIR)/tests
 
-# ---------------------------------------------------------------------------
-# Main solver build
-# ---------------------------------------------------------------------------
-$(MAIN_BIN): $(SRC_FILES) $(MUPARSERX_SRC) | directories
-	$(CXX) $(CXXFLAGS) $(SRC_FILES) $(MUPARSERX_SRC) -o $@
-	@echo "✅ Build complete: $@"
+# ==========================================
+# 7. PULIZIA
+# ==========================================
 
-# ---------------------------------------------------------------------------
-# Test builds (release and debug)
-# ---------------------------------------------------------------------------
-$(BIN_DIR)/%: $(TEST_DIR)/%.cpp $(SRC_NO_MAIN) $(MUPARSERX_SRC) | directories
-	$(CXX) $(CXXFLAGS) $(SRC_NO_MAIN) $(MUPARSERX_SRC) $< -o $@
-	@echo "✅ Test build complete: $@"
-
-$(BIN_DIR)/%_debug: $(TEST_DIR)/%.cpp $(SRC_NO_MAIN) $(MUPARSERX_SRC) | directories
-	$(CXX) $(DEBUG_FLAGS) $(SRC_NO_MAIN) $(MUPARSERX_SRC) $< -o $@
-	@echo "🐞 Debug test build complete: $@"
-
-debug: directories $(TEST_DEBUG_BINS)
-
-# ---------------------------------------------------------------------------
-# Run targets
-# ---------------------------------------------------------------------------
-run: $(MAIN_BIN)
-	@echo "Running main program..."
-	@./$(MAIN_BIN)
-
-run-tests: all
-ifeq ($(TEST),)
-	@echo "Running all tests..."
-	@for t in $(TEST_BINS); do echo "==> $$t"; ./$$t; echo ""; done
-else
-	@echo "Running test: $(TEST)"
-	@./$(BIN_DIR)/$(TEST)
-endif
-
-run-debug: debug
-ifeq ($(TEST),)
-	@echo "Running all debug tests..."
-	@for t in $(TEST_DEBUG_BINS); do echo "==> $$t"; ./$$t; echo ""; done
-else
-	@echo "Running debug test: $(TEST)_debug"
-	@./$(BIN_DIR)/$(TEST)_debug
-endif
-
-# ---------------------------------------------------------------------------
-# Utility targets
-# ---------------------------------------------------------------------------
 clean:
-	rm -rf $(BUILD_DIR) $(BIN_DIR)
-	@echo "🧹 Cleaned build artifacts"
+	rm -rf $(OBJ_DIR) $(BIN_DIR)
 
-rebuild: clean all
-
-help:
-	@echo "Available targets:"
-	@echo "  all          - Build main program and all tests"
-	@echo "  run          - Run main program"
-	@echo "  run-tests    - Run all tests or one test (make run-tests TEST=test_name)"
-	@echo "  debug        - Build all tests in debug mode"
-	@echo "  run-debug    - Run debug tests"
-	@echo "  clean        - Remove build artifacts"
-	@echo "  rebuild      - Clean and rebuild everything"
-	@echo ""
-	@echo "Example:"
-	@echo "  make run-tests TEST=test_matrix3d"
-
-.PHONY: all directories debug run run-tests run-debug clean rebuild help
+clean-all: clean
+	rm -rf $(MUP_BUILD_DIR)
