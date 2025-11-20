@@ -102,14 +102,14 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             Real x = i * dx;
             Real y = j * dy;
             Real z = k * dz;
-            
+
             // Shift by half a cell in the direction of the component:
-            if(comp==0)
-                x += dx/2.0f;
-            else if(comp==1)
-                y += dy/2.0f;
+            if (comp == 0)
+                x += dx / 2.0f;
+            else if (comp == 1)
+                y += dy / 2.0f;
             else
-                z += dz/2.0f;
+                z += dz / 2.0f;
 
             // -----------------------------------------------------------------
             // Directional Laplacian terms
@@ -238,7 +238,7 @@ void NavierStokesBrinkmann::solve()
     // Time stepping loop
     for (Real t = 0.0f; t < T; t += dt)
     {
-        pressure_predictor = pressure_solution + other_phi;
+        pressure_predictor = pressure_solution;
 
         // Compute source terms using u_0 (velocity at t^n)
         compute_vector_g(t);
