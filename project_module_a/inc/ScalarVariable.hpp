@@ -134,11 +134,69 @@ public:
     }
 
     // --- Gradients ---
+    // --- Gradients (Centered Finite Difference - 2nd Order Interior) ---
+
     Real getGradient_x(Dim i, Dim j, Dim k) const
     {
-        auto lhs = i % Nx > 0 ? get(i, j, k) : 0.0f;
-        auto rhs = i % Nx < Nx - 1 ? get(i + 1, j, k) : 0.0f;
-        return (rhs - lhs) * 0.5f;
+        // Interior points (Second Order Centered)
+        if (i > 0 && i < Nx - 1)
+        {
+            Real lhs = get(i - 1, j, k);
+            Real rhs = get(i + 1, j, k);
+            return (rhs - lhs) / (2.0f * dx);
+        }
+        // Left Boundary (Forward Difference - 1st Order)
+        else if (i == 0)
+        {
+            return (get(1, j, k) - get(0, j, k)) / dx;
+        }
+        // Right Boundary (Backward Difference - 1st Order)
+        else
+        {
+            return (get(Nx - 1, j, k) - get(Nx - 2, j, k)) / dx;
+        }
+    }
+
+    Real getGradient_y(Dim i, Dim j, Dim k) const
+    {
+        // Interior points (Second Order Centered)
+        if (j > 0 && j < Ny - 1)
+        {
+            Real lhs = get(i, j - 1, k);
+            Real rhs = get(i, j + 1, k);
+            return (rhs - lhs) / (2.0f * dy);
+        }
+        // Bottom Boundary (Forward Difference - 1st Order)
+        else if (j == 0)
+        {
+            return (get(i, 1, k) - get(i, 0, k)) / dy;
+        }
+        // Top Boundary (Backward Difference - 1st Order)
+        else
+        {
+            return (get(i, Ny - 1, k) - get(i, Ny - 2, k)) / dy;
+        }
+    }
+
+    Real getGradient_z(Dim i, Dim j, Dim k) const
+    {
+        // Interior points (Second Order Centered)
+        if (k > 0 && k < Nz - 1)
+        {
+            Real lhs = get(i, j, k - 1);
+            Real rhs = get(i, j, k + 1);
+            return (rhs - lhs) / (2.0f * dz);
+        }
+        // Front Boundary (Forward Difference - 1st Order)
+        else if (k == 0)
+        {
+            return (get(i, j, 1) - get(i, j, 0)) / dz;
+        }
+        // Back Boundary (Backward Difference - 1st Order)
+        else
+        {
+            return (get(i, j, Nz - 1) - get(i, j, Nz - 2)) / dz;
+        }
     }
 
     Real getGradient_x(Dim index) const
@@ -149,26 +207,12 @@ public:
         return getGradient_x(i, j, k);
     }
 
-    Real getGradient_y(Dim i, Dim j, Dim k) const
-    {
-        auto lhs = j % Ny > 0 ? get(i, j, k) : 0.0f;
-        auto rhs = j % Ny < Ny - 1 ? get(i, j + 1, k) : 0.0f;
-        return (rhs - lhs) * 0.5f;
-    }
-
     Real getGradient_y(Dim index) const
     {
         Dim i = index % Nx;
         Dim j = (index / Nx) % Ny;
         Dim k = index / (Nx * Ny);
         return getGradient_y(i, j, k);
-    }
-
-    Real getGradient_z(Dim i, Dim j, Dim k) const
-    {
-        auto lhs = k % Nz > 0 ? get(i, j, k) : 0.0f;
-        auto rhs = k % Nz < Nz - 1 ? get(i, j, k + 1) : 0.0f;
-        return (rhs - lhs) * 0.5f;
     }
 
     Real getGradient_z(Dim index) const
