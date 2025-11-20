@@ -86,6 +86,8 @@ std::pair<Real, Real> single_run(
     Real err_u = 0.0, err_p = 0.0;
     Real norm_u = 0.0, norm_p = 0.0;
 
+    Real dV = dx_in * dy_in * dz_in;
+
     for (Dim k = 0; k < Nz_in; ++k)
         for (Dim j = 0; j < Ny_in; ++j)
             for (Dim i = 0; i < Nx_in; ++i)
@@ -115,10 +117,13 @@ std::pair<Real, Real> single_run(
                 norm_p += pE * pE;
             }
 
-    err_u = std::sqrt(err_u);
-    norm_u = std::sqrt(norm_u);
-    err_p = std::sqrt(err_p);
-    norm_p = std::sqrt(norm_p);
+    //by multiplying by dV we are approximating the integral over the domain
+    //without dV the error would scale with the number of points
+
+    err_u = std::sqrt(err_u*dV);
+    norm_u = std::sqrt(norm_u*dV);
+    err_p = std::sqrt(err_p*dV);
+    norm_p = std::sqrt(norm_p*dV);
 
     Real rel_err_u = err_u / norm_u;
     Real rel_err_p = err_p / norm_p;
@@ -133,7 +138,7 @@ std::pair<Real, Real> single_run(
 
     return std::make_pair(rel_err_u, rel_err_p);
 }
-int run_multiple(int num_runs)
+int run_multiple()
 {
     try
     {
@@ -146,6 +151,8 @@ int run_multiple(int num_runs)
         parser.parse_input("./Input/Input.in");
 
         // Get initial values from the parser (used as base for refinement)
+        int num_runs = parser.num_runs;
+
         Dim N_initial_x = parser.Nx;
         Dim N_initial_y = parser.Ny;
         Dim N_initial_z = parser.Nz;
@@ -154,8 +161,8 @@ int run_multiple(int num_runs)
 
         std::vector<Real> N_values;
         std::vector<Real> dt_values;
-        std::vector<Real> errors_0;
-        std::vector<Real> errors_1;
+        std::vector<Real> errors_u;
+        std::vector<Real> errors_p;
 
         for (int i = 0; i < num_runs; i++)
         {
@@ -175,8 +182,8 @@ int run_multiple(int num_runs)
             Real dx_curr = parser.DimX / (Real)(Nx_curr - 1);
             Real dy_curr = parser.DimY / (Real)(Ny_curr - 1);
             Real dz_curr = parser.DimZ / (Real)(Nz_curr - 1);
-
-            std::cout << "\nRunning simulation with (Nx, Ny, Nz) = ("
+            std::cout << "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
+            std::cout << "Running simulation with (Nx, Ny, Nz) = ("
                       << Nx_curr << ", " << Ny_curr << ", " << Nz_curr << ") and dt = "
                       << dt_curr << "\n\n";
 
@@ -189,50 +196,44 @@ int run_multiple(int num_runs)
             // We track the number of grid points (Nx) and the time step (dt) for plotting
             N_values.push_back(Nx_curr);
             dt_values.push_back(dt_curr);
-            errors_0.push_back(errors.first);
-            errors_1.push_back(errors.second);
+            errors_u.push_back(errors.first);
+            errors_p.push_back(errors.second);
         }
 
-        // Write error vs N (Spatial Convergence)
-        std::ofstream file_N("error_vs_N.dat");
-        file_N << "# N\tUErr\n";
-        for (size_t i = 0; i < N_values.size(); i++)
-        {
-            file_N << N_values[i] << "\t" << errors_0[i] << "\t" << "\n";
-        }
-        file_N.close();
-
-        // Write error vs dt (Temporal Convergence)
-        std::ofstream file_dt("error_vs_dt.dat");
-        file_dt << "# dt\tPerr\n";
+        // ===============================================================
+        // WRITE VELOCITY ERROR FILE (NO N^-2 COLUMN)
+        // ===============================================================
+        std::ofstream file_u("velocity_error.dat");
+        file_u << "# N\tdt\tError_U\n";
         for (size_t i = 0; i < dt_values.size(); i++)
         {
-            file_dt << dt_values[i] << "\t" << errors_1[i] << "\n";
+            file_u << N_values[i] << "\t"
+                   << dt_values[i] << "\t"
+                   << errors_u[i] << "\n";
         }
-        file_dt.close();
+        file_u.close();
 
-        std::cout << "\nData files created. Generating plots...\n";
-
-        // Call Python script to generate plots
-        int result = system("python3 utils/plot.py error_vs_N.dat error_vs_N.png");
-        if (result != 0)
+        // ===============================================================
+        // WRITE PRESSURE ERROR FILE (NO N^-2 COLUMN)
+        // ===============================================================
+        std::ofstream file_p("pressure_error.dat");
+        file_p << "# N\tdt\tError_P\n";
+        for (size_t i = 0; i < dt_values.size(); i++)
         {
-            std::cerr << "Warning: Failed to plot error_vs_N.dat\n";
+            file_p << N_values[i] << "\t"
+                   << dt_values[i] << "\t"
+                   << errors_p[i] << "\n";
         }
+        file_p.close();
 
-        result = system("python3 utils/plot.py error_vs_dt.dat error_vs_dt.png");
-        if (result != 0)
-        {
-            std::cerr << "Warning: Failed to plot error_vs_dt.dat\n";
-        }
-
-        std::cout << "Plots generated successfully!\n";
+        std::cout << "\nData files created: velocity_error.dat, pressure_error.dat\n";
+        std::cout << "Skipping automated plotting (python script call removed).\n";
 
         return 0;
     }
     catch (const std::runtime_error &e)
     {
         std::cerr << "FATAL ERROR in run_multiple: " << e.what() << std::endl;
-        return 1; // Return non-zero to indicate application failure
+        return 1;
     }
-}
+};

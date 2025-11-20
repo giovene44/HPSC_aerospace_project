@@ -41,14 +41,15 @@ public:
     template <Dim component = 0>
     Real value(Real x_, Real y_, Real z_, Real t_)
     {
-        if constexpr (component == 0)
-            p.SetExpr(string_expression[0]);
-        else if constexpr (component == 1)
-            p.SetExpr(string_expression[1]);
-        else if constexpr (component == 2)
-            p.SetExpr(string_expression[2]);
-        else
-            throw std::runtime_error("BoundaryFunctions::value: invalid component index");
+        try
+        {
+            p.SetExpr(string_expression[component]);
+        }
+        catch (ParserError &e)
+        {
+            std::cerr << "Parser error in BoundaryFunctions::value(): " << e.GetMsg() << std::endl;
+            throw;
+        }
         xval = Value(x_);
         yval = Value(y_);
         zval = Value(z_);
@@ -60,7 +61,28 @@ public:
     template <Dim component = 0>
     Real first_derivative(Real x_, Real y_, Real z_, Real t_, Real d)
     {
-        return (value<component>(x_ + d, y_, z_, t_) - value<component>(x_ - d, y_, z_, t_)) / (2.0 * d);
+        Real xp = x_, yp = y_, zp = z_;
+        Real xm = x_, ym = y_, zm = z_;
+
+        if constexpr (component == 0)
+        {
+            xp += d;
+            xm -= d;
+        }
+        else if constexpr (component == 1)
+        {
+            yp += d;
+            ym -= d;
+        }
+        else if constexpr (component == 2)
+        {
+            zp += d;
+            zm -= d;
+        }
+
+        return (value<component>(xp, yp, zp, t_) -
+                value<component>(xm, ym, zm, t_)) /
+               (2.0 * d);
     }
 
 private:

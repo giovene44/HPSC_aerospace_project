@@ -69,7 +69,6 @@ void NavierStokesBrinkmann::initialize_k_field()
         k_field.set(idx) = k_function(x, y, z);
     }
 }
-
 void NavierStokesBrinkmann::compute_vector_g(Real t)
 {
     // -------------------------------------------------------------------------
@@ -83,10 +82,35 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
     gradient_pressure_predictor.set(1) = pressure_predictor.getGradient_y();
     gradient_pressure_predictor.set(2) = pressure_predictor.getGradient_z();
 
+    // Define a target index for debugging prints to avoid console flood
+    constexpr Dim DEBUG_I = 1;
+    constexpr Dim DEBUG_J = 1;
+    constexpr Dim DEBUG_K = 1;
+    constexpr Dim DEBUG_COMP = 0; // Check the x-component
+
     for (Dim comp = 0; comp < vector_rhs.size(); ++comp)
     {
         for (Dim idx = 0; idx < vector_rhs.elements_per_component(); ++idx)
         {
+            // Convert linear index to 3D coordinates
+            Dim i = idx % Nx;
+            Dim j = (idx / Nx) % Ny;
+            Dim k = idx / (Nx * Ny);
+
+            // Convert grid indices to physical coordinates
+            // this depends on the component, cause of staggered grid!
+            Real x = i * dx;
+            Real y = j * dy;
+            Real z = k * dz;
+            
+            // Shift by half a cell in the direction of the component:
+            if(comp==0)
+                x += dx/2.0f;
+            else if(comp==1)
+                y += dy/2.0f;
+            else
+                z += dz/2.0f;
+
             // -----------------------------------------------------------------
             // Directional Laplacian terms
             // -----------------------------------------------------------------
@@ -98,40 +122,52 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // -----------------------------------------------------------------
             // Physical properties
             // -----------------------------------------------------------------
-            Real nu_val = nu;                                // local kinematic viscosity ν
-            Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k //TODO:SET WHEN READING IS BETTER
-
-            // -----------------------------------------------------------------
-            // Forcing and pressure gradient
-            // -----------------------------------------------------------------
-            // Convert linear index to 3D coordinates
-
-            Dim i = idx % Nx;
-            Dim j = (idx / Nx) % Ny;
-            Dim k = idx / (Nx * Ny);
-
-            // Convert grid indices to physical coordinates
-            Real x = i * dx;
-            Real y = j * dy;
-            Real z = k * dz;
+            Real nu_val = nu;
+            Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k
 
             // Evaluate forcing function
             std::vector<Real> forcing_vec = forcing_function(x, y, z, t);
             Real forcing = forcing_vec[comp];
 
-            // -----------------------------------------------------------------
-            // Assemble RHS term
-            // -----------------------------------------------------------------
-
             Real p_grad = gradient_pressure_predictor.value(comp, idx);
 
             Real velocity = u_0.value(comp, idx);
 
+            // =================================================================
+            // DEBUGGING OUTPUT
+            // =================================================================
+            if (i == DEBUG_I && j == DEBUG_J && k == DEBUG_K && comp == DEBUG_COMP)
+            {
+                std::cout << "\n--- DEBUG: Time=" << t << ", Index (" << i << "," << j << "," << k << "), Comp=" << comp << " ---\n";
+                std::cout << "k_val (permeability): " << k_val << "\n";
+                std::cout << "Laplacian components:\n";
+                std::cout << "  Dxx_eta: " << dxx_eta << "\n";
+                std::cout << "  Dyy_zeta: " << dyy_zeta << "\n";
+                std::cout << "  Dzz_u: " << dzz_u << "\n";
+                std::cout << "Laplacian sum: " << laplacian << "\n";
+                std::cout << "p_grad: " << p_grad << "\n";
+                std::cout << "Forcing: " << forcing << "\n";
+            }
+            // =================================================================
+
+            // -----------------------------------------------------------------
+            // Assemble RHS term
+            // -----------------------------------------------------------------
             Real g_val =
                 forcing                                      // f
                 - p_grad                                     // -∇p
                 + Real(0.5) * nu_val * laplacian             // + (ν/2)(∇²η + ∇²ζ + ∇²u)
                 - (nu_val / (Real(2.0) * k_val)) * velocity; // - (ν/(2k))u₀
+
+            // =================================================================
+            // DEBUGGING OUTPUT - Final result
+            // =================================================================
+            if (i == DEBUG_I && j == DEBUG_J && k == DEBUG_K && comp == DEBUG_COMP)
+            {
+                std::cout << "g_val (FINAL): " << g_val << "\n";
+                std::cout << "--------------------------------------------------\n";
+            }
+            // =================================================================
 
             // -----------------------------------------------------------------
             // Store result
@@ -140,7 +176,6 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
         }
     }
 }
-
 void NavierStokesBrinkmann::compute_vector_xi()
 {
     for (Dim comp = 0; comp < xi.size(); ++comp)
@@ -194,64 +229,61 @@ void NavierStokesBrinkmann::solve()
     DimensionsHandlerVector<decltype(stride_y)> y_vector_handler(Nx, Ny, Nz, 1, 0, 2, dy, stride_y);
     DimensionsHandlerVector<decltype(stride_z)> z_vector_handler(Nx, Ny, Nz, 2, 0, 1, dz, stride_z);
 
+    // Initialize solutions
     velocity_solution = u_0;
     pressure_solution = p_0;
-    // output method
 
-    for (Real t = 0.0f; t <= T; t += dt)
+    // Time stepping loop
+    for (Real t = 0.0f; t < T; t += dt)
     {
-        // printf("Time step at t = %.4f\n", t);
         pressure_predictor = pressure_solution + other_phi;
-        // std::cout << "Pressure predictor computed.\n";
+
+        // Compute source terms using u_0 (velocity at t^n)
         compute_vector_g(t);
-        // std::cout << "Vector g computed.\n";
         compute_vector_xi();
-        // std::cout << "Vector xi computed.\n";
 
         // ============================================================================
         // ===========================MOMENTUM EQUATION SOLVE==========================
         // ============================================================================
+
+        // Solve X-sweep: (I - gamma*Dxx)(eta^{n+1} - eta^n) = xi^{n+1} - eta^n
         vector_rhs = xi - eta;
-        // std::cout << "Vector RHS for x-direction computed.\n";
         velocity_solver.solve<decltype(stride_x), 0>(vector_rhs, vector_intermediate_solution, x_vector_handler);
-        // std::cout << "Velocity intermediate solution for x-direction computed.\n";
-        eta += vector_intermediate_solution;
-        // std::cout << "Eta updated after x-direction solve.\n";
+        eta += vector_intermediate_solution; // Update eta to n+1
 
+        // Solve Y-sweep: (I - gamma*Dyy)(zeta^{n+1} - zeta^n) = eta^{n+1} - zeta^n
         vector_rhs = eta - zeta;
-        // std::cout << "Vector RHS for y-direction computed.\n";
         velocity_solver.solve<decltype(stride_y), 1>(vector_rhs, vector_intermediate_solution, y_vector_handler);
-        // std::cout << "Velocity intermediate solution for y-direction computed.\n";
-        zeta += vector_intermediate_solution;
-        // std::cout << "Zeta updated after y-direction solve.\n";
+        zeta += vector_intermediate_solution; // Update zeta to n+1
 
+        // Solve Z-sweep: (I - gamma*Dzz)(u^{n+1} - u^n) = zeta^{n+1} - u^n
+        // Note: velocity_solution here holds u^n (from initialization or previous loop)
         vector_rhs = zeta - velocity_solution;
-        // std::cout << "Vector RHS for z-direction computed.\n";
         velocity_solver.solve<decltype(stride_z), 2>(vector_rhs, vector_intermediate_solution, z_vector_handler);
-        // std::cout << "Velocity intermediate solution for z-direction computed.\n";
-        velocity_solution += vector_intermediate_solution;
-        // std::cout << "Velocity solution updated after z-direction solve.\n";
+        velocity_solution += vector_intermediate_solution; // Update velocity_solution to n+1
 
         // ============================================================================
         // ===========================PRESSURE EQUATION SOLVE==========================
         // ============================================================================
         compute_rhs_pressure();
-        // std::cout << "RHS for pressure equation computed.\n";
+
         pressure_solver.solve_pressure<decltype(stride_x), 0>(rhs, psi, x_scalar_handler);
-        // std::cout << "Pressure intermediate solution for x-direction computed.\n";
         pressure_solver.solve_pressure<decltype(stride_y), 1>(psi, phi, y_scalar_handler);
-        // std::cout << "Pressure intermediate solution for y-direction computed.\n";
         pressure_solver.solve_pressure<decltype(stride_z), 2>(phi, other_phi, z_scalar_handler);
-        // std::cout << "Pressure intermediate solution for z-direction computed.\n";
 
         // ============================================================================
         // =====================UPDATE PRESSURE====================
         // ============================================================================
         pressure_solution += other_phi;
-        // std::cout << "Pressure solution updated.\n";
+
         velocity_solver.advance_time();
-        // std::cout << "Velocity solver advanced to next time step.\n";
         pressure_solver.advance_time();
-        // std::cout << "Pressure solver advanced to next time step.\n";
+
+        // -------------------------------------------------------
+        // CRITICAL UPDATE: Advance u_0 to the next time step
+        // -------------------------------------------------------
+        // u_0 must hold the velocity at time 't' for the NEXT iteration's
+        // compute_vector_xi() calculation.
+        u_0 = velocity_solution;
     }
 };
