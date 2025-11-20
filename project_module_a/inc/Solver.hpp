@@ -94,9 +94,8 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
-                    // FIX: Divided by dx/dy/dz instead of Nx/Ny/Nz
-                    rhs.set(0, index_1, index_2) = rhs.get(0, index_1, index_2) - Real(2.0) / dx * p_boundary.value(0, index_1 * dy, index_2 * dz, t);
-                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) + Real(2.0) / dx * p_boundary.value((Nx - 1) * dx, index_1 * dy, index_2 * dz, t);
+                    rhs.set(0, index_1, index_2) = rhs.get(0, index_1, index_2) - Real(2.0) / dx * p_boundary.first_derivative(0, index_1 * dy, index_2 * dz, t, dx);
+                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) + Real(2.0) / dx * p_boundary.first_derivative((Nx - 1) * dx, index_1 * dy, index_2 * dz, t, dx);
                 }
             }
         }
@@ -106,8 +105,8 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
-                    rhs.set(index_1, 0, index_2) = rhs.get(index_1, 0, index_2) - Real(2.0) / dy * p_boundary.value(index_1 * dx, 0, index_2 * dz, t);
-                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2) + Real(2.0) / dy * p_boundary.value(index_1 * dx, (Ny - 1) * dy, index_2 * dz, t);
+                    rhs.set(index_1, 0, index_2) = rhs.get(index_1, 0, index_2) - Real(2.0) / dy * p_boundary.first_derivative(index_1 * dx, 0, index_2 * dz, t, dy);
+                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2) + Real(2.0) / dy * p_boundary.first_derivative(index_1 * dx, (Ny - 1) * dy, index_2 * dz, t, dy);
                 }
             }
         }
@@ -117,8 +116,8 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
-                    rhs.set(index_1, index_2, 0) = rhs.get(index_1, index_2, 0) - Real(2.0) / dz * p_boundary.value(index_1 * dx, index_2 * dy, 0, t);
-                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1) + Real(2.0) / dz * p_boundary.value(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t);
+                    rhs.set(index_1, index_2, 0) = rhs.get(index_1, index_2, 0) - Real(2.0) / dz * p_boundary.first_derivative(index_1 * dx, index_2 * dy, 0, t, dz);
+                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1) + Real(2.0) / dz * p_boundary.first_derivative(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t, dz);
                 }
             }
         }

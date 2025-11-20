@@ -1,0 +1,919 @@
+
+===== Input Parameters Loaded =====
+Convergence Runs:          3
+Domain Dimensions:         1, 1, 1
+Base Mesh (Nx, Ny, Nz):    10, 10, 10
+Base dt:                   0.0001
+===================================
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Running simulation with (Nx, Ny, Nz) = (10, 10, 10) and dt = 0.0001
+
+Manufactured solution initialized.
+Solver initialized.
+
+--- DEBUG: Time=0, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.0013633
+Laplacian components:
+  Dxx_eta: 0
+  Dyy_zeta: 0
+  Dzz_u: 0
+Laplacian sum: 0
+p_grad: 0
+Forcing: -0.000487256
+g_val (FINAL): -0.000487256
+--------------------------------------------------
+
+--- DEBUG: Time=0.0001, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.0013633
+Laplacian components:
+  Dxx_eta: 6.88879e-06
+  Dyy_zeta: 4.72248e-08
+  Dzz_u: 4.51596e-06
+Laplacian sum: 1.1452e-05
+p_grad: -0.00153925
+Forcing: -0.000487046
+g_val (FINAL): 0.00105244
+--------------------------------------------------
+
+--- DEBUG: Time=0.0002, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.0013633
+Laplacian components:
+  Dxx_eta: -1.77316e-06
+  Dyy_zeta: -1.69306e-05
+  Dzz_u: -3.28355e-06
+Laplacian sum: -2.19874e-05
+p_grad: -0.0238572
+Forcing: -0.000486835
+g_val (FINAL): 0.0233701
+--------------------------------------------------
+
+--- DEBUG: Time=0.0003, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.0013633
+Laplacian components:
+  Dxx_eta: -0.000194221
+  Dyy_zeta: -0.00021453
+  Dzz_u: -0.000192766
+Laplacian sum: -0.000601516
+p_grad: -0.0554794
+Forcing: -0.000486625
+g_val (FINAL): 0.054981
+--------------------------------------------------
+
+--- DEBUG: Time=0.0004, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.0013633
+Laplacian components:
+  Dxx_eta: -0.000645653
+  Dyy_zeta: -0.000666897
+  Dzz_u: -0.000639778
+Laplacian sum: -0.00195233
+p_grad: -0.0950432
+Forcing: -0.000486414
+g_val (FINAL): 0.0945181
+--------------------------------------------------
+
+--- DEBUG: Time=0.0005, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.0013633
+Laplacian components:
+  Dxx_eta: -0.00141957
+  Dyy_zeta: -0.00143721
+  Dzz_u: -0.00140918
+Laplacian sum: -0.00426596
+p_grad: -0.14097
+Forcing: -0.000486204
+g_val (FINAL): 0.140399
+--------------------------------------------------
+
+--- DEBUG: Time=0.0006, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.0013633
+Laplacian components:
+  Dxx_eta: -0.002566
+  Dyy_zeta: -0.00257596
+  Dzz_u: -0.00255308
+Laplacian sum: -0.00769504
+p_grad: -0.191534
+Forcing: -0.000485993
+g_val (FINAL): 0.190895
+--------------------------------------------------
+
+--- DEBUG: Time=0.0007, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.0013633
+Laplacian components:
+  Dxx_eta: -0.0041203
+  Dyy_zeta: -0.00411979
+  Dzz_u: -0.00410972
+Laplacian sum: -0.0123498
+p_grad: -0.244926
+Forcing: -0.000485783
+g_val (FINAL): 0.244194
+--------------------------------------------------
+
+--- DEBUG: Time=0.0008, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.0013633
+Laplacian components:
+  Dxx_eta: -0.0061026
+  Dyy_zeta: -0.00609081
+  Dzz_u: -0.00610273
+Laplacian sum: -0.0182961
+p_grad: -0.299331
+Forcing: -0.000485572
+g_val (FINAL): 0.298479
+--------------------------------------------------
+
+--- DEBUG: Time=0.0009, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.0013633
+Laplacian components:
+  Dxx_eta: -0.00851783
+  Dyy_zeta: -0.0084966
+  Dzz_u: -0.00854115
+Laplacian sum: -0.0255556
+p_grad: -0.352978
+Forcing: -0.000485362
+g_val (FINAL): 0.351981
+--------------------------------------------------
+
+--- DEBUG: Time=0.001, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.0013633
+Laplacian components:
+  Dxx_eta: -0.0113562
+  Dyy_zeta: -0.0113305
+  Dzz_u: -0.0114197
+Laplacian sum: -0.0341065
+p_grad: -0.404222
+Forcing: -0.000485151
+g_val (FINAL): 0.403054
+--------------------------------------------------
+Solver run completed.
+
+=============================
+   MMS Accuracy Results
+=============================
+Velocity L2 error     = 0.000726993
+Velocity L2 relative  = 0.72503
+Pressure L2 error     = 61.2249
+Pressure L2 relative  = 6849.25
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Running simulation with (Nx, Ny, Nz) = (20, 20, 20) and dt = 5e-05
+
+Manufactured solution initialized.
+Solver initialized.
+
+--- DEBUG: Time=0, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: 0
+  Dyy_zeta: 0
+  Dzz_u: 0
+Laplacian sum: 0
+p_grad: 0
+Forcing: -0.000117747
+g_val (FINAL): -0.000117747
+--------------------------------------------------
+
+--- DEBUG: Time=5e-05, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: 2.0244e-06
+  Dyy_zeta: 2.24699e-09
+  Dzz_u: 2.24647e-06
+Laplacian sum: 4.27312e-06
+p_grad: -0.000913769
+Forcing: -0.000117735
+g_val (FINAL): 0.000796257
+--------------------------------------------------
+
+--- DEBUG: Time=0.0001, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -1.37815e-05
+  Dyy_zeta: -1.89703e-05
+  Dzz_u: -1.18615e-05
+Laplacian sum: -4.46133e-05
+p_grad: -0.01576
+Forcing: -0.000117724
+g_val (FINAL): 0.0156409
+--------------------------------------------------
+
+--- DEBUG: Time=0.00015, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.000303126
+  Dyy_zeta: -0.000305508
+  Dzz_u: -0.000293248
+Laplacian sum: -0.000901883
+p_grad: -0.0372081
+Forcing: -0.000117713
+g_val (FINAL): 0.0370579
+--------------------------------------------------
+
+--- DEBUG: Time=0.0002, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.000986294
+  Dyy_zeta: -0.00097723
+  Dzz_u: -0.000960059
+Laplacian sum: -0.00292358
+p_grad: -0.0646899
+Forcing: -0.000117702
+g_val (FINAL): 0.0644661
+--------------------------------------------------
+
+--- DEBUG: Time=0.00025, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.00217249
+  Dyy_zeta: -0.00214124
+  Dzz_u: -0.0021199
+Laplacian sum: -0.00643363
+p_grad: -0.097527
+Forcing: -0.00011769
+g_val (FINAL): 0.0971752
+--------------------------------------------------
+
+--- DEBUG: Time=0.0003, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.00395777
+  Dyy_zeta: -0.00389212
+  Dzz_u: -0.00386786
+Laplacian sum: -0.0117177
+p_grad: -0.134948
+Forcing: -0.000117679
+g_val (FINAL): 0.134404
+--------------------------------------------------
+
+--- DEBUG: Time=0.00035, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.00642342
+  Dyy_zeta: -0.00631034
+  Dzz_u: -0.00628492
+Laplacian sum: -0.0190187
+p_grad: -0.176108
+Forcing: -0.000117668
+g_val (FINAL): 0.175297
+--------------------------------------------------
+
+--- DEBUG: Time=0.0004, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.00963462
+  Dyy_zeta: -0.00946095
+  Dzz_u: -0.00943663
+Laplacian sum: -0.0285322
+p_grad: -0.220099
+Forcing: -0.000117657
+g_val (FINAL): 0.21894
+--------------------------------------------------
+
+--- DEBUG: Time=0.00045, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.0136392
+  Dyy_zeta: -0.0133925
+  Dzz_u: -0.013372
+Laplacian sum: -0.0404037
+p_grad: -0.26599
+Forcing: -0.000117645
+g_val (FINAL): 0.264396
+--------------------------------------------------
+
+--- DEBUG: Time=0.0005, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.0184673
+  Dyy_zeta: -0.0181367
+  Dzz_u: -0.0181232
+Laplacian sum: -0.0547272
+p_grad: -0.312832
+Forcing: -0.000117634
+g_val (FINAL): 0.310713
+--------------------------------------------------
+
+--- DEBUG: Time=0.00055, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.0241316
+  Dyy_zeta: -0.0237082
+  Dzz_u: -0.0237054
+Laplacian sum: -0.0715451
+p_grad: -0.359684
+Forcing: -0.000117623
+g_val (FINAL): 0.356949
+--------------------------------------------------
+
+--- DEBUG: Time=0.0006, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.0306271
+  Dyy_zeta: -0.0301045
+  Dzz_u: -0.0301165
+Laplacian sum: -0.0908481
+p_grad: -0.405624
+Forcing: -0.000117612
+g_val (FINAL): 0.402181
+--------------------------------------------------
+
+--- DEBUG: Time=0.00065, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.0379313
+  Dyy_zeta: -0.0373069
+  Dzz_u: -0.0373381
+Laplacian sum: -0.112576
+p_grad: -0.449787
+Forcing: -0.0001176
+g_val (FINAL): 0.445546
+--------------------------------------------------
+
+--- DEBUG: Time=0.0007, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.0460061
+  Dyy_zeta: -0.0452809
+  Dzz_u: -0.0453363
+Laplacian sum: -0.136623
+p_grad: -0.491371
+Forcing: -0.000117589
+g_val (FINAL): 0.486246
+--------------------------------------------------
+
+--- DEBUG: Time=0.00075, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.0547989
+  Dyy_zeta: -0.0539778
+  Dzz_u: -0.0540628
+Laplacian sum: -0.162839
+p_grad: -0.529652
+Forcing: -0.000117578
+g_val (FINAL): 0.523562
+--------------------------------------------------
+
+--- DEBUG: Time=0.0008, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.0642435
+  Dyy_zeta: -0.0633362
+  Dzz_u: -0.0634565
+Laplacian sum: -0.191036
+p_grad: -0.563995
+Forcing: -0.000117567
+g_val (FINAL): 0.556868
+--------------------------------------------------
+
+--- DEBUG: Time=0.00085, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.0742631
+  Dyy_zeta: -0.0732832
+  Dzz_u: -0.0734449
+Laplacian sum: -0.220991
+p_grad: -0.593876
+Forcing: -0.000117555
+g_val (FINAL): 0.585644
+--------------------------------------------------
+
+--- DEBUG: Time=0.0009, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.0847709
+  Dyy_zeta: -0.0837369
+  Dzz_u: -0.0839467
+Laplacian sum: -0.252455
+p_grad: -0.618889
+Forcing: -0.000117544
+g_val (FINAL): 0.609496
+--------------------------------------------------
+
+--- DEBUG: Time=0.00095, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.0956741
+  Dyy_zeta: -0.0946085
+  Dzz_u: -0.0948731
+Laplacian sum: -0.285156
+p_grad: -0.638725
+Forcing: -0.000117533
+g_val (FINAL): 0.628124
+--------------------------------------------------
+
+--- DEBUG: Time=0.001, Index (1,1,1), Comp=0 ---
+k_val (permeability): 0.000145592
+Laplacian components:
+  Dxx_eta: -0.106874
+  Dyy_zeta: -0.105803
+  Dzz_u: -0.10613
+Laplacian sum: -0.318808
+p_grad: -0.653236
+Forcing: -0.000117522
+g_val (FINAL): 0.641391
+--------------------------------------------------
+Solver run completed.
+
+=============================
+   MMS Accuracy Results
+=============================
+Velocity L2 error     = 0.000592677
+Velocity L2 relative  = 0.638539
+Pressure L2 error     = 215.912
+Pressure L2 relative  = 26956
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Running simulation with (Nx, Ny, Nz) = (40, 40, 40) and dt = 2.5e-05
+
+Manufactured solution initialized.
+Solver initialized.
+
+--- DEBUG: Time=0, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: 0
+  Dyy_zeta: 0
+  Dzz_u: 0
+Laplacian sum: 0
+p_grad: 0
+Forcing: -2.88073e-05
+g_val (FINAL): -2.88073e-05
+--------------------------------------------------
+
+--- DEBUG: Time=2.5e-05, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: 6.76515e-07
+  Dyy_zeta: -7.30915e-09
+  Dzz_u: 1.11264e-06
+Laplacian sum: 1.78185e-06
+p_grad: -0.000468239
+Forcing: -2.88066e-05
+g_val (FINAL): 0.000439653
+--------------------------------------------------
+
+--- DEBUG: Time=5e-05, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -1.68346e-05
+  Dyy_zeta: -1.89338e-05
+  Dzz_u: -1.53517e-05
+Laplacian sum: -5.11201e-05
+p_grad: -0.00887787
+Forcing: -2.8806e-05
+g_val (FINAL): 0.00884579
+--------------------------------------------------
+
+--- DEBUG: Time=7.5e-05, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.000354737
+  Dyy_zeta: -0.000354142
+  Dzz_u: -0.000347649
+Laplacian sum: -0.00105653
+p_grad: -0.0211912
+Forcing: -2.88053e-05
+g_val (FINAL): 0.021089
+--------------------------------------------------
+
+--- DEBUG: Time=0.0001, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.00115775
+  Dyy_zeta: -0.00114842
+  Dzz_u: -0.00113876
+Laplacian sum: -0.00344493
+p_grad: -0.0372295
+Forcing: -2.88047e-05
+g_val (FINAL): 0.0369602
+--------------------------------------------------
+
+--- DEBUG: Time=0.000125, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.00256202
+  Dyy_zeta: -0.00253619
+  Dzz_u: -0.00252327
+Laplacian sum: -0.00762148
+p_grad: -0.0567756
+Forcing: -2.8804e-05
+g_val (FINAL): 0.0562134
+--------------------------------------------------
+
+--- DEBUG: Time=0.00015, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.00469378
+  Dyy_zeta: -0.00464216
+  Dzz_u: -0.00462596
+Laplacian sum: -0.0139619
+p_grad: -0.0795789
+Forcing: -2.88034e-05
+g_val (FINAL): 0.0785713
+--------------------------------------------------
+
+--- DEBUG: Time=0.000175, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.00766825
+  Dyy_zeta: -0.00758016
+  Dzz_u: -0.00756081
+Laplacian sum: -0.0228092
+p_grad: -0.105347
+Forcing: -2.88027e-05
+g_val (FINAL): 0.103717
+--------------------------------------------------
+
+--- DEBUG: Time=0.0002, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.0115878
+  Dyy_zeta: -0.0114516
+  Dzz_u: -0.0114294
+Laplacian sum: -0.0344688
+p_grad: -0.133762
+Forcing: -2.88021e-05
+g_val (FINAL): 0.131311
+--------------------------------------------------
+
+--- DEBUG: Time=0.000225, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.0165413
+  Dyy_zeta: -0.0163447
+  Dzz_u: -0.0163201
+Laplacian sum: -0.0492061
+p_grad: -0.164485
+Forcing: -2.88014e-05
+g_val (FINAL): 0.160994
+--------------------------------------------------
+
+--- DEBUG: Time=0.00025, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.0226035
+  Dyy_zeta: -0.022334
+  Dzz_u: -0.0223075
+Laplacian sum: -0.0672449
+p_grad: -0.197156
+Forcing: -2.88008e-05
+g_val (FINAL): 0.19239
+--------------------------------------------------
+
+--- DEBUG: Time=0.000275, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.0298345
+  Dyy_zeta: -0.0294793
+  Dzz_u: -0.0294518
+Laplacian sum: -0.0887657
+p_grad: -0.23139
+Forcing: -2.88001e-05
+g_val (FINAL): 0.2251
+--------------------------------------------------
+
+--- DEBUG: Time=0.0003, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.0382789
+  Dyy_zeta: -0.0378258
+  Dzz_u: -0.037798
+Laplacian sum: -0.113903
+p_grad: -0.266802
+Forcing: -2.87995e-05
+g_val (FINAL): 0.25873
+--------------------------------------------------
+
+--- DEBUG: Time=0.000325, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.0479659
+  Dyy_zeta: -0.0474033
+  Dzz_u: -0.0473761
+Laplacian sum: -0.142745
+p_grad: -0.302986
+Forcing: -2.87988e-05
+g_val (FINAL): 0.292866
+--------------------------------------------------
+
+--- DEBUG: Time=0.00035, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.0589086
+  Dyy_zeta: -0.0582257
+  Dzz_u: -0.0582004
+Laplacian sum: -0.175335
+p_grad: -0.33955
+Forcing: -2.87982e-05
+g_val (FINAL): 0.327112
+--------------------------------------------------
+
+--- DEBUG: Time=0.000375, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.0711052
+  Dyy_zeta: -0.0702927
+  Dzz_u: -0.0702704
+Laplacian sum: -0.211668
+p_grad: -0.376091
+Forcing: -2.87975e-05
+g_val (FINAL): 0.361064
+--------------------------------------------------
+
+--- DEBUG: Time=0.0004, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.084538
+  Dyy_zeta: -0.0835884
+  Dzz_u: -0.0835703
+Laplacian sum: -0.251697
+p_grad: -0.41222
+Forcing: -2.87969e-05
+g_val (FINAL): 0.394336
+--------------------------------------------------
+
+--- DEBUG: Time=0.000425, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.0991751
+  Dyy_zeta: -0.0980819
+  Dzz_u: -0.0980699
+Laplacian sum: -0.295327
+p_grad: -0.447552
+Forcing: -2.87962e-05
+g_val (FINAL): 0.426548
+--------------------------------------------------
+
+--- DEBUG: Time=0.00045, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.11497
+  Dyy_zeta: -0.11373
+  Dzz_u: -0.113725
+Laplacian sum: -0.342424
+p_grad: -0.481735
+Forcing: -2.87956e-05
+g_val (FINAL): 0.457357
+--------------------------------------------------
+
+--- DEBUG: Time=0.000475, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.131863
+  Dyy_zeta: -0.130474
+  Dzz_u: -0.130478
+Laplacian sum: -0.392815
+p_grad: -0.514408
+Forcing: -2.87949e-05
+g_val (FINAL): 0.486413
+--------------------------------------------------
+
+--- DEBUG: Time=0.0005, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.149782
+  Dyy_zeta: -0.148245
+  Dzz_u: -0.14826
+Laplacian sum: -0.446286
+p_grad: -0.545258
+Forcing: -2.87943e-05
+g_val (FINAL): 0.513416
+--------------------------------------------------
+
+--- DEBUG: Time=0.000525, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.168643
+  Dyy_zeta: -0.166961
+  Dzz_u: -0.166989
+Laplacian sum: -0.502593
+p_grad: -0.573975
+Forcing: -2.87936e-05
+g_val (FINAL): 0.538073
+--------------------------------------------------
+
+--- DEBUG: Time=0.00055, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.188351
+  Dyy_zeta: -0.186531
+  Dzz_u: -0.186574
+Laplacian sum: -0.561455
+p_grad: -0.600319
+Forcing: -2.8793e-05
+g_val (FINAL): 0.560163
+--------------------------------------------------
+
+--- DEBUG: Time=0.000575, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.208804
+  Dyy_zeta: -0.206855
+  Dzz_u: -0.206915
+Laplacian sum: -0.622575
+p_grad: -0.624023
+Forcing: -2.87923e-05
+g_val (FINAL): 0.57944
+--------------------------------------------------
+
+--- DEBUG: Time=0.0006, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.229891
+  Dyy_zeta: -0.227825
+  Dzz_u: -0.227904
+Laplacian sum: -0.68562
+p_grad: -0.644936
+Forcing: -2.87917e-05
+g_val (FINAL): 0.595773
+--------------------------------------------------
+
+--- DEBUG: Time=0.000625, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.251497
+  Dyy_zeta: -0.249327
+  Dzz_u: -0.249428
+Laplacian sum: -0.750251
+p_grad: -0.662872
+Forcing: -2.8791e-05
+g_val (FINAL): 0.609003
+--------------------------------------------------
+
+--- DEBUG: Time=0.00065, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.273501
+  Dyy_zeta: -0.271243
+  Dzz_u: -0.271368
+Laplacian sum: -0.816112
+p_grad: -0.677681
+Forcing: -2.87904e-05
+g_val (FINAL): 0.619001
+--------------------------------------------------
+
+--- DEBUG: Time=0.000675, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.295775
+  Dyy_zeta: -0.29345
+  Dzz_u: -0.293601
+Laplacian sum: -0.882827
+p_grad: -0.689316
+Forcing: -2.87897e-05
+g_val (FINAL): 0.625747
+--------------------------------------------------
+
+--- DEBUG: Time=0.0007, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.318197
+  Dyy_zeta: -0.315825
+  Dzz_u: -0.316005
+Laplacian sum: -0.950026
+p_grad: -0.697754
+Forcing: -2.87891e-05
+g_val (FINAL): 0.629244
+--------------------------------------------------
+
+--- DEBUG: Time=0.000725, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.340641
+  Dyy_zeta: -0.338246
+  Dzz_u: -0.338456
+Laplacian sum: -1.01734
+p_grad: -0.702911
+Forcing: -2.87884e-05
+g_val (FINAL): 0.629435
+--------------------------------------------------
+
+--- DEBUG: Time=0.00075, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.362982
+  Dyy_zeta: -0.360587
+  Dzz_u: -0.360831
+Laplacian sum: -1.0844
+p_grad: -0.704865
+Forcing: -2.87878e-05
+g_val (FINAL): 0.626421
+--------------------------------------------------
+
+--- DEBUG: Time=0.000775, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.385097
+  Dyy_zeta: -0.382728
+  Dzz_u: -0.383009
+Laplacian sum: -1.15084
+p_grad: -0.703705
+Forcing: -2.87871e-05
+g_val (FINAL): 0.620319
+--------------------------------------------------
+
+--- DEBUG: Time=0.0008, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.406872
+  Dyy_zeta: -0.404555
+  Dzz_u: -0.404875
+Laplacian sum: -1.2163
+p_grad: -0.699539
+Forcing: -2.87865e-05
+g_val (FINAL): 0.611261
+--------------------------------------------------
+
+--- DEBUG: Time=0.000825, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.428195
+  Dyy_zeta: -0.425959
+  Dzz_u: -0.426321
+Laplacian sum: -1.28047
+p_grad: -0.692474
+Forcing: -2.87858e-05
+g_val (FINAL): 0.599377
+--------------------------------------------------
+
+--- DEBUG: Time=0.00085, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.448962
+  Dyy_zeta: -0.446834
+  Dzz_u: -0.447242
+Laplacian sum: -1.34304
+p_grad: -0.682693
+Forcing: -2.87852e-05
+g_val (FINAL): 0.584873
+--------------------------------------------------
+
+--- DEBUG: Time=0.000875, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.469077
+  Dyy_zeta: -0.467083
+  Dzz_u: -0.467539
+Laplacian sum: -1.4037
+p_grad: -0.670425
+Forcing: -2.87845e-05
+g_val (FINAL): 0.567998
+--------------------------------------------------
+
+--- DEBUG: Time=0.0009, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.488454
+  Dyy_zeta: -0.486621
+  Dzz_u: -0.487128
+Laplacian sum: -1.4622
+p_grad: -0.655884
+Forcing: -2.87839e-05
+g_val (FINAL): 0.548984
+--------------------------------------------------
+
+--- DEBUG: Time=0.000925, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.507014
+  Dyy_zeta: -0.505369
+  Dzz_u: -0.505931
+Laplacian sum: -1.51831
+p_grad: -0.639343
+Forcing: -2.87832e-05
+g_val (FINAL): 0.528123
+--------------------------------------------------
+
+--- DEBUG: Time=0.00095, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.524695
+  Dyy_zeta: -0.523263
+  Dzz_u: -0.523883
+Laplacian sum: -1.57184
+p_grad: -0.621063
+Forcing: -2.87826e-05
+g_val (FINAL): 0.505688
+--------------------------------------------------
+
+--- DEBUG: Time=0.000975, Index (1,1,1), Comp=0 ---
+k_val (permeability): 1.68525e-05
+Laplacian components:
+  Dxx_eta: -0.541444
+  Dyy_zeta: -0.540246
+  Dzz_u: -0.540927
+Laplacian sum: -1.62262
+p_grad: -0.601349
+Forcing: -2.87819e-05
+g_val (FINAL): 0.481999
+--------------------------------------------------
+Solver run completed.
+
+=============================
+   MMS Accuracy Results
+=============================
+Velocity L2 error     = 0.000589277
+Velocity L2 relative  = 0.65893
+Pressure L2 error     = 767.107
+Pressure L2 relative  = 100954
+
+Data files created: velocity_error.dat, pressure_error.dat
+Skipping automated plotting (python script call removed).
