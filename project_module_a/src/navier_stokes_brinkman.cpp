@@ -131,7 +131,7 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
 
             Real p_grad = gradient_pressure_predictor.value(comp, idx);
 
-            Real velocity = u_0.value(comp, idx);
+            Real velocity = velocity_solution.value(comp, idx);
 
             // =================================================================
             // DEBUGGING OUTPUT
@@ -183,7 +183,7 @@ void NavierStokesBrinkmann::compute_vector_xi()
         for (Dim idx = 0; idx < xi.elements_per_component(); ++idx)
         {
             xi.set(comp, idx) =
-                u_0.value(comp, idx) + (dt / compute_beta(idx)) * g.value(comp, idx);
+                velocity_solution.value(comp, idx) + (dt / compute_beta(idx)) * g.value(comp, idx);
         }
     }
 }
@@ -230,11 +230,18 @@ void NavierStokesBrinkmann::solve()
     DimensionsHandlerVector<decltype(stride_z)> z_vector_handler(Nx, Ny, Nz, 2, 0, 1, dz, stride_z);
 
     // Initialize solutions
-    velocity_solution.set_all(u_boundary);
-    pressure_solution.set_all(p_boundary);
+    velocity_solution.set_all(u_boundary, Real(0.0));
+    pressure_solution.set_all(p_boundary, Real(0.0));
+    xi = eta = zeta = velocity_solution;
+    psi = phi = other_phi = pressure_solution;
+
+    velocity_time_series.clear();
+    pressure_time_series.clear();
+    velocity_time_series.push_back(velocity_solution);
+    pressure_time_series.push_back(pressure_solution);
 
     // Time stepping loop
-    for (Real t = 0.0f; t < T; t += dt)
+    for (Real t = dt; t <= T; t += dt)
     {
         pressure_predictor = pressure_solution;
 
@@ -279,11 +286,29 @@ void NavierStokesBrinkmann::solve()
         velocity_solver.advance_time();
         pressure_solver.advance_time();
 
+        // std::cout << "Completed time step at t = " << t << std::endl;
+        // for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+        // {
+        //     std::cout << "Velocity component at index (" << idx % Nx << ", " << (idx / Nx) % Ny << ", " << idx / (Nx * Ny) << "): [" << velocity_solution.value(0, idx) << ", " <<velocity_solution.value(1, idx) << ", " <<velocity_solution.value(2, idx) << "]" << std::endl;
+        // }
+
+        // std::cout << "==============================================================\n";
+
+        // for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+        // {
+        //     std::cout << "Pressure at index (" << idx % Nx << ", " << (idx / Nx) % Ny << ", " << idx / (Nx * Ny) << "): " << pressure_solution.get(idx) << std::endl;
+        // }
+
+        // std::cout << "==============================================================\n";
+        // std::cout << "==============================================================\n";
+
         // -------------------------------------------------------
         // CRITICAL UPDATE: Advance u_0 to the next time step
         // -------------------------------------------------------
         // u_0 must hold the velocity at time 't' for the NEXT iteration's
         // compute_vector_xi() calculation.
-        u_0 = velocity_solution;
+        // u_0 = velocity_solution;
+        velocity_time_series.push_back(velocity_solution);
+        pressure_time_series.push_back(pressure_solution);
     }
 };

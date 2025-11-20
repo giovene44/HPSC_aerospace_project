@@ -2,6 +2,7 @@
 #define SCALARVARIABLE_HPP
 
 #include "Variables.hpp"
+#include "BoundaryFunctions.hpp"
 #include <vector>
 #include <iostream>
 #include <stdexcept>

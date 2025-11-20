@@ -87,48 +87,62 @@ std::pair<Real, Real> single_run(
     Real norm_u = 0.0, norm_p = 0.0;
 
     Real dV = dx_in * dy_in * dz_in;
+    std::cout << "==============================\n";
+    for (int t = 0; t < solver.velocity_time_series.size(); t++)
+    {
+        std::cout << "t=" << t * dt_in << std::endl;
 
-    for (Dim k = 0; k < Nz_in; ++k)
-        for (Dim j = 0; j < Ny_in; ++j)
-            for (Dim i = 0; i < Nx_in; ++i)
-            {
-                // Exact MMS at final time (uses current dx/dy/dz and T_final)
-                Real x_coord = i * dx_in;
-                Real y_coord = j * dy_in;
-                Real z_coord = k * dz_in;
+        for (Dim k = 0; k < Nz_in; ++k)
+            for (Dim j = 0; j < Ny_in; ++j)
+                for (Dim i = 0; i < Nx_in; ++i)
+                {
+                    // Exact MMS at final time (uses current dx/dy/dz and T_final)
+                    Real x_coord = i * dx_in;
+                    Real y_coord = j * dy_in;
+                    Real z_coord = k * dz_in;
 
-                Real uxE = mms.velocity(x_coord, y_coord, z_coord, T_final)[0];
-                Real uyE = mms.velocity(x_coord, y_coord, z_coord, T_final)[1];
-                Real uzE = mms.velocity(x_coord, y_coord, z_coord, T_final)[2];
-                Real pE = mms.pressure(x_coord, y_coord, z_coord);
+                    Real uxE = mms.velocity(x_coord, y_coord, z_coord, T_final)[0];
+                    Real uyE = mms.velocity(x_coord, y_coord, z_coord, T_final)[1];
+                    Real uzE = mms.velocity(x_coord, y_coord, z_coord, T_final)[2];
+                    Real pE = mms.pressure(x_coord, y_coord, z_coord);
 
-                // Numerical (uses current indices)
-                Real ux = solver.velocity_solution.value(0, i, j, k);
-                Real uy = solver.velocity_solution.value(1, i, j, k);
-                Real uz = solver.velocity_solution.value(2, i, j, k);
-                Real pN = solver.pressure_solution.get(i, j, k);
-                // Velocity error
-                err_u += (ux - uxE) * (ux - uxE) + (uy - uyE) * (uy - uyE) + (uz - uzE) * (uz - uzE);
-                norm_u += uxE * uxE + uyE * uyE + uzE * uzE;
-                // Pressure error
-                err_p += (pN - pE) * (pN - pE);
-                norm_p += pE * pE;
+                    // Numerical (uses current indices)
+                    Real ux = solver.velocity_solution.value(0, i, j, k);
+                    Real uy = solver.velocity_solution.value(1, i, j, k);
+                    Real uz = solver.velocity_solution.value(2, i, j, k);
+                    Real pN = solver.pressure_solution.get(i, j, k);
+                    // Velocity error
+                    err_u += (ux - uxE) * (ux - uxE) + (uy - uyE) * (uy - uyE) + (uz - uzE) * (uz - uzE);
+                    norm_u += uxE * uxE + uyE * uyE + uzE * uzE;
+                    // Pressure error
+                    err_p += (pN - pE) * (pN - pE);
+                    norm_p += pE * pE;
 
-                // Debugging output
-                std::cout << "Point (" << i << ", " << j << ", " << k << "): ";
-                std::cout << "Exact u: (" << uxE << ", " << uyE << ", " << uzE << "), ";
-                std::cout << "Numerical u: (" << ux << ", " << uy << ", " << uz << "), ";
-                std::cout << "Exact p: " << pE << ", ";
-                std::cout << "Numerical p: " << pN << std::endl;
-            }
+                    // Debugging output
+                    std::cout << "Point (" << x_coord << ", " << y_coord << ", " << z_coord << "):\n";
+                    std::cout << "Velocity error = ("
+                              << (solver.velocity_time_series[t].value(0, i, j, k) - mms.velocity(x_coord, y_coord, z_coord, t)[0]) << ", "
+                              << (solver.velocity_time_series[t].value(1, i, j, k) - mms.velocity(x_coord, y_coord, z_coord, t)[1]) << ", "
+                              << (solver.velocity_time_series[t].value(2, i, j, k) - mms.velocity(x_coord, y_coord, z_coord, t)[2]) << "), ";
+                    std::cout << "Pressure error = "
+                              << (solver.pressure_time_series[t].get(i, j, k) - mms.pressure(x_coord, y_coord, z_coord)) << std::endl;
+                    std::cout << "Exact u: (" << mms.velocity(x_coord, y_coord, z_coord, t)[0] << ", " << mms.velocity(x_coord, y_coord, z_coord, t)[1] << ", " << mms.velocity(x_coord, y_coord, z_coord, t)[2] << "), ";
+                    std::cout << "Numerical u: (" << solver.velocity_time_series[t].value(0, i, j, k) << ", " << solver.velocity_time_series[t].value(1, i, j, k) << ", " << solver.velocity_time_series[t].value(2, i, j, k) << "), ";
+                    std::cout << "Exact p: " << mms.pressure(x_coord, y_coord, z_coord) << ", ";
+                    std::cout << "Numerical p: " << solver.pressure_time_series[t].get(i, j, k) << std::endl;
+                    std::cout << "--------------------------------\n";
+                }
+        std::cout << "==============================\n";
+        std::cout << "==============================\n";
+    }
 
-    //by multiplying by dV we are approximating the integral over the domain
-    //without dV the error would scale with the number of points
+    // by multiplying by dV we are approximating the integral over the domain
+    // without dV the error would scale with the number of points
 
-    err_u = std::sqrt(err_u*dV);
-    norm_u = std::sqrt(norm_u*dV);
-    err_p = std::sqrt(err_p*dV);
-    norm_p = std::sqrt(norm_p*dV);
+    err_u = std::sqrt(err_u * dV);
+    norm_u = std::sqrt(norm_u * dV);
+    err_p = std::sqrt(err_p * dV);
+    norm_p = std::sqrt(norm_p * dV);
 
     Real rel_err_u = err_u / norm_u;
     Real rel_err_p = err_p / norm_p;

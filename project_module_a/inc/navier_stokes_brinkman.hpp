@@ -200,4 +200,7 @@ public:
     // ============================================================================
     VectorVariable velocity_solution; // Final converged velocity
     ScalarVariable pressure_solution; // Final converged pressure
+
+    std::vector<VectorVariable> velocity_time_series;
+    std::vector<ScalarVariable> pressure_time_series;
 };
