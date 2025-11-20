@@ -2,7 +2,16 @@
 # 1. CONFIGURAZIONE
 # ==========================================
 CXX      := g++
-CXXFLAGS := -std=c++17 -Wall -Wextra -O2
+CXXFLAGS := -std=c++17 -Wall -Wextra
+
+# Modalità build: release (default) o debug
+BUILD ?= release
+
+ifeq ($(BUILD),debug)
+CXXFLAGS += -g -O0 -DDEBUG
+else
+CXXFLAGS += -O2
+endif
 
 # Directory
 SRC_DIR  := src
@@ -11,11 +20,10 @@ INC_DIR  := inc
 BIN_DIR  := bin
 OBJ_DIR  := obj
 
-# --- IMPORTANTE: IL NOME DEL TUO FILE CON IL MAIN ---
-# Inserisci qui il nome esatto del file in src/ che contiene int main()
+# File main
 MAIN_FILENAME := main.cpp
 
-# Nomi eseguibili
+# Eseguibili
 MAIN_EXE := $(BIN_DIR)/main_app
 TEST_EXE := $(BIN_DIR)/test_suite
 
@@ -28,40 +36,35 @@ MUP_LIB       := $(MUP_BUILD_DIR)/libmuparserx.a
 INCLUDES      := -I$(INC_DIR) -I$(MUP_DIR)/parser
 
 # ==========================================
-# 3. LOGICA DI SELEZIONE FILE (IL FILTRO)
+# 3. FILE SELEZIONATI AUTOMATICAMENTE
 # ==========================================
 
-# 1. Trova TUTTI i file .cpp in src/
 ALL_SRC_FILES := $(wildcard $(SRC_DIR)/*.cpp)
-
-# 2. Definisce il percorso completo del file main
 APP_MAIN_FILE := $(SRC_DIR)/$(MAIN_FILENAME)
-
-# 3. Crea una lista dei file "Core" (tutto src tranne il main)
-#    Questi servono SIA all'app CHE ai test
 CORE_SRC_FILES := $(filter-out $(APP_MAIN_FILE), $(ALL_SRC_FILES))
 
-# 4. Genera liste oggetti
-# Oggetti della logica comune (Header implementati)
 OBJS_CORE := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(CORE_SRC_FILES))
-# Oggetto specifico del main (solo per l'app)
 OBJ_MAIN  := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(APP_MAIN_FILE))
-# Oggetti dei test
 OBJS_TEST := $(patsubst $(TEST_DIR)/%.cpp, $(OBJ_DIR)/test/%.o, $(wildcard $(TEST_DIR)/*.cpp))
 
 # ==========================================
 # 4. TARGET PRINCIPALI
 # ==========================================
 
-.PHONY: all main test clean clean-all setup
+.PHONY: all main test debug clean clean-all setup
 
 all: main
 
-# L'APP finale unisce: Oggetto Main + Oggetti Core + Muparserx
 main: setup $(MAIN_EXE)
 
-# I TEST uniscono: Oggetti Test + Oggetti Core + Muparserx (ESCLUSO il main dell'app)
 test: setup $(TEST_EXE)
+
+# ============================
+# Modalità DEBUG corretta
+# ============================
+debug:
+	@$(MAKE) clean
+	@$(MAKE) BUILD=debug main
 
 # ==========================================
 # 5. LINKING
@@ -79,19 +82,16 @@ $(TEST_EXE): $(OBJS_TEST) $(OBJS_CORE) $(MUP_LIB)
 # 6. COMPILAZIONE
 # ==========================================
 
-# Compila file src/
 $(OBJ_DIR)/src/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(dir $@)
 	@echo "[CXX SRC] $<"
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-# Compila file test/
 $(OBJ_DIR)/test/%.o: $(TEST_DIR)/%.cpp
 	@mkdir -p $(dir $@)
 	@echo "[CXX TEST] $<"
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-# Compila Muparserx (Submodule)
 $(MUP_LIB):
 	@echo "[SUBMODULE] Building muparserx..."
 	mkdir -p $(MUP_BUILD_DIR)
@@ -101,10 +101,10 @@ $(MUP_LIB):
 setup:
 	@mkdir -p $(BIN_DIR)
 	@mkdir -p $(OBJ_DIR)/src
-	@mkdir -p $(OBJ_DIR)/tests
+	@mkdir -p $(OBJ_DIR)/test
 
 # ==========================================
-# 7. PULIZIA
+# 7. CLEAN
 # ==========================================
 
 clean:

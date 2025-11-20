@@ -93,28 +93,23 @@ public:
     {
         // --- Initialize all fields ---
 
-        // Initialize intermediate fields to zero (CRITICAL FIX)
-        g.set_all(0.0f);
+        // // Initialize intermediate fields to zero (CRITICAL FIX)
+        // g.set_all(0.0f);
 
-        vector_rhs.set_all(0.0f);
-        vector_intermediate_solution.set_all(0.0f);
-        xi.set_all(0.0f);
-        eta.set_all(0.0f);
-        zeta.set_all(0.0f);
-        pressure_predictor.set_all(0.0f);
-        rhs.set_all(0.0f);
-        psi.set_all(0.0f);
-        phi.set_all(0.0f);
-        other_phi.set_all(0.0f);
+        // vector_rhs.set_all(0.0f);
+        // vector_intermediate_solution.set_all(0.0f);
+        // xi.set_all(0.0f);
+        // eta.set_all(0.0f);
+        // zeta.set_all(0.0f);
+        // pressure_predictor.set_all(0.0f);
+        // rhs.set_all(0.0f);
+        // psi.set_all(0.0f);
+        // phi.set_all(0.0f);
+        // other_phi.set_all(0.0f);
 
-        // Initialize u_0 field from boundary condition at t=0
-        u_0.set_all(0.0f);
-        // Initialize p_0 field (typically 0 or from MMS at t=0)
-        p_0.set_all(0.0f);
-
-        // Final solution fields are set to initial conditions in solve()
-        velocity_solution.set_all(0.0f);
-        pressure_solution.set_all(0.0f);
+        // // Final solution fields are set to initial conditions in solve()
+        // velocity_solution.set_all(0.0f);
+        // pressure_solution.set_all(0.0f);
 
         u_boundary.setParsing(u_boundary_file);
         p_boundary.setParsing(p_boundary_file);

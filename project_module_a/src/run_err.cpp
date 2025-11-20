@@ -107,14 +107,19 @@ std::pair<Real, Real> single_run(
                 Real uy = solver.velocity_solution.value(1, i, j, k);
                 Real uz = solver.velocity_solution.value(2, i, j, k);
                 Real pN = solver.pressure_solution.get(i, j, k);
-                std::cout<<"Numerical u: "<<ux<<" "<<uy<<" "<<uz<<" p: "<<pN<<std::endl;
                 // Velocity error
                 err_u += (ux - uxE) * (ux - uxE) + (uy - uyE) * (uy - uyE) + (uz - uzE) * (uz - uzE);
                 norm_u += uxE * uxE + uyE * uyE + uzE * uzE;
-
                 // Pressure error
                 err_p += (pN - pE) * (pN - pE);
                 norm_p += pE * pE;
+
+                // Debugging output
+                std::cout << "Point (" << i << ", " << j << ", " << k << "): ";
+                std::cout << "Exact u: (" << uxE << ", " << uyE << ", " << uzE << "), ";
+                std::cout << "Numerical u: (" << ux << ", " << uy << ", " << uz << "), ";
+                std::cout << "Exact p: " << pE << ", ";
+                std::cout << "Numerical p: " << pN << std::endl;
             }
 
     //by multiplying by dV we are approximating the integral over the domain

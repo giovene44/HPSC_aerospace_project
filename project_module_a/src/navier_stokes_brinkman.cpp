@@ -230,8 +230,8 @@ void NavierStokesBrinkmann::solve()
     DimensionsHandlerVector<decltype(stride_z)> z_vector_handler(Nx, Ny, Nz, 2, 0, 1, dz, stride_z);
 
     // Initialize solutions
-    velocity_solution = u_0;
-    pressure_solution = p_0;
+    velocity_solution.set_all(u_boundary);
+    pressure_solution.set_all(p_boundary);
 
     // Time stepping loop
     for (Real t = 0.0f; t < T; t += dt)

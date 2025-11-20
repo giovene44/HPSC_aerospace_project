@@ -106,6 +106,23 @@ public:
         std::fill(data.begin(), data.end(), value);
     }
 
+    void set_all(BoundaryFunctions &other, Real t)
+    {
+        for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+        {
+            Dim i = idx % Nx;
+            Dim j = (idx / Nx) % Ny;
+            Dim k = idx / (Nx * Ny);
+
+            // Convert grid indices to physical coordinates
+            Real x = i * dx;
+            Real y = j * dy;
+            Real z = k * dz;
+
+            this->set(idx) = other.value<0>(x, y, z, t);
+        }
+    }
+
     Real get(Dim i, Dim j, Dim k) const
     {
         return data[i + j * Nx + k * Nx * Ny];
