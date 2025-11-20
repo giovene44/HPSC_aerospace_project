@@ -105,7 +105,7 @@ std::pair<Real, Real> single_run(
                 Real uy = solver.velocity_solution.value(1, i, j, k);
                 Real uz = solver.velocity_solution.value(2, i, j, k);
                 Real pN = solver.pressure_solution.get(i, j, k);
-
+                std::cout<<"Numerical u: "<<ux<<" "<<uy<<" "<<uz<<" p: "<<pN<<std::endl;
                 // Velocity error
                 err_u += (ux - uxE) * (ux - uxE) + (uy - uyE) * (uy - uyE) + (uz - uzE) * (uz - uzE);
                 norm_u += uxE * uxE + uyE * uyE + uzE * uzE;
@@ -141,9 +141,9 @@ int run_multiple(int num_runs)
         // 1) PARSER INPUT INITIALIZATION (MOVED HERE)
         // ===============================================================
         ParseInput &parser = ParseInput::getInstance();
-        // The path is relative to the execution directory. Using "./Input/Input.txt"
+        // The path is relative to the execution directory. Using "./Input/Input.in"
         // assumes the Input folder is a direct subfolder of the execution directory.
-        parser.parse_input("./Input/Input.txt");
+        parser.parse_input("./Input/Input.in");
 
         // Get initial values from the parser (used as base for refinement)
         Dim N_initial_x = parser.Nx;
@@ -151,11 +151,6 @@ int run_multiple(int num_runs)
         Dim N_initial_z = parser.Nz;
         Real dt_initial = parser.dt;
         Real T_final = parser.T;
-
-        // Store dx_initial values from the file, used to derive dx_curr
-        Real dx_initial = parser.dx;
-        Real dy_initial = parser.dy;
-        Real dz_initial = parser.dz;
 
         std::vector<Real> N_values;
         std::vector<Real> dt_values;
