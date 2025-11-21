@@ -119,6 +119,8 @@ public:
     // -------------------------------------------------------------------------
     // Uses centered difference (u_{i+1} - u_{i-1}) / (2*h) for interior points.
     // Uses one-sided difference at boundaries (1st Order).
+
+    //TODO: This should be changed: it needs to shift to the pressure nodes!
     Real first_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const
     {
         Real v_plus = 0.0;

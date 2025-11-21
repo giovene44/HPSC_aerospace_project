@@ -89,7 +89,7 @@ private:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     rhs.set(0, index_1, index_2) = rhs.get(0, index_1, index_2) - Real(2.0) / dx * p_boundary.value<0>(0, index_1 * dy, index_2 * dz, t);
-                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) + Real(1.0) / dx * p_boundary.value<0>((Nx - 1) * dx, index_1 * dy, index_2 * dz, t);
+                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) + Real(1.0) / dx * p_boundary.value<0>(Nx*dx-0.5*dx, index_1 * dy, index_2 * dz, t);
                 }
             }
         }
@@ -100,7 +100,7 @@ private:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     rhs.set(index_1, 0, index_2) = rhs.get(index_1, 0, index_2) - Real(2.0) / dy * p_boundary.value<1>(index_1 * dx, 0, index_2 * dz, t);
-                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2) + Real(1.0) / dy * p_boundary.value<1>(index_1 * dx, (Ny - 1) * dy, index_2 * dz, t);
+                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2) + Real(1.0) / dy * p_boundary.value<1>(index_1 * dx, Ny*dy-0.5*dy, index_2 * dz, t);
                 }
             }
         }
@@ -111,7 +111,7 @@ private:
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
                     rhs.set(index_1, index_2, 0) = rhs.get(index_1, index_2, 0) - Real(2.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, 0, t);
-                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1) + Real(1.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t);
+                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1) + Real(1.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, Nz*dz-0.5*dz, t);
                 }
             }
         }
