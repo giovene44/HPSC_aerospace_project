@@ -13,6 +13,23 @@ class Solver
 {
 
 public:
+
+
+    // Pure virtual destructor makes the class abstract
+    virtual ~Solver() = 0;
+    Solver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, Real dt_)
+        : Nx(Nx_), Ny(Ny_), Nz(Nz_),
+          dx(dx_), dy(dy_), dz(dz_), dt(dt_) { t = dt_; }; // solve doesn't solve for t=0 called firstly at t=dt
+
+    template <typename StrideFunc, Dim direction>
+    void solve(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar<StrideFunc> &dim_handler);
+    void advance_time()
+    {
+        t += dt;
+    }
+
+protected:
+
     Dim Nx; // Grid points in x
     Dim Ny; // Grid points in y
     Dim Nz; // Grid points in z
@@ -23,21 +40,6 @@ public:
 
     Real t;
     Real dt;
-
-    // Pure virtual destructor makes the class abstract
-    virtual ~Solver() = 0;
-    Solver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, Real dt_)
-        : Nx(Nx_), Ny(Ny_), Nz(Nz_),
-          dx(dx_), dy(dy_), dz(dz_), dt(dt_) { t = Real(0.0); };
-
-    template <typename StrideFunc, Dim direction>
-    void solve(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar<StrideFunc> &dim_handler);
-    void advance_time()
-    {
-        t += dt;
-    }
-
-protected:
     // Make available to derived classes
     void thomas_algorithm(const std::vector<Real> &a, const std::vector<Real> &b, const std::vector<Real> &c, const std::vector<Real> &rhs, std::vector<Real> &x)
     {
@@ -63,16 +65,8 @@ protected:
         }
     }
 
-    // Helpers DIRICHLET BC
-    inline Real x_at(Dim i) { return i * dx; }
-    inline Real y_at(Dim j) { return j * dy; }
-    inline Real z_at(Dim k) { return k * dz; }
-    inline Real x_half(Dim i) { return (i + Real(0.5)) * dx; }
-    inline Real y_half(Dim j) { return (j + Real(0.5)) * dy; }
-    inline Real z_half(Dim k) { return (k + Real(0.5)) * dz; }
-    static Real BC_u(Real, Real, Real) { return Real(1.0); }
-    static Real BC_v(Real, Real, Real) { return Real(1.0); }
-    static Real BC_w(Real, Real, Real) { return Real(1.0); }
+ 
+
 };
 
 // Definition of pure virtual destructor
@@ -94,8 +88,8 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
-                    rhs.set(0, index_1, index_2) = rhs.get(0, index_1, index_2) - Real(2.0) / dx * p_boundary.first_derivative(0, index_1 * dy, index_2 * dz, t, dx);
-                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) + Real(2.0) / dx * p_boundary.first_derivative((Nx - 1) * dx, index_1 * dy, index_2 * dz, t, dx);
+                    rhs.set(0, index_1, index_2) = rhs.get(0, index_1, index_2) - Real(2.0) / dx * p_boundary.value<0>(0, index_1 * dy, index_2 * dz, t);
+                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) + Real(1.0) / dx * p_boundary.value<0>((Nx - 1) * dx, index_1 * dy, index_2 * dz, t);
                 }
             }
         }
@@ -105,8 +99,8 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
-                    rhs.set(index_1, 0, index_2) = rhs.get(index_1, 0, index_2) - Real(2.0) / dy * p_boundary.first_derivative(index_1 * dx, 0, index_2 * dz, t, dy);
-                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2) + Real(2.0) / dy * p_boundary.first_derivative(index_1 * dx, (Ny - 1) * dy, index_2 * dz, t, dy);
+                    rhs.set(index_1, 0, index_2) = rhs.get(index_1, 0, index_2) - Real(2.0) / dy * p_boundary.value<1>(index_1 * dx, 0, index_2 * dz, t);
+                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2) + Real(1.0) / dy * p_boundary.value<1>(index_1 * dx, (Ny - 1) * dy, index_2 * dz, t);
                 }
             }
         }
@@ -116,8 +110,8 @@ private:
             {
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
-                    rhs.set(index_1, index_2, 0) = rhs.get(index_1, index_2, 0) - Real(2.0) / dz * p_boundary.first_derivative(index_1 * dx, index_2 * dy, 0, t, dz);
-                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1) + Real(2.0) / dz * p_boundary.first_derivative(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t, dz);
+                    rhs.set(index_1, index_2, 0) = rhs.get(index_1, index_2, 0) - Real(2.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, 0, t);
+                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1) + Real(1.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t);
                 }
             }
         }

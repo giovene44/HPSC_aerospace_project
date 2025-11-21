@@ -11,8 +11,7 @@ Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
 
-    Real nu_val = nu;
-    return 1.0f + (dt * nu_val) / (2.0f * k_val);
+    return 1.0f + (dt * nu) / (2.0f * k_val);
 }
 
 Real NavierStokesBrinkmann::compute_beta(Dim index) const
@@ -28,10 +27,9 @@ Real NavierStokesBrinkmann::compute_gamma(Dim i, Dim j, Dim k) const
     Real k_val = k_field.get(i, j, k);
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
-
-    Real nu_val = nu;
-    Real beta = 1.0f + (dt * nu_val) / (2.0f * k_val);
-    return (dt * nu_val) / (2.0f * beta);
+   
+    Real beta = 1.0f + (dt * nu) / (2.0f * k_val);
+    return (dt * nu) / (2.0f * beta);
 }
 
 Real NavierStokesBrinkmann::compute_gamma(Dim index) const
@@ -237,13 +235,13 @@ void NavierStokesBrinkmann::solve()
 
     velocity_time_series.clear();
     pressure_time_series.clear();
-    velocity_time_series.push_back(velocity_solution);
-    pressure_time_series.push_back(pressure_solution);
+    velocity_time_series.emplace_back(velocity_solution);
+    pressure_time_series.emplace_back(pressure_solution);
 
     // Time stepping loop
     for (Real t = dt; t <= T; t += dt)
     {
-        pressure_predictor = pressure_solution;
+        pressure_predictor = pressure_solution + other_phi;
 
         // Compute source terms using u_0 (velocity at t^n)
         compute_vector_g(t);
@@ -308,7 +306,7 @@ void NavierStokesBrinkmann::solve()
         // u_0 must hold the velocity at time 't' for the NEXT iteration's
         // compute_vector_xi() calculation.
         // u_0 = velocity_solution;
-        velocity_time_series.push_back(velocity_solution);
-        pressure_time_series.push_back(pressure_solution);
+        velocity_time_series.emplace_back(velocity_solution);
+        pressure_time_series.emplace_back(pressure_solution);
     }
 };

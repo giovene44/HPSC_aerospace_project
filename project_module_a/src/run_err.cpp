@@ -104,7 +104,7 @@ std::pair<Real, Real> single_run(
                     Real uxE = mms.velocity(x_coord, y_coord, z_coord, T_final)[0];
                     Real uyE = mms.velocity(x_coord, y_coord, z_coord, T_final)[1];
                     Real uzE = mms.velocity(x_coord, y_coord, z_coord, T_final)[2];
-                    Real pE = mms.pressure(x_coord, y_coord, z_coord);
+                    Real pE = mms.pressure(x_coord, y_coord, z_coord, T_final);
 
                     // Numerical (uses current indices)
                     Real ux = solver.velocity_solution.value(0, i, j, k);
@@ -125,10 +125,10 @@ std::pair<Real, Real> single_run(
                               << (solver.velocity_time_series[t].value(1, i, j, k) - mms.velocity(x_coord, y_coord, z_coord, t)[1]) << ", "
                               << (solver.velocity_time_series[t].value(2, i, j, k) - mms.velocity(x_coord, y_coord, z_coord, t)[2]) << "), ";
                     std::cout << "Pressure error = "
-                              << (solver.pressure_time_series[t].get(i, j, k) - mms.pressure(x_coord, y_coord, z_coord)) << std::endl;
+                              << (solver.pressure_time_series[t].get(i, j, k) - mms.pressure(x_coord, y_coord, z_coord, t)) << std::endl;
                     std::cout << "Exact u: (" << mms.velocity(x_coord, y_coord, z_coord, t)[0] << ", " << mms.velocity(x_coord, y_coord, z_coord, t)[1] << ", " << mms.velocity(x_coord, y_coord, z_coord, t)[2] << "), ";
                     std::cout << "Numerical u: (" << solver.velocity_time_series[t].value(0, i, j, k) << ", " << solver.velocity_time_series[t].value(1, i, j, k) << ", " << solver.velocity_time_series[t].value(2, i, j, k) << "), ";
-                    std::cout << "Exact p: " << mms.pressure(x_coord, y_coord, z_coord) << ", ";
+                    std::cout << "Exact p: " << mms.pressure(x_coord, y_coord, z_coord,t ) << ", ";
                     std::cout << "Numerical p: " << solver.pressure_time_series[t].get(i, j, k) << std::endl;
                     std::cout << "--------------------------------\n";
                 }

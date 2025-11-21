@@ -42,14 +42,15 @@ public:
         return u;
     }
 
-    Real pressure(Real x, Real y, Real z) const
+    Real pressure(Real x, Real y, Real z, Real t) const
     {
         Real cos_x = std::cos(x);
         Real sin_y = std::sin(y);
         Real sin_z = std::sin(z);
         Real cos_z = std::cos(z);
+        Real sin_t = std::sin(t);
 
-        return (-3.0f / Re) * cos_x * sin_y * (sin_z - cos_z);
+        return (-3.0f / Re) * cos_x * sin_y * (sin_z - cos_z) * sin_t;
     }
 
     Real coefficient(Real x, Real y, Real z) const
