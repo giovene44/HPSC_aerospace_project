@@ -290,10 +290,12 @@ private:
     template <Dim direction>
     void apply_bc(VectorVariable &rhs)
     {
+        // Domain lengths:
+        Real Lx = dx*(Nx - 0.5);
+        Real Ly = dy*(Ny - 0.5);
+        Real Lz = dz*(Nz - 0.5);
 
-        // Here we consider only the even indices in 2nd direction
-        // where we have normal components on even 3rd direction and tangent components on odd 3rd direction
-
+        
         if constexpr (direction == 0)
         {
             for (Dim index_1 = 0; index_1 < Ny; ++index_1)
@@ -302,15 +304,15 @@ private:
                 {
                     // on comp1 we have normal components
                     rhs.set(direction, 0, index_1, index_2) = (u_boundary.value<direction>(0, index_1 * dy, index_2 * dz, t) - u_boundary.value<direction>(0, index_1 * dy, index_2 * dz, t - dt)) - ((u_boundary.first_derivative<1>(0, index_1 * dy, index_2 * dz, t, dy) - u_boundary.first_derivative<1>(0, index_1 * dy, index_2 * dz, t - dt, dy)) + (u_boundary.first_derivative<2>(0, index_1 * dy, index_2 * dz, t, dz) - u_boundary.first_derivative<2>(0, index_1 * dy, index_2 * dz, t - dt, dz))) * dx * Real(0.5);
-                    rhs.set(direction, Nx - 1, index_1, index_2) = u_boundary.value<direction>((Nx - 1) * dx, index_1 * dy, index_2 * dz, t) - u_boundary.value<direction>((Nx - 1) * dx, index_1 * dy, index_2 * dz, t - dt);
+                    rhs.set(direction, Nx - 1, index_1, index_2) = u_boundary.value<direction>(Lx, index_1 * dy, index_2 * dz, t) - u_boundary.value<direction>(Lx, index_1 * dy, index_2 * dz, t - dt);
 
                     // on comp2 we have tangent components
-                    rhs.set(1, 0, index_1, index_2) = u_boundary.value<1>(0, index_1 * dy, index_2 * dz, t) - u_boundary.value<1>(0, index_1 * dy, index_2 * dz, t - dt);
-                    rhs.set(1, Nx - 1, index_1, index_2) = rhs.value(1, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx) * (u_boundary.value<1>((Nx - 1) * dx, index_1 * dy, index_2 * dz, t) - u_boundary.value<1>((Nx - 1) * dx, index_1 * dy, index_2 * dz, t - dt));
+                    rhs.set(1, 0, index_1, index_2) = u_boundary.value<1>(0, 0.5*dy + index_1 * dy, index_2 * dz, t) - u_boundary.value<1>(0, 0.5*dy + index_1 * dy, index_2 * dz, t - dt);
+                    rhs.set(1, Nx - 1, index_1, index_2) = rhs.value(1, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx) * (u_boundary.value<1>(Lx, 0.5*dy + index_1 * dy, index_2 * dz, t) - u_boundary.value<1>(Lx , 0.5*dy + index_1 * dy, index_2 * dz, t - dt));
 
                     // on comp3 we have tangent components
-                    rhs.set(2, 0, index_1, index_2) = u_boundary.value<2>(0, index_1 * dx, index_2 * dy, t) - u_boundary.value<2>(0, index_1 * dx, index_2 * dy, t - dt);
-                    rhs.set(2, Nx - 1, index_1, index_2) = rhs.value(2, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx) * (u_boundary.value<2>((Nx - 1) * dx, index_1 * dy, index_2 * dz, t) - u_boundary.value<2>((Nx - 1) * dx, index_1 * dy, index_2 * dz, t - dt));
+                    rhs.set(2, 0, index_1, index_2) = u_boundary.value<2>(0, index_1 * dy, 0.5*dz + index_2 * dz, t) - u_boundary.value<2>(0, index_1 * dy, 0.5*dz + index_2 * dz, t - dt);
+                    rhs.set(2, Nx - 1, index_1, index_2) = rhs.value(2, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx) * (u_boundary.value<2>(Lx, index_1 * dy, 0.5*dz + index_2 * dz, t) - u_boundary.value<2>(Lx , index_1 * dy, 0.5*dz + index_2 * dz, t - dt));
                 }
             }
         }
@@ -321,16 +323,15 @@ private:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     // on comp2 we have normal components
-                    rhs.set(direction, 0, index_1, index_2) = (u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t - dt)) - ((u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t, dx) - u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t - dt, dx)) + (u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t, dz) - u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t - dt, dz))) * dx * Real(0.5);
-                    rhs.set(direction, Ny - 1, index_1, index_2) = u_boundary.value<direction>(index_1 * dx, (Ny - 1) * dy, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, (Ny - 1) * dy, index_2 * dz, t - dt);
+                    rhs.set(direction, 0, index_1, index_2) = (u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t - dt)) - ((u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t, dx) - u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t - dt, dx)) + (u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t, dz) - u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t - dt, dz))) * dy * Real(0.5);
+                    rhs.set(direction, Ny - 1, index_1, index_2) = u_boundary.value<direction>(index_1 * dx, Ly, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, Ly, index_2 * dz, t - dt);
 
                     // on comp1 we have tangent components
-                    rhs.set(1, 0, index_1, index_2) = u_boundary.value<1>(0, index_1 * dy, index_2 * dz, t) - u_boundary.value<1>(0, index_1 * dy, index_2 * dz, t - dt);
-                    rhs.set(1, Nx - 1, index_1, index_2) = rhs.value(1, index_1, Ny - 1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx) * (u_boundary.value<1>((Nx - 1) * dx, index_1 * dy, index_2 * dz, t) - u_boundary.value<1>((Nx - 1) * dx, index_1 * dy, index_2 * dz, t - dt));
-
+                    rhs.set(0, index_1, 0, index_2) = u_boundary.value<0>(0.5*dx + index_1 * dx, 0, index_2 * dz, t) - u_boundary.value<0>(0.5*dx + index_1 * dx, 0, index_2 * dz, t - dt);
+                    rhs.set(0, index_1, Ny-1, index_2) = rhs.value(0, index_1, Ny - 1, index_2) + Real(2.0) * gamma_field.get(index_1, Ny-1, index_2) / (dy * dy) * (u_boundary.value<0>(0.5*dx + index_1 * dx, Ly, index_2 * dz, t) - u_boundary.value<0>(0.5*dx + index_1 * dx, Ly, index_2 * dz, t - dt));
                     // on comp3 we have tangent components
-                    rhs.set(2, 0, index_1, index_2) = u_boundary.value<2>(index_1 * dx, index_2 * dy, 0, t) - u_boundary.value<2>(index_1 * dx, index_2 * dy, 0, t - dt);
-                    rhs.set(2, Nz - 1, index_1, index_2) = rhs.value(2, index_1, index_2, Nz - 1) + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) * (u_boundary.value<2>(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t) - u_boundary.value<2>(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t - dt));
+                    rhs.set(2, index_1, 0, index_2) = u_boundary.value<2>(index_1 * dx,0, 0.5*dz + index_2 * dz, t) - u_boundary.value<2>(index_1 * dx, 0, 0.5*dz + index_2 * dz, t - dt);
+                    rhs.set(2, index_1, Ny-1, index_2) = rhs.value(2, index_1, Ny - 1, index_2) + Real(2.0) * gamma_field.get(index_1, Ny-1, index_2) / (dy * dy) * (u_boundary.value<2>(index_1 * dx, Ly,0.5*dz + index_2 * dz, t) - u_boundary.value<2>(index_1 * dx, Ly, 0.5*dz + index_2 * dz, t - dt));
                 }
             }
         }
@@ -342,15 +343,15 @@ private:
                 {
                     // on comp3 we have normal components
                     rhs.set(direction, index_1, index_2, 0) = (u_boundary.value<direction>(index_1 * dx, index_2 * dy, 0, t) - u_boundary.value<direction>(index_1 * dx, index_2 * dy, 0, t - dt)) - ((u_boundary.first_derivative<0>(index_1 * dx, index_2 * dy, 0, t, dx) - u_boundary.first_derivative<0>(index_1 * dx, index_2 * dy, 0, t - dt, dx)) + (u_boundary.first_derivative<1>(index_1 * dx, index_2 * dy, 0, t, dy) - u_boundary.first_derivative<1>(index_1 * dx, index_2 * dy, 0, t - dt, dy))) * dz * Real(0.5);
-                    rhs.set(direction, index_1, index_2, Nz - 1) = (u_boundary.value<direction>(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t) - u_boundary.value<direction>(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t - dt));
+                    rhs.set(direction, index_1, index_2, Nz - 1) = (u_boundary.value<direction>(index_1 * dx, index_2 * dy, dz + (Nz - 1) * dz, t) - u_boundary.value<direction>(index_1 * dx, index_2 * dy,dz + (Nz - 1) * dz, t - dt));
 
                     // on comp1 we have tangent components
-                    rhs.set(0, index_1, index_2, 0) = (u_boundary.value<0>(index_1 * dx, index_2 * dy, 0, t) - u_boundary.value<0>(index_1 * dx, index_2 * dy, 0, t - dt));
-                    rhs.set(0, index_1, index_2, Nz - 1) = rhs.value(0, index_1, index_2, Nz - 1) + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) * (u_boundary.value<0>(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t) - u_boundary.value<0>(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t - dt));
+                    rhs.set(0, index_1, index_2, 0) = (u_boundary.value<0>(0.5*dx + index_1 * dx, index_2 * dy, 0, t) - u_boundary.value<0>(0.5*dx +index_1 * dx, index_2 * dy, 0, t - dt));
+                    rhs.set(0, index_1, index_2, Nz - 1) = rhs.value(0, index_1, index_2, Nz - 1) + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) * (u_boundary.value<0>(0.5*dx + index_1 * dx, index_2 * dy, Lz, t) - u_boundary.value<0>(0.5*dx + index_1 * dx, index_2 * dy, Lz, t - dt));
 
                     // on comp2 we have tangent components
-                    rhs.set(1, index_1, index_2, 0) = (u_boundary.value<1>(index_1 * dx, index_2 * dy, 0, t) - u_boundary.value<1>(index_1 * dx, index_2 * dy, 0, t - dt));
-                    rhs.set(1, index_1, index_2, Nz - 1) = rhs.value(1, index_1, index_2, Nz - 1) + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) * (u_boundary.value<1>(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t) - u_boundary.value<1>(index_1 * dx, index_2 * dy, (Nz - 1) * dz, t - dt));
+                    rhs.set(1, index_1, index_2, 0) = (u_boundary.value<1>(index_1 * dx, 0.5*dy + index_2 * dy, 0, t) - u_boundary.value<1>(index_1 * dx, 0.5*dy + index_2 * dy, 0, t - dt));
+                    rhs.set(1, index_1, index_2, Nz - 1) = rhs.value(1, index_1, index_2, Nz - 1) + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) * (u_boundary.value<1>(index_1 * dx, 0.5*dy + index_2 * dy,Lz, t) - u_boundary.value<1>(index_1 * dx, 0.5*dy + index_2 * dy, Lz, t - dt));
                 }
             }
         }

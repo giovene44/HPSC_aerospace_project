@@ -135,9 +135,33 @@ public:
         next_value(dt);
         next_value(T);
 
-        dx = (Nx > 1) ? DimX / (Real)(Nx - 1) : DimX;
-        dy = (Ny > 1) ? DimY / (Real)(Ny - 1) : DimY;
-        dz = (Nz > 1) ? DimZ / (Real)(Nz - 1) : DimZ;
+        // ===========================================
+        // 4. Calculate dx, dy, dz (Grid Spacing)
+        // ===========================================
+        if (Nx > 1)
+        {
+            dx = DimX / (Real)(Nx - 0.5);
+        }
+        else
+        {
+            dx = DimX;
+        }
+        if (Ny > 1)
+        {
+            dy = DimY / (Real)(Ny - 0.5);
+        }
+        else
+        {
+            dy = DimY;
+        }
+        if (Nz > 1)
+        {
+            dz = DimZ / (Real)(Nz - 0.5);
+        }
+        else
+        {
+            dz = DimZ;
+        }
 
         // 2. Boundary Files
         next_value(u_boundary_file);
