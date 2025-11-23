@@ -301,9 +301,7 @@ private:
         Real Ly = dy*(Ny - 0.5);
         Real Lz = dz*(Nz - 0.5);
 
-        // Here we consider only the even indices in 2nd direction
-        // where we have normal components on even 3rd direction and tangent components on odd 3rd direction
-
+        
         if constexpr (direction == 0)
         {
             for (Dim index_1 = 0; index_1 < Ny; ++index_1)
