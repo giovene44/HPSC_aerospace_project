@@ -275,6 +275,9 @@ public:
         return gradient;
     }
 
+    inline Dim get_Nx() const { return Nx; }
+    inline Dim get_Ny() const { return Ny; }
+    inline Dim get_Nz() const { return Nz; }
     // --- Utility ---
     size_t size() const { return data.size(); }
     const std::vector<Real> &getData() const { return data; }
