@@ -73,6 +73,15 @@ public:
         return *this;
     }
 
+    ScalarVariable &operator-=(const ScalarVariable &other)
+    {
+        for (Dim index = 0; index < Nx * Ny * Nz; ++index)
+        {
+            this->set(index) -= other.get(index);
+        }
+        return *this;
+    }
+
     ScalarVariable &operator=(const ScalarVariable &other)
     {
         if (this == &other)

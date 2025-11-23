@@ -4,6 +4,7 @@
 #include <cmath> // for std::abs
 #include <fstream>
 #include <sstream>
+#include <helper.hpp>
 
 Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
 {
@@ -27,7 +28,7 @@ Real NavierStokesBrinkmann::compute_gamma(Dim i, Dim j, Dim k) const
     Real k_val = k_field.get(i, j, k);
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
-   
+
     Real beta = 1.0f + (dt * nu) / (2.0f * k_val);
     return (dt * nu) / (2.0f * beta);
 }
@@ -126,14 +127,13 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // Evaluate forcing function
             std::vector<Real> forcing_vec = forcing_function(x, y, z, t);
             Real forcing = forcing_vec[comp];
-
             Real p_grad = gradient_pressure_predictor.value(comp, idx);
-
             Real velocity = velocity_solution.value(comp, idx);
 
             // =================================================================
             // DEBUGGING OUTPUT
             // =================================================================
+            /*
             if (i == DEBUG_I && j == DEBUG_J && k == DEBUG_K && comp == DEBUG_COMP)
             {
                 std::cout << "\n--- DEBUG: Time=" << t << ", Index (" << i << "," << j << "," << k << "), Comp=" << comp << " ---\n";
@@ -146,6 +146,10 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
                 std::cout << "p_grad: " << p_grad << "\n";
                 std::cout << "Forcing: " << forcing << "\n";
             }
+
+
+            */
+
             // =================================================================
 
             // -----------------------------------------------------------------
@@ -160,11 +164,15 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // =================================================================
             // DEBUGGING OUTPUT - Final result
             // =================================================================
-            if (i == DEBUG_I && j == DEBUG_J && k == DEBUG_K && comp == DEBUG_COMP)
+            /*
+              if (i == DEBUG_I && j == DEBUG_J && k == DEBUG_K && comp == DEBUG_COMP)
             {
                 std::cout << "g_val (FINAL): " << g_val << "\n";
                 std::cout << "--------------------------------------------------\n";
             }
+
+            */
+
             // =================================================================
 
             // -----------------------------------------------------------------
@@ -204,86 +212,77 @@ void NavierStokesBrinkmann::compute_rhs_pressure(Real t)
     for (Dim j = 1; j < Ny; ++j)
     {
         for (Dim k = 1; k < Nz; ++k)
-        {   //derivative w.r.t. x at i=0 is computed with forward difference scheme using B.C. value!
-            float dudx = (velocity_solution.value(0, 0, j, k) - u_boundary.value<0>(0, j*dy, k*dz, t)) / (dx/2.0f);
-            rhs.set(0, j, k) = -(1.0f / dt) * (dudx+
-                                             velocity_solution.first_derivative(1, 1, 0, j, k) +
-                                             velocity_solution.first_derivative(2, 2, 0, j, k));
+        { // derivative w.r.t. x at i=0 is computed with forward difference scheme using B.C. value!
+            float dudx = (velocity_solution.value(0, 0, j, k) - u_boundary.value<0>(0, j * dy, k * dz, t)) / (dx / 2.0f);
+            rhs.set(0, j, k) = -(1.0f / dt) * (dudx +
+                                               velocity_solution.first_derivative(1, 1, 0, j, k) +
+                                               velocity_solution.first_derivative(2, 2, 0, j, k));
         }
     }
 
     for (Dim i = 1; i < Nx; ++i)
     {
         for (Dim k = 1; k < Nz; ++k)
-        {   //derivative w.r.t. y at j=0 is computed with forward difference scheme using B.C. value!
-            float dvdy = (velocity_solution.value(1, i, 0, k) - u_boundary.value<1>(i*dx, 0, k*dz, t)) / (dy/2.0f);
+        { // derivative w.r.t. y at j=0 is computed with forward difference scheme using B.C. value!
+            float dvdy = (velocity_solution.value(1, i, 0, k) - u_boundary.value<1>(i * dx, 0, k * dz, t)) / (dy / 2.0f);
             rhs.set(i, 0, k) = -(1.0f / dt) * (velocity_solution.first_derivative(0, 0, i, 0, k) +
-                                             dvdy +
-                                             velocity_solution.first_derivative(2, 2, i, 0, k));
+                                               dvdy +
+                                               velocity_solution.first_derivative(2, 2, i, 0, k));
         }
     }
 
     for (Dim i = 1; i < Nx; ++i)
     {
         for (Dim j = 1; j < Ny; ++j)
-        {   //derivative w.r.t. z at k=0 is computed with forward difference scheme using B.C. value!
-            float dwdz = (velocity_solution.value(2, i, j, 0) - u_boundary.value<2>(i*dx, j*dy, 0, t)) / (dz/2.0f);
+        { // derivative w.r.t. z at k=0 is computed with forward difference scheme using B.C. value!
+            float dwdz = (velocity_solution.value(2, i, j, 0) - u_boundary.value<2>(i * dx, j * dy, 0, t)) / (dz / 2.0f);
             rhs.set(i, j, 0) = -(1.0f / dt) * (velocity_solution.first_derivative(0, 0, i, j, 0) +
-                                             velocity_solution.first_derivative(1, 1, i, j, 0) +
-                                             dwdz);
+                                               velocity_solution.first_derivative(1, 1, i, j, 0) +
+                                               dwdz);
         }
     }
 
     float dudx, dvdy, dwdz;
     // corner point (0,0,0):
-    dudx = (velocity_solution.value(0, 0, 0, 0) - u_boundary.value<0>(0, 0, 0, t)) / (dx/2.0f);
-    dvdy = (velocity_solution.value(1, 0, 0, 0) - u_boundary.value<1>(0, 0, 0, t)) / (dy/2.0f);
-    dwdz = (velocity_solution.value(2, 0, 0, 0) - u_boundary.value<2>(0, 0, 0, t)) / (dz/2.0f);
+    dudx = (velocity_solution.value(0, 0, 0, 0) - u_boundary.value<0>(0, 0, 0, t)) / (dx / 2.0f);
+    dvdy = (velocity_solution.value(1, 0, 0, 0) - u_boundary.value<1>(0, 0, 0, t)) / (dy / 2.0f);
+    dwdz = (velocity_solution.value(2, 0, 0, 0) - u_boundary.value<2>(0, 0, 0, t)) / (dz / 2.0f);
     rhs.set(0, 0, 0) = -(1.0f / dt) * (dudx + dvdy + dwdz);
 
     // edge (x,0,0):
     for (Dim i = 1; i < Nx; ++i)
     {
         dudx = velocity_solution.first_derivative(0, 0, i, 0, 0);
-        dvdy = (velocity_solution.value(1, i, 0, 0) - u_boundary.value<1>(i*dx, 0, 0, t)) / (dy/2.0f);
-        dwdz = (velocity_solution.value(2, i, 0, 0) - u_boundary.value<2>(i*dx, 0, 0, t)) / (dz/2.0f);
+        dvdy = (velocity_solution.value(1, i, 0, 0) - u_boundary.value<1>(i * dx, 0, 0, t)) / (dy / 2.0f);
+        dwdz = (velocity_solution.value(2, i, 0, 0) - u_boundary.value<2>(i * dx, 0, 0, t)) / (dz / 2.0f);
         rhs.set(i, 0, 0) = -(1.0f / dt) * (dudx + dvdy + dwdz);
     }
 
     // edge (0,y,0):
     for (Dim j = 1; j < Ny; ++j)
     {
-        dudx = (velocity_solution.value(0, 0, j, 0) - u_boundary.value<0>(0, j*dy, 0, t)) / (dx/2.0f);
+        dudx = (velocity_solution.value(0, 0, j, 0) - u_boundary.value<0>(0, j * dy, 0, t)) / (dx / 2.0f);
         dvdy = velocity_solution.first_derivative(1, 1, 0, j, 0);
-        dwdz = (velocity_solution.value(2, 0, j, 0) - u_boundary.value<2>(0, j*dy, 0, t)) / (dz/2.0f);
+        dwdz = (velocity_solution.value(2, 0, j, 0) - u_boundary.value<2>(0, j * dy, 0, t)) / (dz / 2.0f);
         rhs.set(0, j, 0) = -(1.0f / dt) * (dudx + dvdy + dwdz);
     }
     // edge (0,0,z):
-    for (Dim k = 1; k < Nz; ++k)    
+    for (Dim k = 1; k < Nz; ++k)
     {
-        dudx = (velocity_solution.value(0, 0, 0, k) - u_boundary.value<0>(0, 0, k*dz, t)) / (dx/2.0f);
-        dvdy = (velocity_solution.value(1, 0, 0, k) - u_boundary.value<1>(0, 0, k*dz, t)) / (dy/2.0f);
+        dudx = (velocity_solution.value(0, 0, 0, k) - u_boundary.value<0>(0, 0, k * dz, t)) / (dx / 2.0f);
+        dvdy = (velocity_solution.value(1, 0, 0, k) - u_boundary.value<1>(0, 0, k * dz, t)) / (dy / 2.0f);
         dwdz = velocity_solution.first_derivative(2, 2, 0, 0, k);
         rhs.set(0, 0, k) = -(1.0f / dt) * (dudx + dvdy + dwdz);
     }
 }
-
-void NavierStokesBrinkmann::solve()
+void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 {
     auto stride_x = [this](Dim j, Dim k)
-    {
-        return j * Nx + k * Nx * Ny;
-    };
-
+    { return j * Nx + k * Nx * Ny; };
     auto stride_y = [this](Dim i, Dim k)
-    {
-        return i + k * Nx * Ny;
-    };
-
+    { return i + k * Nx * Ny; };
     auto stride_z = [this](Dim i, Dim j)
-    {
-        return i + j * Nx;
-    };
+    { return i + j * Nx; };
 
     DimensionsHandlerScalar<decltype(stride_x)> x_scalar_handler(Nx, Ny, Nz, dx, stride_x);
     DimensionsHandlerScalar<decltype(stride_y)> y_scalar_handler(Nx, Ny, Nz, dy, stride_y);
@@ -293,9 +292,11 @@ void NavierStokesBrinkmann::solve()
     DimensionsHandlerVector<decltype(stride_y)> y_vector_handler(Nx, Ny, Nz, 1, 0, 2, dy, stride_y);
     DimensionsHandlerVector<decltype(stride_z)> z_vector_handler(Nx, Ny, Nz, 2, 0, 1, dz, stride_z);
 
-    // Initialize solutions
+    // Initialize
     velocity_solution.set_all(u_boundary, Real(0.0));
     pressure_solution.set_all(p_boundary, Real(0.0));
+
+    // Init intermediate vars to avoid junk values
     xi = eta = zeta = velocity_solution;
     psi = phi = other_phi = pressure_solution;
 
@@ -304,75 +305,90 @@ void NavierStokesBrinkmann::solve()
     velocity_time_series.emplace_back(velocity_solution);
     pressure_time_series.emplace_back(pressure_solution);
 
-    // Time stepping loop
+    // --- Time Stepping Loop ---
     for (Real t = dt; t <= T; t += dt)
     {
-        pressure_predictor = pressure_solution + other_phi;
-
-        // Compute source terms using u_0 (velocity at t^n)
+        // 1. Momentum Predictor Step (Calculate u*)
+        // ------------------------------------------
         compute_vector_g(t);
         compute_vector_xi();
 
-        // ============================================================================
-        // ===========================MOMENTUM EQUATION SOLVE==========================
-        // ============================================================================
-
-        // Solve X-sweep: (I - gamma*Dxx)(eta^{n+1} - eta^n) = xi^{n+1} - eta^n
+        // X-Sweep
         vector_rhs = xi - eta;
         velocity_solver.solve<decltype(stride_x), 0>(vector_rhs, vector_intermediate_solution, x_vector_handler);
-        eta += vector_intermediate_solution; // Update eta to n+1
+        eta += vector_intermediate_solution;
 
-        // Solve Y-sweep: (I - gamma*Dyy)(zeta^{n+1} - zeta^n) = eta^{n+1} - zeta^n
+        // Y-Sweep
         vector_rhs = eta - zeta;
         velocity_solver.solve<decltype(stride_y), 1>(vector_rhs, vector_intermediate_solution, y_vector_handler);
-        zeta += vector_intermediate_solution; // Update zeta to n+1
+        zeta += vector_intermediate_solution;
 
-        // Solve Z-sweep: (I - gamma*Dzz)(u^{n+1} - u^n) = zeta^{n+1} - u^n
-        // Note: velocity_solution here holds u^n (from initialization or previous loop)
+        // Z-Sweep
         vector_rhs = zeta - velocity_solution;
         velocity_solver.solve<decltype(stride_z), 2>(vector_rhs, vector_intermediate_solution, z_vector_handler);
-        velocity_solution += vector_intermediate_solution; // Update velocity_solution to n+1
 
-        // ============================================================================
-        // ===========================PRESSURE EQUATION SOLVE==========================
-        // ============================================================================
-        compute_rhs_pressure(t);
+        // Update to Intermediate Velocity u*
+        velocity_solution += vector_intermediate_solution;
 
+        // 2. Pressure Projection Step (Calculate phi)
+        // -------------------------------------------
+        compute_rhs_pressure(t); // RHS = -div(u*) / dt
+
+        // Solve Poisson Equation: Laplacian(phi) = RHS
         pressure_solver.solve_pressure<decltype(stride_x), 0>(rhs, psi, x_scalar_handler);
         pressure_solver.solve_pressure<decltype(stride_y), 1>(psi, phi, y_scalar_handler);
         pressure_solver.solve_pressure<decltype(stride_z), 2>(phi, other_phi, z_scalar_handler);
 
-        // ============================================================================
-        // =====================UPDATE PRESSURE====================
-        // ============================================================================
+        // 3. Update Fields
+        // -------------------------------------------
+
+        // Update Pressure: p^{n+1} = phi (assuming phi is total pressure from BCs)
         pressure_solution += other_phi;
+        /*
+        // Correct Velocity: u^{n+1} = u* - (dt/beta) * grad(phi)
+        // This projects velocity onto the divergence-free space
+        for (Dim k = 0; k < Nz; ++k)
+        {
+            for (Dim j = 0; j < Ny; ++j)
+            {
+                for (Dim i = 0; i < Nx; ++i)
+                {
+                    Real beta_val = compute_beta(i, j, k);
+                    Real coeff = dt / beta_val;
 
-        velocity_solver.advance_time();
-        pressure_solver.advance_time();
+                    // --- Correct U (Component 0) ---
+                    // Condition: Interior points only (i=0 and i=Nx-1 are fixed Dirichlet)
+                    if (i > 0 && i < Nx - 1)
+                    {
+                        // Central Difference: (P_{i+1} - P_{i-1}) / 2dx
+                        Real dp_dx = (other_phi.get(i + 1, j, k) - other_phi.get(i - 1, j, k)) / (2.0 * dx);
+                        velocity_solution.set(0, i, j, k) -= coeff * dp_dx;
+                    }
 
-        // std::cout << "Completed time step at t = " << t << std::endl;
-        // for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
-        // {
-        //     std::cout << "Velocity component at index (" << idx % Nx << ", " << (idx / Nx) % Ny << ", " << idx / (Nx * Ny) << "): [" << velocity_solution.value(0, idx) << ", " <<velocity_solution.value(1, idx) << ", " <<velocity_solution.value(2, idx) << "]" << std::endl;
-        // }
+                    // --- Correct V (Component 1) ---
+                    // Condition: Interior points only (j=0 and j=Ny-1 are fixed Dirichlet)
+                    if (j > 0 && j < Ny - 1)
+                    {
+                        // Central Difference: (P_{j+1} - P_{j-1}) / 2dy
+                        Real dp_dy = (other_phi.get(i, j + 1, k) - other_phi.get(i, j - 1, k)) / (2.0 * dy);
+                        velocity_solution.set(1, i, j, k) -= coeff * dp_dy;
+                    }
 
-        // std::cout << "==============================================================\n";
+                    // --- Correct W (Component 2) ---
+                    // Condition: Interior points only (k=0 and k=Nz-1 are fixed Dirichlet)
+                    if (k > 0 && k < Nz - 1)
+                    {
+                        // Central Difference: (P_{k+1} - P_{k-1}) / 2dz
+                        Real dp_dz = (other_phi.get(i, j, k + 1) - other_phi.get(i, j, k - 1)) / (2.0 * dz);
+                        velocity_solution.set(2, i, j, k) -= coeff * dp_dz;
+                    }
+                }
+            }
+        }
 
-        // for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
-        // {
-        //     std::cout << "Pressure at index (" << idx % Nx << ", " << (idx / Nx) % Ny << ", " << idx / (Nx * Ny) << "): " << pressure_solution.get(idx) << std::endl;
-        // }
+        */
 
-        // std::cout << "==============================================================\n";
-        // std::cout << "==============================================================\n";
-
-        // -------------------------------------------------------
-        // CRITICAL UPDATE: Advance u_0 to the next time step
-        // -------------------------------------------------------
-        // u_0 must hold the velocity at time 't' for the NEXT iteration's
-        // compute_vector_xi() calculation.
-        // u_0 = velocity_solution;
         velocity_time_series.emplace_back(velocity_solution);
         pressure_time_series.emplace_back(pressure_solution);
     }
-};
+}

@@ -1,5 +1,5 @@
 #Number of Run
-1
+2
 
 #Dim of X 
 1.0
@@ -20,10 +20,35 @@
 0.001
 
 
+
 # boundary velocity
 ./Input/boundary_u0.dat
 # boundary pressure
 ./Input/boundary_p0.dat
 
-# File containing k(i,j,k) values
-#Input/k_values.dat
+# fx forcing term
+cos(t)*sin(x)*sin(y)*sin(z)+sin(t)*((21+6e-10)*sin(x)*sin(y)*sin(z)-3*sin(x)*sin(y)*cos(z))
+
+# fy forcing term
+cos(t)*cos(x)*cos(y)*cos(z)+sin(t)*((21+6e-10)*cos(x)*cos(y)*cos(z)-3*cos(x)*cos(y)*sin(z)) 
+
+# fz forcing term
+cos(t)*cos(x)*sin(y)*(sin(z)+cos(z))+sin(t)*((15+6e-10)*cos(x)*sin(y)*(sin(z)+cos(z)))
+
+# u_initial condition term
+sin(t)*sin(x)*sin(y)*sin(z)
+
+# v initial condition term
+sin(t)*cos(x)*cos(y)*cos(z)
+
+# w initial conditino term
+sin(t)*cos(x)*sin(y)*(sin(z)+cos(z))
+
+# p initial condition term
+-sin(t)*3.0*cos(x)*sin(y)*(sin(z)-cos(z))
+
+# k 
+1e10
+
+# nu 
+6.0

@@ -1,102 +1,71 @@
 #pragma once
 #include <cmath>
 #include <vector>
+#include <functional>
 #include "Variables.hpp"
-#include "VectorVariable.hpp"
-#include "ScalarVariable.hpp"
+
+using VectorFieldFunction = std::function<std::vector<Real>(Real, Real, Real, Real)>;
+using ScalarFieldFunction = std::function<Real(Real, Real, Real, Real)>;
+using CoefficientFunction = std::function<Real(Real, Real, Real)>;
 
 class ManufacturedSolution
 {
 public:
+    // Constructor NO LONGER takes Grid dimensions (Nx, dx, etc.)
     ManufacturedSolution(
-        Dim Nx_, Dim Ny_, Dim Nz_,
-        Real dx_, Real dy_, Real dz_,
-        Real reynolds_number = 100.0f,
+        VectorFieldFunction u_func,
+        ScalarFieldFunction p_func,
+        CoefficientFunction k_func,
+        VectorFieldFunction f_func,
+        Real nu,
         Real x0 = 0.0f, Real y0 = 0.0f, Real z0 = 0.0f)
-        : Nx(Nx_), Ny(Ny_), Nz(Nz_),
-          dx(dx_), dy(dy_), dz(dz_),
-          x0(x0), y0(y0), z0(z0),
-          Re(reynolds_number)
+        : x0(x0), y0(y0), z0(z0),
+          nu(nu),
+          u_exact(u_func),
+          p_exact(p_func),
+          k_exact(k_func),
+          f_exact(f_func)
     {
     }
 
-    // =====================================================================
-    //  Pointwise MMS functions
-    // =====================================================================
+    // Wrappers
     std::vector<Real> velocity(Real x, Real y, Real z, Real t) const
     {
-        std::vector<Real> u(3);
-
-        Real sin_x = std::sin(x);
-        Real cos_x = std::cos(x);
-        Real sin_y = std::sin(y);
-        Real cos_y = std::cos(y);
-        Real sin_z = std::sin(z);
-        Real cos_z = std::cos(z);
-        Real sin_t = std::sin(t);
-
-        u[0] = sin_t * sin_x * sin_y * sin_z;
-        u[1] = sin_t * cos_x * cos_y * cos_z;
-        u[2] = sin_t * cos_x * sin_y * (sin_z + cos_z);
-
-        return u;
+        if (u_exact)
+            return u_exact(x + x0, y + y0, z + z0, t);
+        return {0.0, 0.0, 0.0};
     }
 
     Real pressure(Real x, Real y, Real z, Real t) const
     {
-        Real cos_x = std::cos(x);
-        Real sin_y = std::sin(y);
-        Real sin_z = std::sin(z);
-        Real cos_z = std::cos(z);
-        Real sin_t = std::sin(t);
-
-        return (-3.0f / Re) * cos_x * sin_y * (sin_z - cos_z) * sin_t;
+        if (p_exact)
+            return p_exact(x + x0, y + y0, z + z0, t);
+        return 0.0;
     }
 
     Real coefficient(Real x, Real y, Real z) const
     {
-        return std::sin(x) * std::sin(y) * std::sin(z);
+        if (k_exact)
+            return k_exact(x + x0, y + y0, z + z0);
+        return 0.0;
     }
 
     std::vector<Real> forcing(Real x, Real y, Real z, Real t) const
     {
-        std::vector<Real> f(3);
-
-        Real sin_x = std::sin(x);
-        Real cos_x = std::cos(x);
-        Real sin_y = std::sin(y);
-        Real cos_y = std::cos(y);
-        Real sin_z = std::sin(z);
-        Real cos_z = std::cos(z);
-        Real sin_t = std::sin(t);
-        Real cos_t = std::cos(t);
-
-        Real k = coefficient(x, y, z);
-
-        Real u = sin_t * sin_x * sin_y * sin_z;
-        Real v = sin_t * cos_x * cos_y * cos_z;
-        Real w = sin_t * cos_x * sin_y * (sin_z + cos_z);
-
-        f[0] = cos_t * u + (3.0f / Re) * u + k * u +
-               (3.0f / Re) * sin_x * sin_y * (sin_z - cos_z);
-
-        f[1] = cos_t * v + (3.0f / Re) * v + k * v -
-               (3.0f / Re) * cos_x * cos_y * (sin_z - cos_z);
-
-        f[2] = cos_t * w + (3.0f / Re) * w + k * w -
-               (3.0f / Re) * cos_x * sin_y * (cos_z + sin_z);
-
-        return f;
+        if (f_exact)
+            return f_exact(x + x0, y + y0, z + z0, t);
+        return {0.0, 0.0, 0.0};
     }
 
+    Real get_Nu() const { return nu; }
+
 private:
-    // Grid parameters
-    Dim Nx, Ny, Nz;
-    Real dx, dy, dz;
-
-    // Domain offsets
+    // Domain offsets only (if your domain doesn't start at 0,0,0)
     Real x0, y0, z0;
+    Real nu;
 
-    // Physical parameter
-    Real Re;
+    VectorFieldFunction u_exact;
+    ScalarFieldFunction p_exact;
+    CoefficientFunction k_exact;
+    VectorFieldFunction f_exact;
 };
