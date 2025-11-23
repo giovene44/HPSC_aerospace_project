@@ -149,7 +149,7 @@ public:
         // ===========================================
         if (Nx > 1)
         {
-            dx = DimX / (Real)(Nx - 1);
+            dx = DimX / (Real)(Nx - 0.5);
         }
         else
         {
@@ -157,7 +157,7 @@ public:
         }
         if (Ny > 1)
         {
-            dy = DimY / (Real)(Ny - 1);
+            dy = DimY / (Real)(Ny - 0.5);
         }
         else
         {
@@ -165,7 +165,7 @@ public:
         }
         if (Nz > 1)
         {
-            dz = DimZ / (Real)(Nz - 1);
+            dz = DimZ / (Real)(Nz - 0.5);
         }
         else
         {
