@@ -123,60 +123,45 @@ public:
     //TODO: This should be changed: it needs to shift to the pressure nodes!
     Real first_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const
     {
+
         Real v_plus = 0.0;
         Real v_minus = 0.0;
         Real den = 0.0;
 
+        // we need to handle the x=0, y=0, z=0 borders outside of this method
+        // because they require BC values for velocity!
+
+
         if (derivation_direction == 0)
         { // x
-            if (i == 0)
-            { // Forward Diff
-                return (value(axes, i + 1, j, k) - value(axes, i, j, k)) / dx;
-            }
-            else if (i == Nx - 1)
-            { // Backward Diff
-                return (value(axes, i, j, k) - value(axes, i - 1, j, k)) / dx;
-            }
-            else
-            { // Centered Diff
-                v_plus = value(axes, i + 1, j, k);
-                v_minus = value(axes, i - 1, j, k);
-                den = 2.0 * dx;
-            }
+            if(i==0 && axes == 0)
+                throw std::invalid_argument("VectorVariable::first_derivative: invalid i for centered difference");
+        
+
+            v_plus = value(axes, i, j, k);
+            v_minus = value(axes, i-1, j, k);
+            den = dx;
+
         }
         else if (derivation_direction == 1)
         { // y
-            if (j == 0)
-            {
-                return (value(axes, i, j + 1, k) - value(axes, i, j, k)) / dy;
-            }
-            else if (j == Ny - 1)
-            {
-                return (value(axes, i, j, k) - value(axes, i, j - 1, k)) / dy;
-            }
-            else
-            {
-                v_plus = value(axes, i, j + 1, k);
-                v_minus = value(axes, i, j - 1, k);
-                den = 2.0 * dy;
-            }
+            if(j==0 && axes == 1)
+                throw std::invalid_argument("VectorVariable::first_derivative: invalid j for centered difference");
+
+            v_plus = value(axes, i, j, k);
+            v_minus = value(axes, i, j-1, k);
+            den = dy;
+
         }
         else if (derivation_direction == 2)
         { // z
-            if (k == 0)
-            {
-                return (value(axes, i, j, k + 1) - value(axes, i, j, k)) / dz;
-            }
-            else if (k == Nz - 1)
-            {
-                return (value(axes, i, j, k) - value(axes, i, j, k - 1)) / dz;
-            }
-            else
-            {
-                v_plus = value(axes, i, j, k + 1);
-                v_minus = value(axes, i, j, k - 1);
-                den = 2.0 * dz;
-            }
+            if(k==0 && axes == 2)
+                throw std::invalid_argument("VectorVariable::first_derivative: invalid k for centered difference");
+
+            v_plus = value(axes, i, j, k);
+            v_minus = value(axes, i, j, k-1);
+            den = dz;
+
         }
         else
         {

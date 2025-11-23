@@ -186,19 +186,85 @@ void NavierStokesBrinkmann::compute_vector_xi()
     }
 }
 
-void NavierStokesBrinkmann::compute_rhs_pressure()
+void NavierStokesBrinkmann::compute_rhs_pressure(Real t)
 {
-    for (Dim x = 0; x < Nx; ++x)
+    for (Dim x = 1; x < Nx; ++x)
     {
-        for (Dim y = 0; y < Ny; ++y)
+        for (Dim y = 1; y < Ny; ++y)
         {
-            for (Dim z = 0; z < Nz; ++z)
+            for (Dim z = 1; z < Nz; ++z)
             {
                 rhs.set(x, y, z) =
                     -(1.0f / dt) *
                     velocity_solution.divergence(x, y, z);
             }
         }
+    }
+
+    for (Dim j = 1; j < Ny; ++j)
+    {
+        for (Dim k = 1; k < Nz; ++k)
+        {   //derivative w.r.t. x at i=0 is computed with forward difference scheme using B.C. value!
+            float dudx = (velocity_solution.value(0, 0, j, k) - u_boundary.value<0>(0, j*dy, k*dz, t)) / (dx/2.0f);
+            rhs.set(0, j, k) = -(1.0f / dt) * (dudx+
+                                             velocity_solution.first_derivative(1, 1, 0, j, k) +
+                                             velocity_solution.first_derivative(2, 2, 0, j, k));
+        }
+    }
+
+    for (Dim i = 1; i < Nx; ++i)
+    {
+        for (Dim k = 1; k < Nz; ++k)
+        {   //derivative w.r.t. y at j=0 is computed with forward difference scheme using B.C. value!
+            float dvdy = (velocity_solution.value(1, i, 0, k) - u_boundary.value<1>(i*dx, 0, k*dz, t)) / (dy/2.0f);
+            rhs.set(i, 0, k) = -(1.0f / dt) * (velocity_solution.first_derivative(0, 0, i, 0, k) +
+                                             dvdy +
+                                             velocity_solution.first_derivative(2, 2, i, 0, k));
+        }
+    }
+
+    for (Dim i = 1; i < Nx; ++i)
+    {
+        for (Dim j = 1; j < Ny; ++j)
+        {   //derivative w.r.t. z at k=0 is computed with forward difference scheme using B.C. value!
+            float dwdz = (velocity_solution.value(2, i, j, 0) - u_boundary.value<2>(i*dx, j*dy, 0, t)) / (dz/2.0f);
+            rhs.set(i, j, 0) = -(1.0f / dt) * (velocity_solution.first_derivative(0, 0, i, j, 0) +
+                                             velocity_solution.first_derivative(1, 1, i, j, 0) +
+                                             dwdz);
+        }
+    }
+
+    float dudx, dvdy, dwdz;
+    // corner point (0,0,0):
+    dudx = (velocity_solution.value(0, 0, 0, 0) - u_boundary.value<0>(0, 0, 0, t)) / (dx/2.0f);
+    dvdy = (velocity_solution.value(1, 0, 0, 0) - u_boundary.value<1>(0, 0, 0, t)) / (dy/2.0f);
+    dwdz = (velocity_solution.value(2, 0, 0, 0) - u_boundary.value<2>(0, 0, 0, t)) / (dz/2.0f);
+    rhs.set(0, 0, 0) = -(1.0f / dt) * (dudx + dvdy + dwdz);
+
+    // edge (x,0,0):
+    for (Dim i = 1; i < Nx; ++i)
+    {
+        dudx = velocity_solution.first_derivative(0, 0, i, 0, 0);
+        dvdy = (velocity_solution.value(1, i, 0, 0) - u_boundary.value<1>(i*dx, 0, 0, t)) / (dy/2.0f);
+        dwdz = (velocity_solution.value(2, i, 0, 0) - u_boundary.value<2>(i*dx, 0, 0, t)) / (dz/2.0f);
+        rhs.set(i, 0, 0) = -(1.0f / dt) * (dudx + dvdy + dwdz);
+    }
+
+    // edge (0,y,0):
+    for (Dim j = 1; j < Ny; ++j)
+    {
+        dudx = (velocity_solution.value(0, 0, j, 0) - u_boundary.value<0>(0, j*dy, 0, t)) / (dx/2.0f);
+        dvdy = velocity_solution.first_derivative(1, 1, 0, j, 0);
+        dwdz = (velocity_solution.value(2, 0, j, 0) - u_boundary.value<2>(0, j*dy, 0, t)) / (dz/2.0f);
+        rhs.set(0, j, 0) = -(1.0f / dt) * (dudx + dvdy + dwdz);
+    }
+    // edge (0,0,z):
+    for (Dim k = 1; k < Nz; ++k)    
+    {
+        dudx = (velocity_solution.value(0, 0, 0, k) - u_boundary.value<0>(0, 0, k*dz, t)) / (dx/2.0f);
+        dvdy = (velocity_solution.value(1, 0, 0, k) - u_boundary.value<1>(0, 0, k*dz, t)) / (dy/2.0f);
+        dwdz = velocity_solution.first_derivative(2, 2, 0, 0, k);
+        rhs.set(0, 0, k) = -(1.0f / dt) * (dudx + dvdy + dwdz);
     }
 }
 
@@ -270,7 +336,7 @@ void NavierStokesBrinkmann::solve()
         // ============================================================================
         // ===========================PRESSURE EQUATION SOLVE==========================
         // ============================================================================
-        compute_rhs_pressure();
+        compute_rhs_pressure(t);
 
         pressure_solver.solve_pressure<decltype(stride_x), 0>(rhs, psi, x_scalar_handler);
         pressure_solver.solve_pressure<decltype(stride_y), 1>(psi, phi, y_scalar_handler);
