@@ -20,12 +20,11 @@ INC_DIR  := inc
 BIN_DIR  := bin
 OBJ_DIR  := obj
 
-# File main
+# File main dell'applicazione principale
 MAIN_FILENAME := main.cpp
 
-# Eseguibili
+# Eseguibile principale
 MAIN_EXE := $(BIN_DIR)/main_app
-TEST_EXE := $(BIN_DIR)/test_suite
 
 # ==========================================
 # 2. CONFIGURAZIONE MUPARSERX
@@ -39,28 +38,50 @@ INCLUDES      := -I$(INC_DIR) -I$(MUP_DIR)/parser
 # 3. FILE SELEZIONATI AUTOMATICAMENTE
 # ==========================================
 
-ALL_SRC_FILES := $(wildcard $(SRC_DIR)/*.cpp)
-APP_MAIN_FILE := $(SRC_DIR)/$(MAIN_FILENAME)
+# --- SORGENTI PRINCIPALI ---
+ALL_SRC_FILES  := $(wildcard $(SRC_DIR)/*.cpp)
+APP_MAIN_FILE  := $(SRC_DIR)/$(MAIN_FILENAME)
+# Core files sono tutti tranne il main.cpp (per evitare conflitti di main multipli nei test)
 CORE_SRC_FILES := $(filter-out $(APP_MAIN_FILE), $(ALL_SRC_FILES))
 
 OBJS_CORE := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(CORE_SRC_FILES))
 OBJ_MAIN  := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(APP_MAIN_FILE))
-OBJS_TEST := $(patsubst $(TEST_DIR)/%.cpp, $(OBJ_DIR)/test/%.o, $(wildcard $(TEST_DIR)/*.cpp))
+
+# --- SORGENTI TEST ---
+# Troviamo tutti i file .cpp in tests/
+TEST_SRCS := $(wildcard $(TEST_DIR)/*.cpp)
+
+# Definiamo gli oggetti dei test
+OBJS_TEST := $(patsubst $(TEST_DIR)/%.cpp, $(OBJ_DIR)/test/%.o, $(TEST_SRCS))
+
+# Definiamo gli ESEGUIBILI dei test.
+# Esempio: tests/test_math.cpp -> bin/test_math
+TEST_EXES := $(patsubst $(TEST_DIR)/%.cpp, $(BIN_DIR)/%, $(TEST_SRCS))
 
 # ==========================================
 # 4. TARGET PRINCIPALI
 # ==========================================
 
-.PHONY: all main test debug clean clean-all setup
+.PHONY: all main test debug clean clean-all setup run-tests
 
 all: main
 
 main: setup $(MAIN_EXE)
 
-test: setup $(TEST_EXE)
+# Il target 'test' ora compila TUTTI gli eseguibili separati
+test: setup $(TEST_EXES)
+	@echo "Build dei test completata. Eseguibili in $(BIN_DIR)/"
+
+# Utility per eseguire tutti i test generati in sequenza
+run-tests: test
+	@for test_bin in $(TEST_EXES); do \
+		echo "Running $$test_bin..."; \
+		./$$test_bin || exit 1; \
+		echo "--------------------------------"; \
+	done
 
 # ============================
-# Modalità DEBUG corretta
+# Modalità DEBUG
 # ============================
 debug:
 	@$(MAKE) clean
@@ -70,13 +91,17 @@ debug:
 # 5. LINKING
 # ==========================================
 
+# Link dell'applicazione principale
 $(MAIN_EXE): $(OBJ_MAIN) $(OBJS_CORE) $(MUP_LIB)
 	@echo "[LINK APP] $@"
 	$(CXX) $(OBJ_MAIN) $(OBJS_CORE) $(MUP_LIB) -o $@
 
-$(TEST_EXE): $(OBJS_TEST) $(OBJS_CORE) $(MUP_LIB)
+# Link dinamico per i TEST separati
+# La regola % matcha il nome del file (senza estensione) dentro bin/
+# Dipende dal corrispondente .o in obj/test/, dai file CORE e dalla LIB
+$(BIN_DIR)/%: $(OBJ_DIR)/test/%.o $(OBJS_CORE) $(MUP_LIB)
 	@echo "[LINK TEST] $@"
-	$(CXX) $(OBJS_TEST) $(OBJS_CORE) $(MUP_LIB) -o $@
+	$(CXX) $< $(OBJS_CORE) $(MUP_LIB) -o $@
 
 # ==========================================
 # 6. COMPILAZIONE

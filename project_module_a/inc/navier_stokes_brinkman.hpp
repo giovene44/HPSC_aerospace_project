@@ -216,6 +216,95 @@ public:
         return {rel_err_u, rel_err_p};
     }
 
+    /**
+     * @brief Computes the L2 relative error ONLY on the boundary nodes.
+     * Useful to verify if Dirichlet Boundary Conditions are being respected/overwritten.
+     */
+    std::pair<Real, Real> compute_Boundary_L2_errors(
+        const VectorVariable &u_num,
+        const ScalarVariable &p_num,
+        const ManufacturedSolution &mms,
+        Real t)
+    {
+        // 1. Get Grid Dimensions
+        Dim Nx = u_num.get_Nx();
+        Dim Ny = u_num.get_Ny();
+        Dim Nz = u_num.get_Nz();
+
+        // 2. Calculate Volume Element
+        // Note: Even on boundary, we treat the node as representing a volume element for consistency
+        Real dV = dx * dy * dz;
+
+        Real err_u = 0.0, err_p = 0.0;
+        Real norm_u = 0.0, norm_p = 0.0;
+        size_t boundary_node_count = 0;
+
+        // 3. Loop over grid
+        for (Dim k = 0; k < Nz; ++k)
+        {
+            for (Dim j = 0; j < Ny; ++j)
+            {
+                for (Dim i = 0; i < Nx; ++i)
+                {
+                    // --- FILTER: ONLY PROCESS BOUNDARY NODES ---
+                    bool is_boundary = (i == 0 || i == Nx - 1 ||
+                                        j == 0 || j == Ny - 1 ||
+                                        k == 0 || k == Nz - 1);
+
+                    if (!is_boundary)
+                        continue; // Skip internal nodes
+
+                    boundary_node_count++;
+
+                    // Physical Coordinates
+                    Real x = i * dx;
+                    Real y = j * dy;
+                    Real z = k * dz;
+
+                    // --- Exact Solution ---
+                    std::vector<Real> u_ex = mms.velocity(x, y, z, t);
+                    Real p_ex = mms.pressure(x, y, z, t);
+
+                    // --- Numerical Solution ---
+                    Real u_num_x = u_num.value(0, i, j, k);
+                    Real u_num_y = u_num.value(1, i, j, k);
+                    Real u_num_z = u_num.value(2, i, j, k);
+                    Real p_val = p_num.get(i, j, k);
+
+                    // --- Velocity Error Accumulation ---
+                    Real dux = u_num_x - u_ex[0];
+                    Real duy = u_num_y - u_ex[1];
+                    Real duz = u_num_z - u_ex[2];
+
+                    err_u += dux * dux + duy * duy + duz * duz;
+                    norm_u += u_ex[0] * u_ex[0] + u_ex[1] * u_ex[1] + u_ex[2] * u_ex[2];
+
+                    // --- Pressure Error Accumulation ---
+                    err_p += (p_val - p_ex) * (p_val - p_ex);
+                    norm_p += p_ex * p_ex;
+                }
+            }
+        }
+
+        // 4. Scale and Root
+        err_u = std::sqrt(err_u * dV);
+        norm_u = std::sqrt(norm_u * dV);
+        err_p = std::sqrt(err_p * dV);
+        norm_p = std::sqrt(norm_p * dV);
+
+        // 5. Compute Relative Errors
+        Real rel_err_u = (norm_u > 1e-15) ? err_u / norm_u : 0.0;
+        Real rel_err_p = (norm_p > 1e-15) ? err_p / norm_p : 0.0;
+
+        // 6. PRINT DIAGNOSTICS
+        std::cout << "------------------------------------------\n";
+        std::cout << " BOUNDARY ERRORS at t = " << t << " (Nodes: " << boundary_node_count << ")\n";
+        std::cout << " Velocity -> Abs: " << err_u << " | Rel: " << rel_err_u << "\n";
+        std::cout << " Pressure -> Abs: " << err_p << " | Rel: " << rel_err_p << "\n";
+        std::cout << "------------------------------------------\n";
+
+        return {rel_err_u, rel_err_p};
+    }
     // ============================================================================
     // GRID, MATERIAL, AND TIME INFORMATION
     // ============================================================================

@@ -305,7 +305,7 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
     velocity_time_series.emplace_back(velocity_solution);
     pressure_time_series.emplace_back(pressure_solution);
 
-    // --- Time Stepping Loop ---
+       // --- Time Stepping Loop ---
     for (Real t = dt; t <= T; t += dt)
     {
         // 1. Momentum Predictor Step (Calculate u*)
@@ -390,5 +390,6 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         velocity_time_series.emplace_back(velocity_solution);
         pressure_time_series.emplace_back(pressure_solution);
+        compute_Boundary_L2_errors(velocity_solution, pressure_solution, mms, t);
     }
 }

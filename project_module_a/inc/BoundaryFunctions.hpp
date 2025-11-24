@@ -85,6 +85,11 @@ public:
                (2.0 * d);
     }
 
+    void set_string_expression(const std::vector<std::string> &exprs)
+    {
+        string_expression = exprs;
+    }
+
 private:
     ParserX p;
     std::vector<std::string> string_expression;
