@@ -108,7 +108,8 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
     //
     //   g = f - ∇p + (ν/2)(Dxx*η0 + Dyy*ζ0 + Dzz*u0) - (ν / (2k)) * u0
     // -------------------------------------------------------------------------
-
+    pressure_predictor = pressure_solution + other_phi;
+    
     gradient_pressure_predictor.set(0) = pressure_predictor.getGradient_x();
     gradient_pressure_predictor.set(1) = pressure_predictor.getGradient_y();
     gradient_pressure_predictor.set(2) = pressure_predictor.getGradient_z();
