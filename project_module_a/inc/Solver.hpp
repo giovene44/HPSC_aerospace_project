@@ -276,6 +276,7 @@ public:
     {
         apply_bc<direction>(rhs);
         block_solver<direction, StrideFunc>(rhs, solution, dim_handler);
+        advance_time();
     };
     BoundaryFunctions &set_p_boundary() { return p_boundary; }
 };
@@ -717,6 +718,8 @@ public:
     {
         apply_bc<direction>(rhs);
         block_solver<direction, StrideFunc>(rhs, solution, dim_handler);
+        advance_time();
+
     };
     void set_gamma(ScalarVariable &g) { gamma_field = g; }
     BoundaryFunctions &set_u_boundary() { return u_boundary; }

@@ -149,63 +149,46 @@ public:
     Real getGradient_x(Dim i, Dim j, Dim k) const
     {
         // Interior points (Second Order Centered)
-        if (i > 0 && i < Nx - 1)
+        if (i < Nx - 1)
         {
-            Real lhs = get(i - 1, j, k);
+            Real lhs = get(i, j, k);
             Real rhs = get(i + 1, j, k);
-            return (rhs - lhs) / (2.0f * dx);
+            return (rhs - lhs) / dx;
         }
-        // Left Boundary (Forward Difference - 1st Order)
-        else if (i == 0)
-        {
-            return (get(1, j, k) - get(0, j, k)) / dx;
-        }
-        // Right Boundary (Backward Difference - 1st Order)
-        else
-        {
-            return (get(Nx - 1, j, k) - get(Nx - 2, j, k)) / dx;
-        }
+        else 
+            return 0.0; // g not used at the boundary!
+
     }
 
     Real getGradient_y(Dim i, Dim j, Dim k) const
     {
         // Interior points (Second Order Centered)
-        if (j > 0 && j < Ny - 1)
+        if (j < Ny - 1)
         {
-            Real lhs = get(i, j - 1, k);
+            Real lhs = get(i, j, k);
             Real rhs = get(i, j + 1, k);
-            return (rhs - lhs) / (2.0f * dy);
+            return (rhs - lhs) / dy;
         }
         // Bottom Boundary (Forward Difference - 1st Order)
-        else if (j == 0)
-        {
-            return (get(i, 1, k) - get(i, 0, k)) / dy;
-        }
-        // Top Boundary (Backward Difference - 1st Order)
         else
         {
-            return (get(i, Ny - 1, k) - get(i, Ny - 2, k)) / dy;
+            return 0.0; // g not used at the boundary!
         }
+     
     }
 
     Real getGradient_z(Dim i, Dim j, Dim k) const
     {
         // Interior points (Second Order Centered)
-        if (k > 0 && k < Nz - 1)
+        if (k < Nz - 1)
         {
-            Real lhs = get(i, j, k - 1);
+            Real lhs = get(i, j, k);
             Real rhs = get(i, j, k + 1);
-            return (rhs - lhs) / (2.0f * dz);
+            return (rhs - lhs) / dz;
         }
-        // Front Boundary (Forward Difference - 1st Order)
-        else if (k == 0)
-        {
-            return (get(i, j, 1) - get(i, j, 0)) / dz;
-        }
-        // Back Boundary (Backward Difference - 1st Order)
         else
         {
-            return (get(i, j, Nz - 1) - get(i, j, Nz - 2)) / dz;
+            return 0.0; // g not used at the boundary!  
         }
     }
 
