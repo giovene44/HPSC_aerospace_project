@@ -75,7 +75,10 @@ std::pair<Real, Real> single_run(
                 Real y = j * dy_in;
                 Real z = k * dz_in;
 
-                auto u_ex = mms.velocity(x, y, z, T_final);
+                auto u_ex_x = mms.velocity(x+dx_in*0.5, y, z, T_final);
+                auto u_ex_y = mms.velocity(x, y+dy_in*0.5, z, T_final);
+                auto u_ex_z = mms.velocity(x, y, z+dz_in*0.5, T_final);
+                std::vector<Real> u_ex = {u_ex_x[0], u_ex_y[1], u_ex_z[2]};
                 Real p_ex = mms.pressure(x, y, z, T_final);
 
                 Real ux = solver.velocity_solution.value(0, i, j, k);
@@ -92,6 +95,8 @@ std::pair<Real, Real> single_run(
 
                 err_p += (pN - p_ex) * (pN - p_ex);
                 norm_p += p_ex * p_ex;
+
+                
             }
         }
     }
@@ -109,6 +114,9 @@ std::pair<Real, Real> single_run(
     std::cout << "=============================\n";
     std::cout << "Velocity L2 absolute  = " << err_u << "\n";
     std::cout << "Pressure L2 absolute  = " << err_p << "\n";
+    std::cout << "Velocity L2 relative  = " << rel_err_u << "\n";
+    std::cout << "Pressure L2 relative  = " << rel_err_p << "\n";
+    std::cout << "=============================\n";
 
     return std::make_pair(rel_err_u, rel_err_p);
 }
