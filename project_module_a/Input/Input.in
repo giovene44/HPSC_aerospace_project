@@ -1,14 +1,14 @@
 #Number of Run
-2
+1
 
 #Dim of X 
-1.0
+2.0*3.141592653
 
 #Dim of Y 
-1.0
+2.0*3.141592653
 
 #Dim of Z 
-1.0
+2.0*3.141592653
 
 # Number of mesh points in X, Y, Z directions (Nx, Ny, Nz)
 10 10 10

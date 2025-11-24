@@ -132,7 +132,9 @@ public:
     void compute_vector_g(Real t);
     void compute_vector_xi();
 
-    void compute_rhs_pressure(Real t);
+    void center_pressure(ScalarVariable &pressure_field);
+
+    void compute_rhs_pressure();
 
     void update_pressure_and_velocity_fields();
     void solve(const ManufacturedSolution &mms);

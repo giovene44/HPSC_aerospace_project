@@ -23,6 +23,38 @@ Real NavierStokesBrinkmann::compute_beta(Dim index) const
     return compute_beta(i, j, k);
 }
 
+void NavierStokesBrinkmann::center_pressure(ScalarVariable &pressure_field)
+{
+    Real average = 0.0f;
+    Real total_elements = 0.0f;
+
+    for (Dim idx = 0; idx < Nx; ++idx)
+    {
+        for(Dim idy = 0; idy< Ny; ++idy)
+        {
+            for(Dim idz = 0; idz < Nz; ++idz)
+            {
+                Dim weight = 1;
+                if (idx == 0 || idx == Nx - 1) weight *= 0.5;
+                if (idy == 0 || idy == Ny - 1) weight *= 0.5;
+                if (idz == 0 || idz == Nz - 1) weight *= 0.5;
+                average += pressure_field.get(idx, idy, idz) * weight;
+
+                total_elements += weight;
+
+            }
+        }
+    }
+
+
+    average /= total_elements;
+
+    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+    {
+        pressure_field.set(idx) = pressure_field.get(idx) - average;
+    }
+}
+
 Real NavierStokesBrinkmann::compute_gamma(Dim i, Dim j, Dim k) const
 {
     Real k_val = k_field.get(i, j, k);
@@ -194,7 +226,7 @@ void NavierStokesBrinkmann::compute_vector_xi()
     }
 }
 
-void NavierStokesBrinkmann::compute_rhs_pressure(Real t)
+void NavierStokesBrinkmann::compute_rhs_pressure()
 {
     for (Dim x = 1; x < Nx; ++x)
     {
@@ -209,72 +241,54 @@ void NavierStokesBrinkmann::compute_rhs_pressure(Real t)
         }
     }
 
+
+    //We Impose div(u)=0 at boundaries:
+
     for (Dim j = 1; j < Ny; ++j)
     {
         for (Dim k = 1; k < Nz; ++k)
-        { // derivative w.r.t. x at i=0 is computed with forward difference scheme using B.C. value!
-            float dudx = (velocity_solution.value(0, 0, j, k) - u_boundary.value<0>(0, j * dy, k * dz, t)) / (dx / 2.0f);
-            rhs.set(0, j, k) = -(1.0f / dt) * (dudx +
-                                               velocity_solution.first_derivative(1, 1, 0, j, k) +
-                                               velocity_solution.first_derivative(2, 2, 0, j, k));
+        { 
+            rhs.set(0, j, k) = 0.0;
         }
     }
 
     for (Dim i = 1; i < Nx; ++i)
     {
         for (Dim k = 1; k < Nz; ++k)
-        { // derivative w.r.t. y at j=0 is computed with forward difference scheme using B.C. value!
-            float dvdy = (velocity_solution.value(1, i, 0, k) - u_boundary.value<1>(i * dx, 0, k * dz, t)) / (dy / 2.0f);
-            rhs.set(i, 0, k) = -(1.0f / dt) * (velocity_solution.first_derivative(0, 0, i, 0, k) +
-                                               dvdy +
-                                               velocity_solution.first_derivative(2, 2, i, 0, k));
+        {
+            rhs.set(i, 0, k) = 0.0;
         }
     }
 
     for (Dim i = 1; i < Nx; ++i)
     {
         for (Dim j = 1; j < Ny; ++j)
-        { // derivative w.r.t. z at k=0 is computed with forward difference scheme using B.C. value!
-            float dwdz = (velocity_solution.value(2, i, j, 0) - u_boundary.value<2>(i * dx, j * dy, 0, t)) / (dz / 2.0f);
-            rhs.set(i, j, 0) = -(1.0f / dt) * (velocity_solution.first_derivative(0, 0, i, j, 0) +
-                                               velocity_solution.first_derivative(1, 1, i, j, 0) +
-                                               dwdz);
+        { 
+            rhs.set(i, j, 0) = 0.0;
         }
     }
 
-    float dudx, dvdy, dwdz;
-    // corner point (0,0,0):
-    dudx = (velocity_solution.value(0, 0, 0, 0) - u_boundary.value<0>(0, 0, 0, t)) / (dx / 2.0f);
-    dvdy = (velocity_solution.value(1, 0, 0, 0) - u_boundary.value<1>(0, 0, 0, t)) / (dy / 2.0f);
-    dwdz = (velocity_solution.value(2, 0, 0, 0) - u_boundary.value<2>(0, 0, 0, t)) / (dz / 2.0f);
-    rhs.set(0, 0, 0) = -(1.0f / dt) * (dudx + dvdy + dwdz);
+
+    rhs.set(0, 0, 0) = 0.0;
 
     // edge (x,0,0):
-    for (Dim i = 1; i < Nx; ++i)
+    for(Dim i = 1; i < Nx; ++i)
     {
-        dudx = velocity_solution.first_derivative(0, 0, i, 0, 0);
-        dvdy = (velocity_solution.value(1, i, 0, 0) - u_boundary.value<1>(i * dx, 0, 0, t)) / (dy / 2.0f);
-        dwdz = (velocity_solution.value(2, i, 0, 0) - u_boundary.value<2>(i * dx, 0, 0, t)) / (dz / 2.0f);
-        rhs.set(i, 0, 0) = -(1.0f / dt) * (dudx + dvdy + dwdz);
+        rhs.set(i, 0, 0) = 0.0;
     }
 
     // edge (0,y,0):
-    for (Dim j = 1; j < Ny; ++j)
+    for(Dim j = 1; j < Ny; ++j)
     {
-        dudx = (velocity_solution.value(0, 0, j, 0) - u_boundary.value<0>(0, j * dy, 0, t)) / (dx / 2.0f);
-        dvdy = velocity_solution.first_derivative(1, 1, 0, j, 0);
-        dwdz = (velocity_solution.value(2, 0, j, 0) - u_boundary.value<2>(0, j * dy, 0, t)) / (dz / 2.0f);
-        rhs.set(0, j, 0) = -(1.0f / dt) * (dudx + dvdy + dwdz);
+        rhs.set(0, j, 0) = 0.0;
     }
     // edge (0,0,z):
-    for (Dim k = 1; k < Nz; ++k)
+    for(Dim k = 1; k < Nz; ++k)
     {
-        dudx = (velocity_solution.value(0, 0, 0, k) - u_boundary.value<0>(0, 0, k * dz, t)) / (dx / 2.0f);
-        dvdy = (velocity_solution.value(1, 0, 0, k) - u_boundary.value<1>(0, 0, k * dz, t)) / (dy / 2.0f);
-        dwdz = velocity_solution.first_derivative(2, 2, 0, 0, k);
-        rhs.set(0, 0, k) = -(1.0f / dt) * (dudx + dvdy + dwdz);
+        rhs.set(0, 0, k) = 0.0;
     }
 }
+
 void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 {
     auto stride_x = [this](Dim j, Dim k)
@@ -332,7 +346,7 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         // 2. Pressure Projection Step (Calculate phi)
         // -------------------------------------------
-        compute_rhs_pressure(t); // RHS = -div(u*) / dt
+        compute_rhs_pressure(); // RHS = -div(u*) / dt
 
         // Solve Poisson Equation: Laplacian(phi) = RHS
         pressure_solver.solve_pressure<decltype(stride_x), 0>(rhs, psi, x_scalar_handler);
@@ -344,6 +358,7 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         // Update Pressure: p^{n+1} = phi (assuming phi is total pressure from BCs)
         pressure_solution += other_phi;
+        center_pressure(pressure_solution);
         /*
         // Correct Velocity: u^{n+1} = u* - (dt/beta) * grad(phi)
         // This projects velocity onto the divergence-free space
