@@ -380,10 +380,9 @@ public:
                 }
                 else
                 {
-                    // Unknown -> Apply Matrix Operator
                     for (Dim i = 0; i < N; ++i)
                     {
-                        if (i == 0 || i == N - 1) // Boundaries (Identity for Normal comp)
+                        if (i == 0 || i == N - 1) // Boundaries
                         {
                             set_rhs(Comp1, i, get_val(Comp1, i));
                         }
@@ -650,10 +649,12 @@ public:
                 };
 
                 // Comp1 (Normal)
+
                 if (!handle_known_face<direction>(dim_handler, solution, i1, i2, Comp1))
                 {
                     setup_TDMA_internal(N, h, a, b, c, d, [&](Dim i)
                                         { return get_rhs_comp(Comp1, i); }, get_gamma);
+
                     a[0] = 0.0;
                     b[0] = 1.0;
                     c[0] = 0.0;
@@ -719,7 +720,6 @@ public:
         apply_bc<direction>(rhs);
         block_solver<direction, StrideFunc>(rhs, solution, dim_handler);
         advance_time();
-
     };
     void set_gamma(ScalarVariable &g) { gamma_field = g; }
     BoundaryFunctions &set_u_boundary() { return u_boundary; }

@@ -120,7 +120,7 @@ public:
     // Uses centered difference (u_{i+1} - u_{i-1}) / (2*h) for interior points.
     // Uses one-sided difference at boundaries (1st Order).
 
-    //TODO: This should be changed: it needs to shift to the pressure nodes!
+    // TODO: This should be changed: it needs to shift to the pressure nodes!
     Real first_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const
     {
 
@@ -131,37 +131,32 @@ public:
         // we need to handle the x=0, y=0, z=0 borders outside of this method
         // because they require BC values for velocity!
 
-
         if (derivation_direction == 0)
         { // x
-            if(i==0 && axes == 0)
+            if (i == 0 && axes == 0)
                 throw std::invalid_argument("VectorVariable::first_derivative: invalid i for centered difference");
-        
 
             v_plus = value(axes, i, j, k);
-            v_minus = value(axes, i-1, j, k);
+            v_minus = value(axes, i - 1, j, k);
             den = dx;
-
         }
         else if (derivation_direction == 1)
         { // y
-            if(j==0 && axes == 1)
+            if (j == 0 && axes == 1)
                 throw std::invalid_argument("VectorVariable::first_derivative: invalid j for centered difference");
 
             v_plus = value(axes, i, j, k);
-            v_minus = value(axes, i, j-1, k);
+            v_minus = value(axes, i, j - 1, k);
             den = dy;
-
         }
         else if (derivation_direction == 2)
         { // z
-            if(k==0 && axes == 2)
+            if (k == 0 && axes == 2)
                 throw std::invalid_argument("VectorVariable::first_derivative: invalid k for centered difference");
 
             v_plus = value(axes, i, j, k);
-            v_minus = value(axes, i, j, k-1);
+            v_minus = value(axes, i, j, k - 1);
             den = dz;
-
         }
         else
         {
@@ -179,65 +174,81 @@ public:
         return first_derivative(axes, derivation_direction, i, j, k);
     }
 
-    // second order derivative is computed on the velocity nodes!
-    // on the borders we use a one-sided second order schema.
-    // ENSURE Nx,Ny,Nz>=4 TO AVOID PROBLEMS!
-    Real second_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const
+    // second order derivative on the velocity nodes (staggering handled by using
+    // the component index for value(...) access). Keep signature identical but
+    // make parameter meanings explicit: axes -> component, derivation_direction -> dir.
+    //
+    // Usage: second_derivative(component, dir, i, j, k)
+    //   component: 0 = u, 1 = v, 2 = w
+    //   dir:       0 = d^2/dx^2, 1 = d^2/dy^2, 2 = d^2/dz^2
+    //
+    // Notes:
+    // - Interior points: standard 3-point centered scheme.
+    // - Near physical domain boundaries (i==0 or i==Nx-1 etc.) we use a one-sided
+    //   4-point second-order accurate formula (same as before).
+    // - Ensure Nx,Ny,Nz >= 4 when using one-sided formulas (you already documented that).
+    Real second_derivative(int component, int dir, Dim i, Dim j, Dim k) const
     {
-        Real v1(Real(0.0)), v2(Real(0.0)), v3(Real(0.0)), den(Real(0.0)), val(Real(0.0));
+        // sanity checks (optional - remove in hot loops if you want performance)
+        if (component < 0 || component > 2)
+            throw std::invalid_argument("VectorVariable::second_derivative: invalid component index");
+        if (dir < 0 || dir > 2)
+            throw std::invalid_argument("VectorVariable::second_derivative: invalid derivation direction");
 
-        if (derivation_direction == 0)
-        { // x direction
+        // choose spacing and indices according to direction
+        if (dir == 0) // x-direction
+        {
+            // boundary one-sided (left)
             if (i == 0)
             {
-                return (2.0 * value(axes, i, j, k) - 5.0 * value(axes, i + 1, j, k) + 4.0 * value(axes, i + 2, j, k) - value(axes, i + 3, j, k)) / (dx * dx);
+                // (2 u0 - 5 u1 + 4 u2 - u3) / dx^2  — second-order one-sided
+                return (Real(2.0) * value(component, 0, j, k) - Real(5.0) * value(component, 1, j, k) + Real(4.0) * value(component, 2, j, k) - value(component, 3, j, k)) / (dx * dx);
             }
-            else if (i == Nx - 1)
+            // boundary one-sided (right)
+            if (i == Nx - 1)
             {
-                return (2.0 * value(axes, i, j, k) - 5.0 * value(axes, i - 1, j, k) + 4.0 * value(axes, i - 2, j, k) - value(axes, i - 3, j, k)) / (dx * dx);
+                // mirrored one-sided at right end
+                return (Real(2.0) * value(component, Nx - 1, j, k) - Real(5.0) * value(component, Nx - 2, j, k) + Real(4.0) * value(component, Nx - 3, j, k) - value(component, Nx - 4, j, k)) / (dx * dx);
             }
-            v1 = value(axes, i + 1, j, k);
-            v2 = value(axes, i, j, k);
-            v3 = value(axes, i - 1, j, k);
-            den = dx * dx;
+
+            // interior centered
+            Real u_ip1 = value(component, i + 1, j, k);
+            Real u_i = value(component, i, j, k);
+            Real u_im1 = value(component, i - 1, j, k);
+            return (u_ip1 - Real(2.0) * u_i + u_im1) / (dx * dx);
         }
-        else if (derivation_direction == 1)
-        { // y direction
+        else if (dir == 1) // y-direction
+        {
             if (j == 0)
             {
-                return (2.0 * value(axes, i, j, k) - 5.0 * value(axes, i, j + 1, k) + 4.0 * value(axes, i, j + 2, k) - value(axes, i, j + 3, k)) / (dy * dy);
+                return (Real(2.0) * value(component, i, 0, k) - Real(5.0) * value(component, i, 1, k) + Real(4.0) * value(component, i, 2, k) - value(component, i, 3, k)) / (dy * dy);
             }
-            else if (j == Ny - 1)
+            if (j == Ny - 1)
             {
-                return (2.0 * value(axes, i, j, k) - 5.0 * value(axes, i, j - 1, k) + 4.0 * value(axes, i, j - 2, k) - value(axes, i, j - 3, k)) / (dy * dy);
+                return (Real(2.0) * value(component, i, Ny - 1, k) - Real(5.0) * value(component, i, Ny - 2, k) + Real(4.0) * value(component, i, Ny - 3, k) - value(component, i, Ny - 4, k)) / (dy * dy);
             }
-            v1 = value(axes, i, j + 1, k);
-            v2 = value(axes, i, j, k);
-            v3 = value(axes, i, j - 1, k);
-            den = dy * dy;
+
+            Real u_jp1 = value(component, i, j + 1, k);
+            Real u_j = value(component, i, j, k);
+            Real u_jm1 = value(component, i, j - 1, k);
+            return (u_jp1 - Real(2.0) * u_j + u_jm1) / (dy * dy);
         }
-        else if (derivation_direction == 2)
-        { // z direction
+        else // dir == 2, z-direction
+        {
             if (k == 0)
             {
-                return (2.0 * value(axes, i, j, k) - 5.0 * value(axes, i, j, k + 1) + 4.0 * value(axes, i, j, k + 2) - value(axes, i, j, k + 3)) / (dz * dz);
+                return (Real(2.0) * value(component, i, j, 0) - Real(5.0) * value(component, i, j, 1) + Real(4.0) * value(component, i, j, 2) - value(component, i, j, 3)) / (dz * dz);
             }
-            else if (k == Nz - 1)
+            if (k == Nz - 1)
             {
-                return (2.0 * value(axes, i, j, k) - 5.0 * value(axes, i, j, k - 1) + 4.0 * value(axes, i, j, k - 2) - value(axes, i, j, k - 3)) / (dz * dz);
+                return (Real(2.0) * value(component, i, j, Nz - 1) - Real(5.0) * value(component, i, j, Nz - 2) + Real(4.0) * value(component, i, j, Nz - 3) - value(component, i, j, Nz - 4)) / (dz * dz);
             }
-            v1 = value(axes, i, j, k + 1);
-            v2 = value(axes, i, j, k);
-            v3 = value(axes, i, j, k - 1);
-            den = dz * dz;
+
+            Real u_kp1 = value(component, i, j, k + 1);
+            Real u_k = value(component, i, j, k);
+            Real u_km1 = value(component, i, j, k - 1);
+            return (u_kp1 - Real(2.0) * u_k + u_km1) / (dz * dz);
         }
-        else
-        {
-            throw std::invalid_argument("VectorVariable::second_derivative: invalid derivation_direction");
-        }
-        val = v1 - 2 * v2 + v3;
-        val /= den;
-        return val;
     }
 
     Real second_derivative(int axes, int derivation_direction, Dim index) const
