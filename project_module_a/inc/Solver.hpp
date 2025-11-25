@@ -94,7 +94,7 @@ public:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     rhs.set(index_1, 0, index_2) = rhs.get(index_1, 0, index_2) - Real(2.0) / dy * p_boundary.value<1>(index_1 * dx, 0, index_2 * dz, t);
-                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2) + Real(1.0) / dy * p_boundary.value<1>(index_1 * dx, Ny * dy - 0.5 * dy, index_2 * dz, t);
+                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2) + Real(1.0) / dy * p_boundary.value<1>(index_1 * dx, (Ny - 0.5) * dy, index_2 * dz, t);
                 }
             }
         }
@@ -105,7 +105,7 @@ public:
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
                     rhs.set(index_1, index_2, 0) = rhs.get(index_1, index_2, 0) - Real(2.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, 0, t);
-                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1) + Real(1.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, Nz * dz - 0.5 * dz, t);
+                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1) + Real(1.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, (Nz - 0.5) * dz, t);
                 }
             }
         }
@@ -511,6 +511,12 @@ public:
         auto update_bc = [&](Dim i, Dim j, Dim k)
         {
             Real x = i * dx, y = j * dy, z = k * dz;
+            if(t == 0.0f){
+                solution.set(Comp1, i, j, k) = u_boundary.value<0>(x+dx /Real(2.0), y, z, t);
+                solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y+dy/Real(2.0), z, t);
+                solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z+dz/Real(2.0), t);
+                return;
+            }
             solution.set(Comp1, i, j, k) = u_boundary.value<0>(x+dx /Real(2.0), y, z, t) - u_boundary.value<0>(x+dx/Real(2.0), y, z, t_prev);
             solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y+dy/Real(2.0), z, t) - u_boundary.value<1>(x, y+dy/Real(2.0), z, t_prev);
             solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z+dz/Real(2.0), t) - u_boundary.value<2>(x, y, z+dz/Real(2.0), t_prev);
