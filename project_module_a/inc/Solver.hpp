@@ -83,7 +83,7 @@ public:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     rhs.set(0, index_1, index_2) = rhs.get(0, index_1, index_2) - Real(2.0) / dx * p_boundary.value<0>(0, index_1 * dy, index_2 * dz, t);
-                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) + Real(1.0) / dx * p_boundary.value<0>(Nx * dx - 0.5 * dx, index_1 * dy, index_2 * dz, t);
+                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) + Real(1.0) / dx * p_boundary.value<0>((Nx - 0.5) * dx, index_1 * dy, index_2 * dz, t);
                 }
             }
         }
@@ -511,9 +511,9 @@ public:
         auto update_bc = [&](Dim i, Dim j, Dim k)
         {
             Real x = i * dx, y = j * dy, z = k * dz;
-            solution.set(Comp1, i, j, k) = u_boundary.value<0>(x, y, z, t) - u_boundary.value<0>(x, y, z, t_prev);
-            solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y, z, t) - u_boundary.value<1>(x, y, z, t_prev);
-            solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z, t) - u_boundary.value<2>(x, y, z, t_prev);
+            solution.set(Comp1, i, j, k) = u_boundary.value<0>(x+dx /Real(2.0), y, z, t) - u_boundary.value<0>(x+dx/Real(2.0), y, z, t_prev);
+            solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y+dy/Real(2.0), z, t) - u_boundary.value<1>(x, y+dy/Real(2.0), z, t_prev);
+            solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z+dz/Real(2.0), t) - u_boundary.value<2>(x, y, z+dz/Real(2.0), t_prev);
         };
 
         if constexpr (direction == 0)
