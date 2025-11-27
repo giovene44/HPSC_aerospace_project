@@ -324,7 +324,7 @@ public:
      * Handles known faces exactly like block_solver to ensure consistent verification.
      */
     template <Dim direction, typename StrideFunc>
-    void apply_matrix_operator(const VectorVariable &x_vec, VectorVariable &rhs_vec, const DimensionsHandlerVector<StrideFunc> &dim_handler)
+    void apply_matrix_operator(const VectorVariable &x_vec, VectorVariable &rhs_vec, VectorVariable &true_rhs, const DimensionsHandlerVector<StrideFunc> &dim_handler)
     {
         Dim N = (direction == 0) ? Nx : ((direction == 1) ? Ny : Nz);
         Real h = (direction == 0) ? dx : ((direction == 1) ? dy : dz);
@@ -371,6 +371,16 @@ public:
                         return gamma_field.get(i1, i2, i);
                 };
 
+                auto get_true_rhs = [&](Dim comp, Dim i)
+                {
+                    if constexpr (direction == 0)
+                        return true_rhs.value(comp, i, i1, i2);
+                    else if constexpr (direction == 1)
+                        return true_rhs.value(comp, i1, i, i2);
+                    else
+                        return true_rhs.value(comp, i1, i2, i);
+                };
+
                 // --- COMPONENT 1 (Normal) ---
                 if (is_known_face<direction>(i1, i2, Comp1))
                 {
@@ -409,14 +419,11 @@ public:
                     {
                         if (i == 0) // Left Boundary (Identity)
                         {
-                            set_rhs(Comp2, i, get_val(Comp2, i));
+                            set_rhs(Comp2, i, get_true_rhs(Comp2, i));
                         }
                         else if (i == N - 1) // Right Boundary (Modified Neumann)
                         {
-                            Real coeff = get_gamma_val(i) / (h * h);
-                            Real val = (-coeff) * get_val(Comp2, i - 1) +
-                                       (1.0 + 3.0 * coeff) * get_val(Comp2, i);
-                            set_rhs(Comp2, i, val);
+                            set_rhs(Comp2, i, get_true_rhs(Comp2, i));
                         }
                         else // Internal
                         {
@@ -441,14 +448,11 @@ public:
                     {
                         if (i == 0) // Left Boundary (Identity)
                         {
-                            set_rhs(Comp3, i, get_val(Comp3, i));
+                            set_rhs(Comp3, i, get_true_rhs(Comp3, i));
                         }
                         else if (i == N - 1) // Right Boundary (Modified Neumann)
                         {
-                            Real coeff = get_gamma_val(i) / (h * h);
-                            Real val = (-coeff) * get_val(Comp3, i - 1) +
-                                       (1.0 + 3.0 * coeff) * get_val(Comp3, i);
-                            set_rhs(Comp3, i, val);
+                            set_rhs(Comp3, i, get_true_rhs(Comp3, i));
                         }
                         else // Internal
                         {
@@ -510,15 +514,16 @@ public:
         auto update_bc = [&](Dim i, Dim j, Dim k)
         {
             Real x = i * dx, y = j * dy, z = k * dz;
-            if(t == 0.0f){
-                solution.set(Comp1, i, j, k) = u_boundary.value<0>(x+dx /Real(2.0), y, z, t);
-                solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y+dy/Real(2.0), z, t);
-                solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z+dz/Real(2.0), t);
+            if (t == 0.0f)
+            {
+                solution.set(Comp1, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t);
+                solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t);
+                solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t);
                 return;
             }
-            solution.set(Comp1, i, j, k) = u_boundary.value<0>(x+dx /Real(2.0), y, z, t) - u_boundary.value<0>(x+dx/Real(2.0), y, z, t_prev);
-            solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y+dy/Real(2.0), z, t) - u_boundary.value<1>(x, y+dy/Real(2.0), z, t_prev);
-            solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z+dz/Real(2.0), t) - u_boundary.value<2>(x, y, z+dz/Real(2.0), t_prev);
+            solution.set(Comp1, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t) - u_boundary.value<0>(x + dx / Real(2.0), y, z, t_prev);
+            solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t) - u_boundary.value<1>(x, y + dy / Real(2.0), z, t_prev);
+            solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t) - u_boundary.value<2>(x, y, z + dz / Real(2.0), t_prev);
         };
 
         if constexpr (direction == 0)

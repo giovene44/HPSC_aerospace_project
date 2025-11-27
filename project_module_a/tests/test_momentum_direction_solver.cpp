@@ -179,11 +179,11 @@ auto define_stride_x(const Grid &g)
 // 5. Diagnostics: Check matrix operator & residual
 // ===============================================================
 void check_matrix_operator(VelocitySolver &solver, const VectorVariable &vector,
-                           const VectorVariable &rhs, const Grid &g,
+                           VectorVariable &rhs, const Grid &g,
                            DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler)
 {
     VectorVariable Ax(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Ax, x_handler);
+    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Ax, rhs, x_handler);
     std::cout << "Matrix operator diagnostic on boundaries and interior:\n";
     // Optionally loop and print residuals
 }
@@ -201,7 +201,7 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs,
     solver.solve<decltype(define_stride_x(g)), 0>(rhs, computed_sol, x_handler);
 
     VectorVariable Acomp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(computed_sol, Acomp, x_handler);
+    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(computed_sol, Acomp, rhs, x_handler);
 
     Real max_res = 0.0;
     for (int cc = 0; cc < 3; ++cc)

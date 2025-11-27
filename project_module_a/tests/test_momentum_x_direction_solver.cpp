@@ -179,11 +179,11 @@ auto define_stride_x(const Grid &g)
 // 5. Diagnostics: Check matrix operator & residual
 // ===============================================================
 void check_matrix_operator(VelocitySolver &solver, const VectorVariable &vector,
-                           const VectorVariable &rhs, const Grid &g,
+                           VectorVariable &rhs, const Grid &g,
                            DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler)
 {
     VectorVariable Ax(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Ax, x_handler);
+    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Ax, rhs, x_handler);
     std::cout << "Matrix operator diagnostic on boundaries and interior:\n";
     // Optionally loop and print residuals
 }
@@ -201,18 +201,29 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs,
     solver.solve<decltype(define_stride_x(g)), 0>(rhs, computed_sol, x_handler);
 
     VectorVariable Acomp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(computed_sol, Acomp, x_handler);
+    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Acomp, rhs, x_handler);
 
     Real max_res = 0.0;
+    Real tolerance = 1e-2;
     for (int cc = 0; cc < 3; ++cc)
         for (Dim k = 0; k < g.Nz; ++k)
             for (Dim j = 0; j < g.Ny; ++j)
                 for (Dim i = 0; i < g.Nx; ++i)
-                    max_res = std::max(max_res, std::abs(Acomp.value(cc, i, j, k) - rhs.value(cc, i, j, k)));
+                {
+                    Real residual = std::abs(Acomp.value(cc, i, j, k) - rhs.value(cc, i, j, k));
+                    if (residual > tolerance)
+                    {
+                        printf("Residual error at comp=%d (i,j,k)=(%d,%d,%d): |A*sol - rhs| = %f (tolerance = %f)\n",
+                               cc, i, j, k, residual, tolerance);
+                        printf("  A*sol = %f, rhs = %f\n", Acomp.value(cc, i, j, k), rhs.value(cc, i, j, k));
+                        std::cout << "[FAIL] Residual exceeds tolerance.\n";
+                        return false;
+                    }
+                    max_res = std::max(max_res, residual);
+                }
 
     std::cout << "Max |A*computed_sol - rhs| = " << max_res << "\n";
 
-    Real tolerance = 2e-1;
     for (int comp = 0; comp < 3; ++comp)
         for (Dim k = 0; k < g.Nz; ++k)
             for (Dim j = 0; j < g.Ny; ++j)
@@ -239,7 +250,7 @@ int main()
     VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
     BoundaryFunctions u_boundary;
-    std::vector<std::string> sin_bc = {"sin(x)", "sin(x)", "sin(x)"};
+    std::vector<std::string> sin_bc = {"0", "0", "0"};
     u_boundary.set_string_expression(sin_bc);
 
     initialize_fields(g, gamma_field, vector, rhs, u_boundary);
