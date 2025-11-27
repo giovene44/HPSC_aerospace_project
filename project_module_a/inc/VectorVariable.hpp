@@ -93,9 +93,9 @@ public:
             Real y = j * dy;
             Real z = k * dz;
 
-            data[0].set(idx) = other.value<0>(x+dx/Real(2.0), y, z, t);
-            data[1].set(idx) = other.value<1>(x, y+dy/Real(2.0), z, t);
-            data[2].set(idx) = other.value<2>(x, y, z+dz/Real(2.0), t);
+            data[0].set(idx) = other.value<0>(x + dx / Real(2.0), y, z, t);
+            data[1].set(idx) = other.value<1>(x, y + dy / Real(2.0), z, t);
+            data[2].set(idx) = other.value<2>(x, y, z + dz / Real(2.0), t);
         }
     }
 

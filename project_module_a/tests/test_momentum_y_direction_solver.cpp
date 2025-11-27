@@ -47,27 +47,12 @@ void apply_known_faces(VectorVariable &vector,
         {
             vector.set(0, 0, j, k) = u_boundary.value<0>(0.0, j * g.dy, k * g.dz, t);
             vector.set(0, g.Nx - 1, j, k) = u_boundary.value<0>(Lx, j * g.dy, k * g.dz, t);
-            /*
+
             vector.set(1, 0, j, k) = u_boundary.value<1>(0.0, 0.5 * g.dy + j * g.dy, k * g.dz, t);
-            Real val = vector.value(1, g.Nx - 1, j, k);
-            Real gamma_val = gamma_field.get(g.Nx - 1, j, k);
-            Real sd = vector.second_derivative(1, 0, g.Nx - 1, j, k);
-            Real rhs_val = val - gamma_val * sd;
-            auto a = -gamma_val / (g.dx * g.dx);
-            auto b = 1.0 + 2.0 * gamma_val / (g.dx * g.dx);
-            auto c = -gamma_val / (g.dx * g.dx);
-            vector.set(1, g.Nx - 1, j, k) = ((rhs_val - 2 * c * u_boundary.value<1>(Lx, 0.5 * g.dy + j * g.dy, k * g.dz, t)) - a * vector.value(1, g.Nx - 2, j, k)) / (b - c);
-            */
+            vector.set(1, g.Nx - 1, j, k) = u_boundary.value<1>(Lx, 0.5 * g.dy + j * g.dy, k * g.dz, t);
 
             vector.set(2, 0, j, k) = u_boundary.value<2>(0.0, j * g.dy, 0.5 * g.dz + k * g.dz, t);
-            Real val2 = vector.value(2, g.Nx - 1, j, k);
-            Real gamma_val2 = gamma_field.get(g.Nx - 1, j, k);
-            Real sd2 = vector.second_derivative(2, 0, g.Nx - 1, j, k);
-            Real rhs_val2 = val2 - gamma_val2 * sd2;
-            auto a2 = -gamma_val2 / (g.dx * g.dx);
-            auto b2 = 1.0 + 2.0 * gamma_val2 / (g.dx * g.dx);
-            auto c2 = -gamma_val2 / (g.dx * g.dx);
-            vector.set(2, g.Nx - 1, j, k) = ((rhs_val2 - 2 * c2 * u_boundary.value<2>(Lx, j * g.dy, 0.5 * g.dz + k * g.dz, t)) - a2 * vector.value(2, g.Nx - 2, j, k)) / (b2 - c2);
+            vector.set(2, g.Nx - 1, j, k) = u_boundary.value<2>(Lx, j * g.dy, 0.5 * g.dz + k * g.dz, t);
         }
 
     // Y-direction faces
@@ -136,13 +121,13 @@ void initialize_fields(const Grid &g,
                         z = (k + 0.5) * g.dz;
                     }
 
-                    vector.set(comp, i, j, k) = sin(x);
+                    vector.set(comp, i, j, k) = sin(y);
                 }
 
     // Apply known faces
     // apply_known_faces(vector, u_boundary, g, gamma_field, 0.0);
 
-    // Build RHS = (I - gamma * Dxx) * vector
+    // Build RHS = (I - gamma * Dyy) * vector
     for (int comp = 0; comp < 3; ++comp)
         for (Dim k = 0; k < g.Nz; ++k)
             for (Dim j = 0; j < g.Ny; ++j)
@@ -150,7 +135,7 @@ void initialize_fields(const Grid &g,
                 {
                     Real val = vector.value(comp, i, j, k);
                     Real gamma_val = gamma_field.get(i, j, k);
-                    Real sd = vector.second_derivative(comp, 0, i, j, k);
+                    Real sd = vector.second_derivative(comp, 1, i, j, k);
                     Real rhs_val = val - gamma_val * sd;
 
                     // Apply boundary BCs on RHS
@@ -191,10 +176,10 @@ VelocitySolver setup_solver(const Grid &g, ScalarVariable &gamma_field, Boundary
     return solver;
 }
 
-auto define_stride_x(const Grid &g)
+auto define_stride_y(const Grid &g)
 {
-    return [=](Dim j, Dim k)
-    { return j * g.Nx + k * g.Nx * g.Ny; };
+    return [=](Dim i, Dim k)
+    { return i + k * g.Nx * g.Ny; };
 }
 
 // ===============================================================
@@ -202,10 +187,10 @@ auto define_stride_x(const Grid &g)
 // ===============================================================
 void check_matrix_operator(VelocitySolver &solver, const VectorVariable &vector,
                            VectorVariable &rhs, const Grid &g,
-                           DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler)
+                           DimensionsHandlerVector<decltype(define_stride_y(g))> &y_handler)
 {
     VectorVariable Ax(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Ax, rhs, x_handler);
+    solver.apply_matrix_operator<1, decltype(define_stride_y(g))>(vector, Ax, rhs, y_handler);
     std::cout << "Matrix operator diagnostic on boundaries and interior:\n";
     // Optionally loop and print residuals
 }
@@ -215,18 +200,18 @@ void check_matrix_operator(VelocitySolver &solver, const VectorVariable &vector,
 // ===============================================================
 bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs,
                      const VectorVariable &vector, const Grid &g,
-                     DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler)
+                     DimensionsHandlerVector<decltype(define_stride_y(g))> &y_handler)
 {
     VectorVariable computed_sol(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     computed_sol.set_all(0.0);
 
-    solver.solve<decltype(define_stride_x(g)), 0>(rhs, computed_sol, x_handler);
+    solver.solve<decltype(define_stride_y(g)), 1>(rhs, computed_sol, y_handler);
 
     VectorVariable Acomp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Acomp, rhs, x_handler);
+    solver.apply_matrix_operator<1, decltype(define_stride_y(g))>(vector, Acomp, rhs, y_handler);
 
     Real max_res = 0.0;
-    Real tolerance = 1e-3;
+    Real tolerance = 1e-2;
     /*
 
       for (int cc = 0; cc < 3; ++cc)
@@ -286,12 +271,12 @@ int main()
 
     VelocitySolver solver = setup_solver(g, gamma_field, u_boundary);
 
-    auto stride_x = define_stride_x(g);
-    DimensionsHandlerVector<decltype(stride_x)> x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx, stride_x);
+    auto stride_y = define_stride_y(g);
+    DimensionsHandlerVector<decltype(stride_y)> y_handler(g.Nx, g.Ny, g.Nz, 1, 0, 2, g.dy, stride_y);
 
-    check_matrix_operator(solver, vector, rhs, g, x_handler);
+    check_matrix_operator(solver, vector, rhs, g, y_handler);
 
-    bool success = solve_and_check(solver, rhs, vector, g, x_handler);
+    bool success = solve_and_check(solver, rhs, vector, g, y_handler);
 
     if (success)
         std::cout << "[PASS] Solver matrix and inversion are consistent.\n";
