@@ -243,7 +243,8 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs,
 // ===============================================================
 int main()
 {
-    Grid g = setup_grid(1.0, 1.0, 1.0, 5, 5, 5, 0.01);
+    const Real two_pi = 2.0 * 3.141592653589793;
+    Grid g = setup_grid(two_pi, two_pi, two_pi, 7, 7, 7, 0.01);
 
     ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable vector(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
