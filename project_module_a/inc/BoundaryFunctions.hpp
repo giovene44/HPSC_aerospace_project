@@ -88,6 +88,17 @@ public:
     void set_string_expression(const std::vector<std::string> &exprs)
     {
         string_expression = exprs;
+        
+        // Initialize parser variables (same as setParsing)
+        xval = Value(Real(0.0));
+        yval = Value(Real(0.0));
+        zval = Value(Real(0.0));
+        tval = Value(Real(0.0));
+
+        p.DefineVar("x", Variable(&xval));
+        p.DefineVar("y", Variable(&yval));
+        p.DefineVar("z", Variable(&zval));
+        p.DefineVar("t", Variable(&tval));
     }
 
 private:

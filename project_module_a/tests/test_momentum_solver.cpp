@@ -75,7 +75,7 @@ int main()
     {
         // Apply Matrix A * x -> rhs
         // Note: You need to specify the template parameters <StrideFunc, direction>
-        velocity_solver.apply_matrix_operator<0, decltype(stride_x)>(vector, rhs, x_vector_handler);
+        velocity_solver.apply_matrix_operator<0, decltype(stride_x)>(vector, rhs, rhs, x_vector_handler);
 
         std::cout << "Matrix application successful." << std::endl;
 

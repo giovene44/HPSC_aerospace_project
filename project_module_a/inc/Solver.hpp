@@ -324,7 +324,7 @@ public:
      * Handles known faces exactly like block_solver to ensure consistent verification.
      */
     template <Dim direction, typename StrideFunc>
-    void apply_matrix_operator(const VectorVariable &x_vec, VectorVariable &rhs_vec, const DimensionsHandlerVector<StrideFunc> &dim_handler)
+    void apply_matrix_operator(const VectorVariable &x_vec, VectorVariable &rhs_vec, VectorVariable &true_rhs, const DimensionsHandlerVector<StrideFunc> &dim_handler)
     {
         Dim N = (direction == 0) ? Nx : ((direction == 1) ? Ny : Nz);
         Real h = (direction == 0) ? dx : ((direction == 1) ? dy : dz);
@@ -371,6 +371,16 @@ public:
                         return gamma_field.get(i1, i2, i);
                 };
 
+                auto get_true_rhs = [&](Dim comp, Dim i)
+                {
+                    if constexpr (direction == 0)
+                        return true_rhs.value(comp, i, i1, i2);
+                    else if constexpr (direction == 1)
+                        return true_rhs.value(comp, i1, i, i2);
+                    else
+                        return true_rhs.value(comp, i1, i2, i);
+                };
+
                 // --- COMPONENT 1 (Normal) ---
                 if (is_known_face<direction>(i1, i2, Comp1))
                 {
@@ -380,10 +390,9 @@ public:
                 }
                 else
                 {
-                    // Unknown -> Apply Matrix Operator
                     for (Dim i = 0; i < N; ++i)
                     {
-                        if (i == 0 || i == N - 1) // Boundaries (Identity for Normal comp)
+                        if (i == 0 || i == N - 1) // Boundaries
                         {
                             set_rhs(Comp1, i, get_val(Comp1, i));
                         }
@@ -410,14 +419,11 @@ public:
                     {
                         if (i == 0) // Left Boundary (Identity)
                         {
-                            set_rhs(Comp2, i, get_val(Comp2, i));
+                            set_rhs(Comp2, i, get_true_rhs(Comp2, i));
                         }
                         else if (i == N - 1) // Right Boundary (Modified Neumann)
                         {
-                            Real coeff = get_gamma_val(i) / (h * h);
-                            Real val = (-coeff) * get_val(Comp2, i - 1) +
-                                       (1.0 + 3.0 * coeff) * get_val(Comp2, i);
-                            set_rhs(Comp2, i, val);
+                            set_rhs(Comp2, i, get_true_rhs(Comp2, i));
                         }
                         else // Internal
                         {
@@ -442,14 +448,11 @@ public:
                     {
                         if (i == 0) // Left Boundary (Identity)
                         {
-                            set_rhs(Comp3, i, get_val(Comp3, i));
+                            set_rhs(Comp3, i, get_true_rhs(Comp3, i));
                         }
                         else if (i == N - 1) // Right Boundary (Modified Neumann)
                         {
-                            Real coeff = get_gamma_val(i) / (h * h);
-                            Real val = (-coeff) * get_val(Comp3, i - 1) +
-                                       (1.0 + 3.0 * coeff) * get_val(Comp3, i);
-                            set_rhs(Comp3, i, val);
+                            set_rhs(Comp3, i, get_true_rhs(Comp3, i));
                         }
                         else // Internal
                         {
@@ -511,21 +514,27 @@ public:
         auto update_bc = [&](Dim i, Dim j, Dim k)
         {
             Real x = i * dx, y = j * dy, z = k * dz;
-            if(t == 0.0f){
-                solution.set(Comp1, i, j, k) = u_boundary.value<0>(x+dx /Real(2.0), y, z, t);
-                solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y+dy/Real(2.0), z, t);
-                solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z+dz/Real(2.0), t);
+            if (t == 0.0f)
+            {
+                solution.set(Comp1, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t);
+                solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t);
+                solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t);
                 return;
             }
-            solution.set(Comp1, i, j, k) = u_boundary.value<0>(x+dx /Real(2.0), y, z, t) - u_boundary.value<0>(x+dx/Real(2.0), y, z, t_prev);
-            solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y+dy/Real(2.0), z, t) - u_boundary.value<1>(x, y+dy/Real(2.0), z, t_prev);
-            solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z+dz/Real(2.0), t) - u_boundary.value<2>(x, y, z+dz/Real(2.0), t_prev);
+            solution.set(Comp1, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t) - u_boundary.value<0>(x + dx / Real(2.0), y, z, t_prev);
+            solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t) - u_boundary.value<1>(x, y + dy / Real(2.0), z, t_prev);
+            solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t) - u_boundary.value<2>(x, y, z + dz / Real(2.0), t_prev);
         };
 
         if constexpr (direction == 0)
         {
             for (Dim i = 0; i < Nx; ++i)
+            {
                 update_bc(i, index_1, index_2);
+                if (index_1 == 0 && index_2 == 0)
+                {
+                }
+            }
         }
         else if constexpr (direction == 1)
         {
@@ -660,6 +669,7 @@ public:
                 {
                     setup_TDMA_internal(N, h, a, b, c, d, [&](Dim i)
                                         { return get_rhs_comp(Comp1, i); }, get_gamma);
+
                     a[0] = 0.0;
                     b[0] = 1.0;
                     c[0] = 0.0;
@@ -673,7 +683,6 @@ public:
                         set_sol_comp(Comp1, i, x[i]);
                 }
 
-                // Comp2 (Tangent)
                 if (!handle_known_face<direction>(dim_handler, solution, i1, i2, Comp2))
                 {
                     setup_TDMA_internal(N, h, a, b, c, d, [&](Dim i)
@@ -725,7 +734,6 @@ public:
         apply_bc<direction>(rhs);
         block_solver<direction, StrideFunc>(rhs, solution, dim_handler);
         advance_time();
-
     };
     void set_gamma(ScalarVariable &g) { gamma_field = g; }
     BoundaryFunctions &set_u_boundary() { return u_boundary; }
