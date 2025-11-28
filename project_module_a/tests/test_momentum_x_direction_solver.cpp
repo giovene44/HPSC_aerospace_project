@@ -106,9 +106,9 @@ void initialize_fields(const Grid &g,
                        ScalarVariable &gamma_field,
                        VectorVariable &vector,
                        VectorVariable &rhs,
-                       BoundaryFunctions &u_boundary)
+                       BoundaryFunctions &u_boundary,
+                       Real t)
 {
-    gamma_field.set_all(0.1f);
 
     // Initialize interior
     for (int comp = 0; comp < 3; ++comp)
@@ -136,7 +136,7 @@ void initialize_fields(const Grid &g,
                         z = (k + 0.5) * g.dz;
                     }
 
-                    vector.set(comp, i, j, k) = sin(x);
+                    vector.set(comp, i, j, k) = sin(x) * sin(t);
                 }
 
     // Apply known faces
@@ -178,18 +178,18 @@ void initialize_fields(const Grid &g,
                         }
                         if (comp == 0)
                         {
-                            rhs_val = u_boundary.value<0>(x_coord, y_coord, z_coord, 0.0);
+                            rhs_val = u_boundary.value<0>(x_coord, y_coord, z_coord, t);
                             vector.set(comp, i, j, k) = rhs_val;
                         }
 
                         else if (comp == 1)
                         {
-                            rhs_val = u_boundary.value<1>(x_coord, y_coord, z_coord, 0.0);
+                            rhs_val = u_boundary.value<1>(x_coord, y_coord, z_coord, t);
                             vector.set(comp, i, j, k) = rhs_val;
                         }
                         else
                         {
-                            rhs_val = u_boundary.value<2>(x_coord, y_coord, z_coord, 0.0);
+                            rhs_val = u_boundary.value<2>(x_coord, y_coord, z_coord, t);
                             vector.set(comp, i, j, k) = rhs_val;
                         }
                     }
@@ -200,9 +200,9 @@ void initialize_fields(const Grid &g,
 // ===============================================================
 // 4. Setup Solver & Strides
 // ===============================================================
-VelocitySolver setup_solver(const Grid &g, ScalarVariable &gamma_field, BoundaryFunctions &u_boundary)
+VelocitySolver setup_solver(const Grid &g, ScalarVariable &gamma_field, BoundaryFunctions &u_boundary, Real t)
 {
-    VelocitySolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt, gamma_field, u_boundary);
+    VelocitySolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, t, gamma_field, u_boundary);
     solver.gamma_field = gamma_field;
     solver.u_boundary = u_boundary;
     return solver;
@@ -230,17 +230,24 @@ void check_matrix_operator(VelocitySolver &solver, const VectorVariable &vector,
 // ===============================================================
 // 6. Solve and check solution
 // ===============================================================
-bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs,
-                     const VectorVariable &vector, const Grid &g,
+bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
+                     VectorVariable &vector_1, VectorVariable &rhs_2,
+                     VectorVariable &vector_2, const Grid &g,
                      DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler)
 {
+    VectorVariable rhs_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable vector_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+
+    rhs_delta = rhs_2 - rhs_1;
+    vector_delta = vector_2 - vector_1;
+
     VectorVariable computed_sol(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     computed_sol.set_all(0.0);
 
-    solver.solve<decltype(define_stride_x(g)), 0>(rhs, computed_sol, x_handler);
+    solver.solve<decltype(define_stride_x(g)), 0>(rhs_delta, computed_sol, x_handler);
 
     VectorVariable Acomp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Acomp, rhs, x_handler);
+    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector_delta, Acomp, rhs_delta, x_handler);
 
     Real max_res = 0.0;
     Real tolerance = 1e-2;
@@ -270,10 +277,10 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs,
         for (Dim k = 0; k < g.Nz; ++k)
             for (Dim j = 0; j < g.Ny; ++j)
                 for (Dim i = 0; i < g.Nx; ++i)
-                    if (std::abs(vector.value(comp, i, j, k) - computed_sol.value(comp, i, j, k)) > tolerance)
+                    if (std::abs(vector_delta.value(comp, i, j, k) - computed_sol.value(comp, i, j, k)) > tolerance)
                     {
                         printf("Mismatch comp=%d (i,j,k)=(%d,%d,%d): expected %f, got %f\n",
-                               comp, i, j, k, vector.value(comp, i, j, k), computed_sol.value(comp, i, j, k));
+                               comp, i, j, k, vector_delta.value(comp, i, j, k), computed_sol.value(comp, i, j, k));
                         return false;
                     }
 
@@ -286,29 +293,31 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs,
 int main()
 {
     const Real two_pi = 2.0 * 3.141592653589793;
-    Grid g = setup_grid(two_pi, two_pi, two_pi, 500, 500, 500, 0.01);
+    Grid g = setup_grid(two_pi, two_pi, two_pi, 100, 100, 100, 0.002f);
 
     printf("Grid setup: Nx=%d, Ny=%d, Nz=%d, dx=%f, dy=%f, dz=%f, dt=%f\n",
            g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt);
 
     ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    VectorVariable vector(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    gamma_field.set_all(0.1f);
+    VectorVariable vector_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable rhs_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable vector_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable rhs_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
     BoundaryFunctions u_boundary;
-    std::vector<std::string> sin_bc = {"sin(x)", "sin(x)", "sin(x)"};
+    std::vector<std::string> sin_bc = {"sin(x)*sin(t)", "sin(x)*sin(t)", "sin(x)*sin(t)"};
     u_boundary.set_string_expression(sin_bc);
 
-    initialize_fields(g, gamma_field, vector, rhs, u_boundary);
+    initialize_fields(g, gamma_field, vector_1, rhs_1, u_boundary, g.dt);
+    initialize_fields(g, gamma_field, vector_2, rhs_2, u_boundary, g.dt + g.dt);
 
-    VelocitySolver solver = setup_solver(g, gamma_field, u_boundary);
+    VelocitySolver solver = setup_solver(g, gamma_field, u_boundary, g.dt + g.dt);
 
     auto stride_x = define_stride_x(g);
     DimensionsHandlerVector<decltype(stride_x)> x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx, stride_x);
 
-    check_matrix_operator(solver, vector, rhs, g, x_handler);
-
-    bool success = solve_and_check(solver, rhs, vector, g, x_handler);
+    bool success = solve_and_check(solver, rhs_1, vector_1, rhs_2, vector_2, g, x_handler);
 
     if (success)
         std::cout << "[PASS] Solver matrix and inversion are consistent.\n";

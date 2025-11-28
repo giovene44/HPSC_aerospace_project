@@ -523,12 +523,6 @@ public:
             }
             solution.set(Comp1, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t) - u_boundary.value<0>(x + dx / Real(2.0), y, z, t_prev);
             solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t) - u_boundary.value<1>(x, y + dy / Real(2.0), z, t_prev);
-            if (i == 1 && j == 0 && k == 0)
-            {
-                printf("Comp1 : %d, Comp2 : %d, Comp3 : %d\n", Comp1, Comp2, Comp3);
-                printf("Updating Bc at comp2 index (%d,%d,%d) to value %f\n", i, j, k, solution.set(Comp2, i, j, k));
-                printf(" u_boundary.value<1>(x, y + dy / Real(2.0), z, t) : %f\n", u_boundary.value<1>(x, y + dy / Real(2.0), z, t));
-            }
             solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t) - u_boundary.value<2>(x, y, z + dz / Real(2.0), t_prev);
         };
 
