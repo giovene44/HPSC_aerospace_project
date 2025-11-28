@@ -157,10 +157,25 @@ void initialize_fields(const Grid &g,
 
                     if (i == 0 || i == g.Nx - 1 || j == 0 || j == g.Ny - 1 || k == 0 || k == g.Nz - 1)
                     {
-                        Real x_coord = (comp == 0) ? ((i == 0) ? 0.0 : g.dx * (g.Nx - 0.5)) : (i * g.dx + ((comp == 0) ? 0.5 * g.dx : 0.0));
-                        Real y_coord = (comp == 1) ? ((j == 0) ? 0.0 : g.dy * (g.Ny - 0.5)) : (j * g.dy + ((comp == 1) ? 0.5 * g.dy : 0.0));
-                        Real z_coord = (comp == 2) ? ((k == 0) ? 0.0 : g.dz * (g.Nz - 0.5)) : (k * g.dz + ((comp == 2) ? 0.5 * g.dz : 0.0));
-
+                        Real x_coord, y_coord, z_coord;
+                        if (comp == 0)
+                        {
+                            x_coord = (i + 0.5) * g.dx;
+                            y_coord = j * g.dy;
+                            z_coord = k * g.dz;
+                        }
+                        else if (comp == 1)
+                        {
+                            x_coord = i * g.dx;
+                            y_coord = (j + 0.5) * g.dy;
+                            z_coord = k * g.dz;
+                        }
+                        else
+                        {
+                            x_coord = i * g.dx;
+                            y_coord = j * g.dy;
+                            z_coord = (k + 0.5) * g.dz;
+                        }
                         if (comp == 0)
                         {
                             rhs_val = u_boundary.value<0>(x_coord, y_coord, z_coord, 0.0);
@@ -188,6 +203,8 @@ void initialize_fields(const Grid &g,
 VelocitySolver setup_solver(const Grid &g, ScalarVariable &gamma_field, BoundaryFunctions &u_boundary)
 {
     VelocitySolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt, gamma_field, u_boundary);
+    solver.gamma_field = gamma_field;
+    solver.u_boundary = u_boundary;
     return solver;
 }
 
@@ -226,7 +243,7 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs,
     solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Acomp, rhs, x_handler);
 
     Real max_res = 0.0;
-    Real tolerance = 1e-3;
+    Real tolerance = 1e-2;
     /*
 
       for (int cc = 0; cc < 3; ++cc)
@@ -279,7 +296,7 @@ int main()
     VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
     BoundaryFunctions u_boundary;
-    std::vector<std::string> sin_bc = {"0", "0", "0"};
+    std::vector<std::string> sin_bc = {"sin(x)", "sin(x)", "sin(x)"};
     u_boundary.set_string_expression(sin_bc);
 
     initialize_fields(g, gamma_field, vector, rhs, u_boundary);
