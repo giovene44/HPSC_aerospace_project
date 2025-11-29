@@ -62,19 +62,6 @@ void initialize_fields(const Grid &g,
                     Real val = vector.get(i, j, k);
                     Real sd = vector.second_derivative(0, i, j, k);
                     Real rhs_val = val - sd;
-
-                    // Apply boundary BCs on RHS
-
-                    if (i == 0 || i == g.Nx - 1 )
-                    {
-                        Real x_coord, y_coord, z_coord;
-                            x_coord = i * g.dx;
-                            y_coord = j * g.dy;
-                            z_coord = k * g.dz;
-
-                            rhs_val = p_boundary.value<>(x_coord, y_coord, z_coord, t);
-                            vector.set(i, j, k) = rhs_val;
-                    }
                     rhs.set(i, j, k) = rhs_val;
                 }
 }
@@ -96,33 +83,6 @@ auto define_stride_x(const Grid &g)
 }
 
 // ===============================================================
-// 5. Diagnostics: Check matrix operator & residual
-// ===============================================================
-void check_matrix_operator(PressureSolver &solver, const ScalarVariable &vector,
-                           ScalarVariable &rhs, const Grid &g,
-                           DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler)
-{
-    ScalarVariable Ax(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Ax, rhs, x_handler);
-    std::cout << "Matrix operator diagnostic on boundaries and interior:\n";
-    // Optionally loop and print residuals
-    for (Dim k = 0; k < g.Nz; ++k)
-        for (Dim j = 0; j < g.Ny; ++j)
-            for (Dim i = 0; i < g.Nx; ++i)
-            {
-                Real residual = std::abs(Ax.get(i, j, k) - rhs.get(i, j, k));
-                if (residual > 1e-5)
-                {
-                    std::cout << std::fixed << std::setprecision(6)
-                              << "At (i,j,k)=(" << i << "," << j << "," << k << "): "
-                              << "A*vector = " << Ax.get(i, j, k)
-                              << ", rhs = " << rhs.get(i, j, k)
-                              << ", |A*vector - rhs| = " << residual << "\n";
-                }
-            }
-}
-
-// ===============================================================
 // 6. Solve and check solution
 // ===============================================================
 bool solve_and_check(PressureSolver &solver, ScalarVariable &rhs,
@@ -140,6 +100,7 @@ bool solve_and_check(PressureSolver &solver, ScalarVariable &rhs,
 
     Real max_res = 0.0;
     Real tolerance = 1e-2;
+    bool res = true;
     /*
 
       for (int cc = 0; cc < 3; ++cc)
@@ -162,17 +123,19 @@ bool solve_and_check(PressureSolver &solver, ScalarVariable &rhs,
 
     */
 
-        for (Dim k = 0; k < g.Nz; ++k)
-            for (Dim j = 0; j < g.Ny; ++j)
+        for (Dim j = 0; j < g.Ny; ++j)
+            for (Dim k = 0; k < g.Nz; ++k)
                 for (Dim i = 0; i < g.Nx; ++i)
                     if (std::abs(vector.get(i, j, k) - computed_sol.get(i, j, k)) > tolerance)
                     {
                         printf("Mismatch (i,j,k)=(%d,%d,%d): expected %f, got %f\n",
                                i, j, k, vector.get(i, j, k), computed_sol.get(i, j, k));
-                        return false;
+
+                        res=false;
+
                     }
 
-    return true;
+    return res;
 }
 
 // ===============================================================
