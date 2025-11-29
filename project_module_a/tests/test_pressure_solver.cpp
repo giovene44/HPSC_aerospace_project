@@ -48,7 +48,7 @@ void initialize_fields(const Grid &g,
                     y = j * g.dy;
                     z = k * g.dz;
 
-                    vector.set(i, j, k) = 2*1e5*sin(t)*sin(x)*sin(y)*(sin(z)-cos(z));
+                    vector.set(i, j, k) = -1.0 * sin(t) * 2 * 1e5 * cos(x) * sin(y) * (sin(z) - cos(z));
                 }
 
     // Apply known faces
@@ -125,24 +125,18 @@ void check_matrix_operator(PressureSolver &solver, const ScalarVariable &vector,
 // ===============================================================
 // 6. Solve and check solution
 // ===============================================================
-bool solve_and_check(PressureSolver &solver, ScalarVariable &rhs_1,
-                     ScalarVariable &vector_1, ScalarVariable &rhs_2,
-                     ScalarVariable &vector_2, const Grid &g,
+bool solve_and_check(PressureSolver &solver, ScalarVariable &rhs,
+                     ScalarVariable &vector, const Grid &g,
                      DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler)
 {
-    ScalarVariable rhs_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    ScalarVariable vector_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-
-    rhs_delta = rhs_2 - rhs_1;
-    vector_delta = vector_2 - vector_1;
 
     ScalarVariable computed_sol(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     computed_sol.set_all(0.0);
 
-    solver.solve_pressure<decltype(define_stride_x(g)), 0>(rhs_delta, computed_sol, x_handler);
+    solver.solve_pressure<decltype(define_stride_x(g)), 0>(rhs, computed_sol, x_handler);
 
     ScalarVariable Acomp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector_delta, Acomp, rhs_delta, x_handler);
+    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Acomp, rhs, x_handler);
 
     Real max_res = 0.0;
     Real tolerance = 1e-2;
@@ -171,10 +165,10 @@ bool solve_and_check(PressureSolver &solver, ScalarVariable &rhs_1,
         for (Dim k = 0; k < g.Nz; ++k)
             for (Dim j = 0; j < g.Ny; ++j)
                 for (Dim i = 0; i < g.Nx; ++i)
-                    if (std::abs(vector_delta.get(i, j, k) - computed_sol.get(i, j, k)) > tolerance)
+                    if (std::abs(vector.get(i, j, k) - computed_sol.get(i, j, k)) > tolerance)
                     {
                         printf("Mismatch (i,j,k)=(%d,%d,%d): expected %f, got %f\n",
-                               i, j, k, vector_delta.get(i, j, k), computed_sol.get(i, j, k));
+                               i, j, k, vector.get(i, j, k), computed_sol.get(i, j, k));
                         return false;
                     }
 
@@ -192,10 +186,8 @@ int main()
     printf("Grid setup: Nx=%d, Ny=%d, Nz=%d, dx=%f, dy=%f, dz=%f, dt=%f\n",
            g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt);
 
-    ScalarVariable vector_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    ScalarVariable rhs_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    ScalarVariable vector_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    ScalarVariable rhs_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    ScalarVariable vector(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    ScalarVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
     BoundaryFunctions p_boundary;
     std::vector<std::string> exact_bc = {"-sin(t)*2*1e5*cos(x)*sin(y)*(sin(z)-cos(z))"};
@@ -210,14 +202,13 @@ int main()
     p_exact.set_string_expression(exact_bc);
     p_boundary.set_string_expression(derived_bc);
 
-    initialize_fields(g, vector_1, rhs_1, p_boundary, g.dt);
-    initialize_fields(g, vector_2, rhs_2, p_boundary, g.dt + g.dt);
-    PressureSolver solver = setup_solver(g, p_boundary, g.dt + g.dt);
+    initialize_fields(g, vector, rhs, p_boundary, g.dt);
+    PressureSolver solver = setup_solver(g, p_boundary, g.dt);
 
     auto stride_x = define_stride_x(g);
     DimensionsHandlerVector<decltype(stride_x)> x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx, stride_x);
 
-    bool success = solve_and_check(solver, rhs_1, vector_1, rhs_2, vector_2, g, x_handler);
+    bool success = solve_and_check(solver, rhs, vector, g, x_handler);
 
     if (success)
         std::cout << "[PASS] Solver matrix and inversion are consistent.\n";
