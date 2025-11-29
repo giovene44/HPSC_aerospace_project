@@ -65,7 +65,7 @@ void initialize_fields(const Grid &g,
 
                     // Apply boundary BCs on RHS
 
-                    if (i == 0 || i == g.Nx - 1 || j == 0 || j == g.Ny - 1 || k == 0 || k == g.Nz - 1)
+                    if (i == 0 || i == g.Nx - 1 )
                     {
                         Real x_coord, y_coord, z_coord;
                             x_coord = i * g.dx;
