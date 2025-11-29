@@ -174,7 +174,7 @@ public:
      * Mimics the coefficients used in block_solver for consistency check.
      */
     template <Dim direction, typename StrideFunc>
-    void apply_matrix_operator(const ScalarVariable &x_scalar, ScalarVariable &rhs_scalar, const DimensionsHandlerScalar<StrideFunc> &dim_handler)
+    void apply_matrix_operator(const ScalarVariable &x_scalar, ScalarVariable &rhs_scalar, ScalarVariable &true_rhs, const DimensionsHandlerScalar<StrideFunc> &dim_handler)
     {
         // 1. Determine Dimensions and Grid Spacing based on direction
         Dim N = (direction == 0) ? Nx : ((direction == 1) ? Ny : Nz);

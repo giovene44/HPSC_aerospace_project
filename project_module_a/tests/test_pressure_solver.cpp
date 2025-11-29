@@ -1,135 +1,228 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
-#include <stdexcept>
-#include <chrono>
 #include <vector>
 #include <iomanip>
-
 #include "navier_stokes_brinkman.hpp"
 
+// ===============================================================
+// 1. Setup Grid Parameters
+// ===============================================================
+struct Grid
+{
+    Dim Nx, Ny, Nz;
+    Real dx, dy, dz;
+    Real dt;
+};
+
+Grid setup_grid(Real dim_x, Real dim_y, Real dim_z, Dim Nx, Dim Ny, Dim Nz, Real dt)
+{
+    Grid g;
+    g.Nx = Nx;
+    g.Ny = Ny;
+    g.Nz = Nz;
+    g.dx = dim_x / (Nx - 0.5);
+    g.dy = dim_y / (Ny - 0.5);
+    g.dz = dim_z / (Nz - 0.5);
+    g.dt = dt;
+    return g;
+}
+
+// ===============================================================
+// 3. Initialize Fields (interior + RHS)
+// ===============================================================
+void initialize_fields(const Grid &g,
+                       ScalarVariable &vector,
+                       ScalarVariable &rhs,
+                       BoundaryFunctions &p_boundary,
+                       Real t)
+{
+
+    // Initialize interior
+        for (int k = 0; k < g.Nz; ++k)
+            for (int j = 0; j < g.Ny; ++j)
+                for (int i = 0; i < g.Nx; ++i)
+                {
+                    Real x, y, z;
+                    x = i * g.dx;
+                    y = j * g.dy;
+                    z = k * g.dz;
+
+                    vector.set(i, j, k) = 2*1e5*sin(t)*sin(x)*sin(y)*(sin(z)-cos(z));
+                }
+
+    // Apply known faces
+    // apply_known_faces(vector, u_boundary, g, gamma_field, 0.0);
+
+    // Build RHS = (I - Dxx) * vector
+        for (Dim k = 0; k < g.Nz; ++k)
+            for (Dim j = 0; j < g.Ny; ++j)
+                for (Dim i = 0; i < g.Nx; ++i)
+                {
+                    Real val = vector.get(i, j, k);
+                    Real sd = vector.second_derivative(0, i, j, k);
+                    Real rhs_val = val - sd;
+
+                    // Apply boundary BCs on RHS
+
+                    if (i == 0 || i == g.Nx - 1 || j == 0 || j == g.Ny - 1 || k == 0 || k == g.Nz - 1)
+                    {
+                        Real x_coord, y_coord, z_coord;
+                            x_coord = i * g.dx;
+                            y_coord = j * g.dy;
+                            z_coord = k * g.dz;
+
+                            rhs_val = p_boundary.value<>(x_coord, y_coord, z_coord, t);
+                            vector.set(i, j, k) = rhs_val;
+                    }
+                    rhs.set(i, j, k) = rhs_val;
+                }
+}
+
+// ===============================================================
+// 4. Setup Solver & Strides
+// ===============================================================
+PressureSolver setup_solver(const Grid &g, BoundaryFunctions &p_boundary, Real t)
+{
+    PressureSolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, t, p_boundary);
+    solver.p_boundary = p_boundary;
+    return solver;
+}
+
+auto define_stride_x(const Grid &g)
+{
+    return [=](Dim j, Dim k)
+    { return j * g.Nx + k * g.Nx * g.Ny; };
+}
+
+// ===============================================================
+// 5. Diagnostics: Check matrix operator & residual
+// ===============================================================
+void check_matrix_operator(PressureSolver &solver, const ScalarVariable &vector,
+                           ScalarVariable &rhs, const Grid &g,
+                           DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler)
+{
+    ScalarVariable Ax(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector, Ax, rhs, x_handler);
+    std::cout << "Matrix operator diagnostic on boundaries and interior:\n";
+    // Optionally loop and print residuals
+    for (Dim k = 0; k < g.Nz; ++k)
+        for (Dim j = 0; j < g.Ny; ++j)
+            for (Dim i = 0; i < g.Nx; ++i)
+            {
+                Real residual = std::abs(Ax.get(i, j, k) - rhs.get(i, j, k));
+                if (residual > 1e-5)
+                {
+                    std::cout << std::fixed << std::setprecision(6)
+                              << "At (i,j,k)=(" << i << "," << j << "," << k << "): "
+                              << "A*vector = " << Ax.get(i, j, k)
+                              << ", rhs = " << rhs.get(i, j, k)
+                              << ", |A*vector - rhs| = " << residual << "\n";
+                }
+            }
+}
+
+// ===============================================================
+// 6. Solve and check solution
+// ===============================================================
+bool solve_and_check(PressureSolver &solver, ScalarVariable &rhs_1,
+                     ScalarVariable &vector_1, ScalarVariable &rhs_2,
+                     ScalarVariable &vector_2, const Grid &g,
+                     DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler)
+{
+    ScalarVariable rhs_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    ScalarVariable vector_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+
+    rhs_delta = rhs_2 - rhs_1;
+    vector_delta = vector_2 - vector_1;
+
+    ScalarVariable computed_sol(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    computed_sol.set_all(0.0);
+
+    solver.solve_pressure<decltype(define_stride_x(g)), 0>(rhs_delta, computed_sol, x_handler);
+
+    ScalarVariable Acomp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector_delta, Acomp, rhs_delta, x_handler);
+
+    Real max_res = 0.0;
+    Real tolerance = 1e-2;
+    /*
+
+      for (int cc = 0; cc < 3; ++cc)
+        for (Dim k = 0; k < g.Nz; ++k)
+            for (Dim j = 0; j < g.Ny; ++j)
+                for (Dim i = 0; i < g.Nx; ++i)
+                {
+                    Real residual = std::abs(Acomp.value(cc, i, j, k) - rhs.value(cc, i, j, k));
+                    if (residual > tolerance)
+                    {
+                        printf("Residual error at comp=%d (i,j,k)=(%d,%d,%d): |A*sol - rhs| = %f (tolerance = %f)\n",
+                               cc, i, j, k, residual, tolerance);
+                        printf("  A*sol = %f, rhs = %f\n", Acomp.value(cc, i, j, k), rhs.value(cc, i, j, k));
+                        std::cout << "[FAIL] Residual exceeds tolerance.\n";
+                        return false;
+                    }
+                    max_res = std::max(max_res, residual);
+                }
+    std::cout << "Max |A*computed_sol - rhs| = " << max_res << "\n";
+
+    */
+
+        for (Dim k = 0; k < g.Nz; ++k)
+            for (Dim j = 0; j < g.Ny; ++j)
+                for (Dim i = 0; i < g.Nx; ++i)
+                    if (std::abs(vector_delta.get(i, j, k) - computed_sol.get(i, j, k)) > tolerance)
+                    {
+                        printf("Mismatch (i,j,k)=(%d,%d,%d): expected %f, got %f\n",
+                               i, j, k, vector_delta.get(i, j, k), computed_sol.get(i, j, k));
+                        return false;
+                    }
+
+    return true;
+}
+
+// ===============================================================
+// 7. Main function
+// ===============================================================
 int main()
 {
-    // 1. Setup Grid Parameters
-    Real dim_x = 1.0, dim_y = 1.0, dim_z = 1.0;
-    Dim Nx = 5;
-    Dim Ny = 5;
-    Dim Nz = 5;
+    constexpr Real two_pi = 2.0 * M_PI;
+    Grid g = setup_grid(two_pi, two_pi, two_pi, 20, 20, 20, 0.002f);
 
-    Real dx, dy, dz;
-    dx = dim_x / (Nx - 0.5);
-    dy = dim_y / (Ny - 0.5);
-    dz = dim_z / (Nz - 0.5);
-    Real dt = 0.01;
+    printf("Grid setup: Nx=%d, Ny=%d, Nz=%d, dx=%f, dy=%f, dz=%f, dt=%f\n",
+           g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt);
 
-    // 2. Setup Fields (ScalarVariables for Pressure)
-    ScalarVariable p_exact(Nx, Ny, Nz, dx, dy, dz);
-    ScalarVariable p_rhs(Nx, Ny, Nz, dx, dy, dz);
-    ScalarVariable p_computed(Nx, Ny, Nz, dx, dy, dz);
+    ScalarVariable vector_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    ScalarVariable rhs_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    ScalarVariable vector_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    ScalarVariable rhs_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
-    // Initialize exact pressure with test data
-    for (Dim k = 0; k < Nz; ++k)
-    {
-        for (Dim j = 0; j < Ny; ++j)
-        {
-            for (Dim i = 0; i < Nx; ++i)
-            {
-                // Fill with arbitrary values
-                p_exact.set(i, j, k) = static_cast<Real>(i + j + k + 1.0);
-            }
-        }
-    }
-
-    // 3. Setup Boundaries
-    // Pressure boundary conditions are typically 1 component ("0.0")
     BoundaryFunctions p_boundary;
-    std::vector<std::string> zero_bc = {"0.0", "0.0", "0.0"};
-    p_boundary.set_string_expression(zero_bc);
+    std::vector<std::string> exact_bc = {"-sin(t)*2*1e5*cos(x)*sin(y)*(sin(z)-cos(z))"};
 
-    // 4. Instantiate Solver
-    PressureSolver pressure_solver(Nx, Ny, Nz, dx, dy, dz, dt, p_boundary);
+    std::vector<std::string> derived_bc = {
+        "2*1e5*sin(t)*sin(x)*sin(y)*(sin(z)-cos(z))",
+        "-2*1e5*sin(t)*cos(x)*cos(y)*(sin(z)-cos(z))",
+        "-2*1e5*sin(t)*cos(x)*sin(y)*(sin(z)+cos(z))"
+    };
 
-    // 5. Define Strides
-    // We use [=] to capture Nx, Ny, Nz by value
-    auto stride_x = [=](Dim j, Dim k)
-    { return j * Nx + k * Nx * Ny; };
+    BoundaryFunctions p_exact;
+    p_exact.set_string_expression(exact_bc);
+    p_boundary.set_string_expression(derived_bc);
 
-    // 6. Define Handler
-    DimensionsHandlerScalar<decltype(stride_x)> x_scalar_handler(Nx, Ny, Nz, dx, stride_x);
+    initialize_fields(g, vector_1, rhs_1, p_boundary, g.dt);
+    initialize_fields(g, vector_2, rhs_2, p_boundary, g.dt + g.dt);
+    PressureSolver solver = setup_solver(g, p_boundary, g.dt + g.dt);
 
-    // 7. Run Test
-    try
-    {
-        std::cout << "--- Testing Pressure Solver Consistency (X-Direction) ---" << std::endl;
+    auto stride_x = define_stride_x(g);
+    DimensionsHandlerVector<decltype(stride_x)> x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx, stride_x);
 
-        // A. Apply Matrix A * x -> rhs
-        // Template args: <direction, StrideFunc> (Order may vary based on your class definition, checking previous context...)
-        // Previous context defined: template <Dim direction, typename StrideFunc> for PressureSolver functions.
-        pressure_solver.apply_matrix_operator<0, decltype(stride_x)>(p_exact, p_rhs, x_scalar_handler);
+    bool success = solve_and_check(solver, rhs_1, vector_1, rhs_2, vector_2, g, x_handler);
 
-        std::cout << "Matrix application successful." << std::endl;
+    if (success)
+        std::cout << "[PASS] Solver matrix and inversion are consistent.\n";
+    else
+        std::cout << "[FAIL] Solver test failed.\n";
 
-        // B. Solve A * x_computed = rhs
-        p_computed.set_all(0.0);
-
-        pressure_solver.block_solver<0, decltype(stride_x)>(p_rhs, p_computed, x_scalar_handler);
-
-        std::cout << "Block solver successful." << std::endl;
-
-        // 8. Element-wise Consistency Check
-        Real tolerance = 1e-4;
-        bool failed = false;
-
-        std::cout << std::fixed << std::setprecision(8);
-
-        for (Dim k = 0; k < Nz; ++k)
-        {
-            for (Dim j = 0; j < Ny; ++j)
-            {
-                for (Dim i = 0; i < Nx; ++i)
-                {
-                    Real original = p_exact.get(i, j, k);
-                    Real computed = p_computed.get(i, j, k);
-                    Real diff = std::abs(original - computed);
-
-                    if (diff > tolerance)
-                    {
-                        std::cerr << "\n[ERROR] Mismatch found!" << std::endl;
-                        std::cerr << "  Index: (" << i << ", " << j << ", " << k << ")" << std::endl;
-                        std::cerr << "  Original: " << original << std::endl;
-                        std::cerr << "  Computed: " << computed << std::endl;
-                        std::cerr << "  Diff:     " << diff << std::endl;
-
-                        failed = true;
-                        break; // Break innermost
-                    }
-                }
-                if (failed)
-                    break;
-            }
-            if (failed)
-                break;
-        }
-
-        if (!failed)
-        {
-            std::cout << "\n--------------------------------------------------" << std::endl;
-            std::cout << "  [PASS] Pressure Solver matrix and inversion are consistent." << std::endl;
-            std::cout << "--------------------------------------------------" << std::endl;
-        }
-        else
-        {
-            std::cout << "\n--------------------------------------------------" << std::endl;
-            std::cout << "  [FAIL] Test aborted due to mismatch." << std::endl;
-            std::cout << "--------------------------------------------------" << std::endl;
-            return -1;
-        }
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "Test Failed with Exception: " << e.what() << std::endl;
-        return -1;
-    }
-
-    return 0;
+    return success ? 0 : -1;
 }

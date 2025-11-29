@@ -157,7 +157,6 @@ public:
         }
         else 
             return 0.0; // g not used at the boundary!
-
     }
 
     Real getGradient_y(Dim i, Dim j, Dim k) const
@@ -265,6 +264,56 @@ public:
             }
         }
         return gradient;
+    }
+
+    Real second_derivative(int direction, Dim i, Dim j, Dim k) const
+    {
+        if (direction == 0) // x-direction
+        {
+            if (i > 0 && i < Nx - 1)
+            {
+                Real lhs = get(i - 1, j, k);
+                Real center = get(i, j, k);
+                Real rhs = get(i + 1, j, k);
+                return (lhs - 2 * center + rhs) / (dx * dx);
+            }
+            else
+            {
+                return 0.0;
+            }
+        }
+        else if (direction == 1) // y-direction
+        {
+            if (j > 0 && j < Ny - 1)
+            {
+                Real lhs = get(i, j - 1, k);
+                Real center = get(i, j, k);
+                Real rhs = get(i, j + 1, k);
+                return (lhs - 2 * center + rhs) / (dy * dy);
+            }
+            else
+            {
+                return 0.0;
+            }
+        }
+        else if (direction == 2) // z-direction
+        {
+            if (k > 0 && k < Nz - 1)
+            {
+                Real lhs = get(i, j, k - 1);
+                Real center = get(i, j, k);
+                Real rhs = get(i, j, k + 1);
+                return (lhs - 2 * center + rhs) / (dz * dz);
+            }
+            else
+            {
+                return 0.0;
+            }
+        }
+        else
+        {
+            throw std::invalid_argument("Invalid direction for second_derivative");
+        }
     }
 
     inline Dim get_Nx() const { return Nx; }
