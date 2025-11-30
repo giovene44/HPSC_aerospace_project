@@ -61,6 +61,12 @@ protected:
             x[i] = rhs_prime[i] - c_prime[i] * x[i + 1];
         }
     }
+
+public:
+    void set_t(Real t)
+    {
+        this->t = t;
+    }
 };
 
 // Definition of pure virtual destructor
@@ -509,18 +515,17 @@ public:
         Dim Comp1 = dim_handler.Comp1;
         Dim Comp2 = dim_handler.Comp2;
         Dim Comp3 = dim_handler.Comp3;
-        const Real t_prev = (t - dt < 0.0f) ? 0.0f : t - dt;
 
         auto update_bc = [&](Dim i, Dim j, Dim k)
         {
             Real x = i * dx, y = j * dy, z = k * dz;
             if (t == 0.0f)
             {
-                solution.set(Comp1, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t);
-                solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t);
-                solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t);
+                printf("IF YOU SEE THIS MESSAGE IN VelocitySolver::handle_known_face THEN SOMETHING IS WRONG\n");
                 return;
             }
+            Real t_prev = t - dt;
+
             solution.set(Comp1, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t) - u_boundary.value<0>(x + dx / Real(2.0), y, z, t_prev);
             solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t) - u_boundary.value<1>(x, y + dy / Real(2.0), z, t_prev);
             solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t) - u_boundary.value<2>(x, y, z + dz / Real(2.0), t_prev);

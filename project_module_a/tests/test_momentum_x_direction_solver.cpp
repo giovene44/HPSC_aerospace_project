@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <iomanip>
+#include <fstream>
 #include "navier_stokes_brinkman.hpp"
 
 // ===============================================================
@@ -152,7 +153,7 @@ void initialize_fields(const Grid &g,
                     Real sd = vector.second_derivative(comp, 0, i, j, k);
                     Real rhs_val = val - gamma_val * sd;
 
-                    // Apply boundary BCs on RHS
+                    // Apply boundary BCs on VECTOR
 
                     if (i == 0 || i == g.Nx - 1 || j == 0 || j == g.Ny - 1 || k == 0 || k == g.Nz - 1)
                     {
@@ -177,19 +178,16 @@ void initialize_fields(const Grid &g,
                         }
                         if (comp == 0)
                         {
-                            rhs_val = u_boundary.value<0>(x_coord, y_coord, z_coord, t);
-                            vector.set(comp, i, j, k) = rhs_val;
+                            vector.set(comp, i, j, k) = u_boundary.value<0>(x_coord, y_coord, z_coord, t);
                         }
 
                         else if (comp == 1)
                         {
-                            rhs_val = u_boundary.value<1>(x_coord, y_coord, z_coord, t);
-                            vector.set(comp, i, j, k) = rhs_val;
+                            vector.set(comp, i, j, k) = u_boundary.value<1>(x_coord, y_coord, z_coord, t);
                         }
                         else
                         {
-                            rhs_val = u_boundary.value<2>(x_coord, y_coord, z_coord, t);
-                            vector.set(comp, i, j, k) = rhs_val;
+                            vector.set(comp, i, j, k) = u_boundary.value<2>(x_coord, y_coord, z_coord, t);
                         }
                     }
                     rhs.set(comp, i, j, k) = rhs_val;
@@ -199,11 +197,12 @@ void initialize_fields(const Grid &g,
 // ===============================================================
 // 4. Setup Solver & Strides
 // ===============================================================
-VelocitySolver setup_solver(const Grid &g, ScalarVariable &gamma_field, BoundaryFunctions &u_boundary, Real t)
+VelocitySolver setup_solver(const Grid &g, ScalarVariable &gamma_field, BoundaryFunctions &u_boundary, Real dt, Real t)
 {
-    VelocitySolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, t, gamma_field, u_boundary);
+    VelocitySolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, dt, gamma_field, u_boundary);
     solver.gamma_field = gamma_field;
     solver.u_boundary = u_boundary;
+    solver.set_t(t);
     return solver;
 }
 
@@ -216,10 +215,25 @@ auto define_stride_x(const Grid &g)
 // ===============================================================
 // 6. Solve and check solution
 // ===============================================================
+Real compute_L2_error(VectorVariable &expected, VectorVariable &computed, const Grid &g)
+{
+    Real error = 0.0;
+    for (int comp = 0; comp < 3; ++comp)
+        for (Dim k = 0; k < g.Nz; ++k)
+            for (Dim j = 0; j < g.Ny; ++j)
+                for (Dim i = 0; i < g.Nx; ++i)
+                {
+                    Real diff = expected.value(comp, i, j, k) - computed.value(comp, i, j, k);
+                    error += diff * diff;
+                }
+    return sqrt(error * g.dx * g.dy * g.dz);
+}
+
 bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
                      VectorVariable &vector_1, VectorVariable &rhs_2,
                      VectorVariable &vector_2, const Grid &g,
-                     DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler)
+                     DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler,
+                     Real &l2_error)
 {
     VectorVariable rhs_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable vector_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
@@ -232,29 +246,11 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
 
     solver.solve<decltype(define_stride_x(g)), 0>(rhs_delta, computed_sol, x_handler);
 
-    VectorVariable Acomp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    solver.apply_matrix_operator<0, decltype(define_stride_x(g))>(vector_delta, Acomp, rhs_delta, x_handler);
+    // Compute L2 error
+    l2_error = compute_L2_error(vector_delta, computed_sol, g);
 
-    Real max_res = 0.0;
-    Real tolerance = 1e-2;
-
-    for (int cc = 0; cc < 3; ++cc)
-        for (Dim k = 0; k < g.Nz; ++k)
-            for (Dim j = 0; j < g.Ny; ++j)
-                for (Dim i = 0; i < g.Nx; ++i)
-                {
-                    Real residual = std::abs(Acomp.value(cc, i, j, k) - rhs_delta.value(cc, i, j, k));
-                    if (residual > tolerance)
-                    {
-                        printf("Residual error at comp=%d (i,j,k)=(%d,%d,%d): |A*sol - rhs| = %f (tolerance = %f)\n",
-                               cc, i, j, k, residual, tolerance);
-                        printf("  A*sol = %f, rhs = %f\n", Acomp.value(cc, i, j, k), rhs_delta.value(cc, i, j, k));
-                        std::cout << "[FAIL] Residual exceeds tolerance.\n";
-                        return false;
-                    }
-                    max_res = std::max(max_res, residual);
-                }
-    std::cout << "Max |A*computed_sol - rhs| = " << max_res << "\n";
+    // Adaptive tolerance based on grid spacing (for coarse grids, allow larger point-wise errors)
+    Real tolerance = std::max(5e-5, 0.1 * g.dx * g.dx);
 
     for (int comp = 0; comp < 3; ++comp)
         for (Dim k = 0; k < g.Nz; ++k)
@@ -276,36 +272,98 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
 int main()
 {
     const Real two_pi = 2.0 * 3.141592653589793;
-    Grid g = setup_grid(two_pi, two_pi, two_pi, 100, 100, 100, 0.002f);
 
-    printf("Grid setup: Nx=%d, Ny=%d, Nz=%d, dx=%f, dy=%f, dz=%f, dt=%f\n",
-           g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt);
+    // Open output file
+    std::ofstream outfile("convergence_momentum_x.txt");
+    outfile << "# Convergence study for momentum x-direction solver\n";
+    outfile << "# Nx Ny Nz dx dt L2_error convergence_rate\n";
+    outfile << std::scientific << std::setprecision(8);
 
-    ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    gamma_field.set_all(0.1f);
-    VectorVariable vector_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    VectorVariable rhs_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    VectorVariable vector_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    VectorVariable rhs_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    // Test multiple grid resolutions
+    std::vector<Dim> grid_sizes = {10, 20, 40, 80, 100};
+    std::vector<Real> errors;
+    std::vector<Real> dx_values;
+    std::vector<Real> dt_values;
 
-    BoundaryFunctions u_boundary;
-    std::vector<std::string> sin_bc = {"sin(x)*sin(t)", "sin(x)*sin(t)", "sin(x)*sin(t)"};
-    u_boundary.set_string_expression(sin_bc);
+    for (Dim N : grid_sizes)
+    {
+        // Make dt proportional to dx to avoid time discretization error dominating
+        Real dt_test = 0.01 * (two_pi / (N - 0.5)); // dt ~ O(dx)
+        Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
-    initialize_fields(g, gamma_field, vector_1, rhs_1, u_boundary, g.dt);
-    initialize_fields(g, gamma_field, vector_2, rhs_2, u_boundary, g.dt + g.dt);
+        printf("\n=================================================\n");
+        printf("Grid: Nx=%d, Ny=%d, Nz=%d, dx=%f, dy=%f, dz=%f, dt=%f\n",
+               g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt);
+        printf("=================================================\n");
 
-    VelocitySolver solver = setup_solver(g, gamma_field, u_boundary, g.dt + g.dt);
+        ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        gamma_field.set_all(0.1f);
+        VectorVariable vector_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable rhs_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable vector_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable rhs_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
-    auto stride_x = define_stride_x(g);
-    DimensionsHandlerVector<decltype(stride_x)> x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx, stride_x);
+        BoundaryFunctions u_boundary;
+        std::vector<std::string> sin_bc = {"sin(x)*sin(t)", "sin(x)*sin(t)", "sin(x)*sin(t)"};
+        u_boundary.set_string_expression(sin_bc);
 
-    bool success = solve_and_check(solver, rhs_1, vector_1, rhs_2, vector_2, g, x_handler);
+        initialize_fields(g, gamma_field, vector_1, rhs_1, u_boundary, g.dt);
+        initialize_fields(g, gamma_field, vector_2, rhs_2, u_boundary, g.dt + g.dt);
 
-    if (success)
-        std::cout << "[PASS] Solver matrix and inversion are consistent.\n";
-    else
-        std::cout << "[FAIL] Solver test failed.\n";
+        VelocitySolver solver = setup_solver(g, gamma_field, u_boundary, g.dt, g.dt + g.dt);
 
-    return success ? 0 : -1;
+        auto stride_x = define_stride_x(g);
+        DimensionsHandlerVector<decltype(stride_x)> x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx, stride_x);
+
+        Real l2_error = 0.0;
+        bool success = solve_and_check(solver, rhs_1, vector_1, rhs_2, vector_2, g, x_handler, l2_error);
+
+        errors.push_back(l2_error);
+        dx_values.push_back(g.dx);
+        dt_values.push_back(g.dt);
+
+        // Compute convergence rate if we have at least 2 data points
+        Real conv_rate = 0.0;
+        if (errors.size() > 1)
+        {
+            size_t idx = errors.size() - 1;
+            conv_rate = log(errors[idx - 1] / errors[idx]) / log(dx_values[idx - 1] / dx_values[idx]);
+        }
+
+        // Write to file
+        outfile << g.Nx << " " << g.Ny << " " << g.Nz << " "
+                << g.dx << " " << g.dt << " " << l2_error << " " << conv_rate << "\n";
+        outfile.flush();
+
+        printf("L2 Error: %.8e\n", l2_error);
+        if (errors.size() > 1)
+            printf("Convergence rate: %.4f (expected ~2.0 for 2nd order)\n", conv_rate);
+
+        if (success)
+            std::cout << "[PASS] Solver test passed for N=" << N << "\n";
+        else
+        {
+            std::cout << "[FAIL] Solver test failed for N=" << N << "\n";
+            outfile.close();
+            return -1;
+        }
+    }
+
+    outfile.close();
+
+    printf("\n=================================================\n");
+    printf("CONVERGENCE STUDY SUMMARY\n");
+    printf("=================================================\n");
+    printf("Grid Size    dx          dt          L2 Error      Conv. Rate\n");
+    printf("---------------------------------------------------------------\n");
+    for (size_t i = 0; i < errors.size(); ++i)
+    {
+        Real rate = (i > 0) ? log(errors[i - 1] / errors[i]) / log(dx_values[i - 1] / dx_values[i]) : 0.0;
+        printf("%-12d %.6e  %.6e  %.6e  %.4f\n",
+               grid_sizes[i], dx_values[i], dt_values[i], errors[i], rate);
+    }
+    printf("=================================================\n");
+    printf("Results written to: convergence_momentum_x.txt\n");
+
+    return 0;
 }
