@@ -30,22 +30,23 @@ void NavierStokesBrinkmann::center_pressure(ScalarVariable &pressure_field)
 
     for (Dim idx = 0; idx < Nx; ++idx)
     {
-        for(Dim idy = 0; idy< Ny; ++idy)
+        for (Dim idy = 0; idy < Ny; ++idy)
         {
-            for(Dim idz = 0; idz < Nz; ++idz)
+            for (Dim idz = 0; idz < Nz; ++idz)
             {
                 Dim weight = 1;
-                if (idx == 0 || idx == Nx - 1) weight *= 0.5;
-                if (idy == 0 || idy == Ny - 1) weight *= 0.5;
-                if (idz == 0 || idz == Nz - 1) weight *= 0.5;
+                if (idx == 0 || idx == Nx - 1)
+                    weight *= 0.5;
+                if (idy == 0 || idy == Ny - 1)
+                    weight *= 0.5;
+                if (idz == 0 || idz == Nz - 1)
+                    weight *= 0.5;
                 average += pressure_field.get(idx, idy, idz) * weight;
 
                 total_elements += weight;
-
             }
         }
     }
-
 
     average /= total_elements;
 
@@ -109,16 +110,19 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
     //   g = f - ∇p + (ν/2)(Dxx*η0 + Dyy*ζ0 + Dzz*u0) - (ν / (2k)) * u0
     // -------------------------------------------------------------------------
     pressure_predictor = pressure_solution + other_phi;
-    
+
     gradient_pressure_predictor.set(0) = pressure_predictor.getGradient_x();
     gradient_pressure_predictor.set(1) = pressure_predictor.getGradient_y();
     gradient_pressure_predictor.set(2) = pressure_predictor.getGradient_z();
 
     // Define a target index for debugging prints to avoid console flood
-    constexpr Dim DEBUG_I = 1;
+    /*
+     constexpr Dim DEBUG_I = 1;
     constexpr Dim DEBUG_J = 1;
     constexpr Dim DEBUG_K = 1;
     constexpr Dim DEBUG_COMP = 0; // Check the x-component
+
+    */
 
     for (Dim comp = 0; comp < vector_rhs.size(); ++comp)
     {
@@ -242,13 +246,12 @@ void NavierStokesBrinkmann::compute_rhs_pressure()
         }
     }
 
-
-    //We Impose div(u)=0 at boundaries:
+    // We Impose div(u)=0 at boundaries:
 
     for (Dim j = 1; j < Ny; ++j)
     {
         for (Dim k = 1; k < Nz; ++k)
-        { 
+        {
             rhs.set(0, j, k) = 0.0;
         }
     }
@@ -264,27 +267,26 @@ void NavierStokesBrinkmann::compute_rhs_pressure()
     for (Dim i = 1; i < Nx; ++i)
     {
         for (Dim j = 1; j < Ny; ++j)
-        { 
+        {
             rhs.set(i, j, 0) = 0.0;
         }
     }
 
-
     rhs.set(0, 0, 0) = 0.0;
 
     // edge (x,0,0):
-    for(Dim i = 1; i < Nx; ++i)
+    for (Dim i = 1; i < Nx; ++i)
     {
         rhs.set(i, 0, 0) = 0.0;
     }
 
     // edge (0,y,0):
-    for(Dim j = 1; j < Ny; ++j)
+    for (Dim j = 1; j < Ny; ++j)
     {
         rhs.set(0, j, 0) = 0.0;
     }
     // edge (0,0,z):
-    for(Dim k = 1; k < Nz; ++k)
+    for (Dim k = 1; k < Nz; ++k)
     {
         rhs.set(0, 0, k) = 0.0;
     }
@@ -320,7 +322,7 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
     velocity_time_series.emplace_back(velocity_solution);
     pressure_time_series.emplace_back(pressure_solution);
 
-       // --- Time Stepping Loop ---
+    // --- Time Stepping Loop ---
     for (Real t = dt; t <= T; t += dt)
     {
         // 1. Momentum Predictor Step (Calculate u*)

@@ -200,25 +200,12 @@ auto define_stride_y(const Grid &g)
 }
 
 // ===============================================================
-// 5. Diagnostics: Check matrix operator & residual
-// ===============================================================
-void check_matrix_operator(VelocitySolver &solver, const VectorVariable &vector,
-                           VectorVariable &rhs, const Grid &g,
-                           DimensionsHandlerVector<decltype(define_stride_y(g))> &y_handler)
-{
-    VectorVariable Ax(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    solver.apply_matrix_operator<1, decltype(define_stride_y(g))>(vector, Ax, rhs, y_handler);
-    std::cout << "Matrix operator diagnostic on boundaries and interior:\n";
-    // Optionally loop and print residuals
-}
-
-// ===============================================================
 // 6. Solve and check solution
 // ===============================================================
 bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
                      VectorVariable &vector_1, VectorVariable &rhs_2,
                      VectorVariable &vector_2, const Grid &g,
-                     DimensionsHandlerVector<decltype(define_stride_y(g))> &y_handler)
+                     const DimensionsHandlerVector<decltype(define_stride_y(g))> &y_handler)
 {
     VectorVariable rhs_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable vector_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
@@ -234,7 +221,6 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
     VectorVariable Acomp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     solver.apply_matrix_operator<1, decltype(define_stride_y(g))>(vector_delta, Acomp, rhs_delta, y_handler);
 
-    Real max_res = 0.0;
     Real tolerance = 1e-2;
     /*
 

@@ -62,10 +62,13 @@ int main()
     // We must capture Nx, Ny by value [=] so the lambda can see them.
     auto stride_x = [=](Dim j, Dim k)
     { return j * Nx + k * Nx * Ny; };
-    auto stride_y = [=](Dim i, Dim k)
+    /*
+       auto stride_y = [=](Dim i, Dim k)
     { return i + k * Nx * Ny; };
     auto stride_z = [=](Dim i, Dim j)
     { return i + j * Nx; };
+
+    */
 
     // 6. Define Handlers
     DimensionsHandlerVector<decltype(stride_x)> x_vector_handler(Nx, Ny, Nz, 0, 1, 2, dx, stride_x);
