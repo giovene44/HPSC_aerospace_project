@@ -297,44 +297,71 @@ void solve(VelocitySolver &solver,
            Real beta,
            Real &l2_error)
 {
-    VectorVariable u_true_next(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    VectorVariable rhs_true_next(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-
-    initialize_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_n_plus_1_start, nu);
-    construct_g_function(g_function, rhs_true_next, u_1, eta_1, zeta_1, g, nu);
-    compute_xi_function(xi_function, g_function, g, u_1, beta);
-
     VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable temp_solution(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable u_true_next(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable rhs_true_next(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable u_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable eta_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable zeta_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
-    // iteration => t = t_n_plus_1_start
-    temp_solution.set_all(0.0f);
-    // rhs = xi_function - eta_1
-    rhs = xi_function - eta_1;
-    // (I - gamma*Dxx)(eta_2 - eta_1) = rhs
-    solver.solve<decltype(define_stride_x(g)), 0>(rhs, temp_solution, x_handler);
-    // eta_2 = temp_solution + eta_1
-    eta_2 = temp_solution + eta_1;
+    // Initialize u_n, eta_n, zeta_n from input (at t_n)
+    u_n = u_1;
+    eta_n = eta_1;
+    zeta_n = zeta_1;
 
-    // rhs = eta_2 - zeta_1
-    rhs = eta_2 - zeta_1;
-    temp_solution.set_all(0.0f);
-    // (I - gamma*Dyy)(zeta_2 - zeta_1) = rhs
-    solver.solve<decltype(define_stride_y(g)), 1>(rhs, temp_solution, y_handler);
-    // zeta_2 = temp_solution + zeta_1
-    zeta_2 = temp_solution + zeta_1;
+    // Time-stepping loop from t_n_plus_1_start to T_final
+    int num_steps = (int)((T_final - t_n_plus_1_start) / g.dt) + 1;
+    Real t_current = t_n_plus_1_start;
 
-    // rhs = zeta_2 - u_1
-    rhs = zeta_2 - u_1;
-    temp_solution.set_all(0.0f);
-    // (I - gamma*Dzz)(u_2 - u_1) = rhs
-    solver.solve<decltype(define_stride_z(g)), 2>(rhs, temp_solution, z_handler);
-    // u_2 = temp_solution + u_1
-    VectorVariable u_2_comp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    u_2_comp = temp_solution + u_1;
+    for (int step = 0; step < num_steps; ++step)
+    {
+        // Update solver time to current time step
+        solver.set_t(t_current);
 
-    // Compute L2 error u_next_comp vs u_true_next
-    l2_error = compute_L2_error(u_true_next, u_2_comp, g);
+        // Compute true solution at current time for RHS computation
+        initialize_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_current, nu);
+
+        // Construct g_function and xi_function for current time step
+        construct_g_function(g_function, rhs_true_next, u_n, eta_n, zeta_n, g, nu);
+        compute_xi_function(xi_function, g_function, g, u_n, beta);
+
+        // X-direction splitting: solve for eta_{n+1}
+        temp_solution.set_all(0.0f);
+        rhs = xi_function - eta_n;
+        solver.solve<decltype(define_stride_x(g)), 0>(rhs, temp_solution, x_handler);
+        eta_2 = temp_solution + eta_n;
+
+        // Y-direction splitting: solve for zeta_{n+1}
+        rhs = eta_2 - zeta_n;
+        temp_solution.set_all(0.0f);
+        solver.solve<decltype(define_stride_y(g)), 1>(rhs, temp_solution, y_handler);
+        zeta_2 = temp_solution + zeta_n;
+
+        // Z-direction splitting: solve for u_{n+1}
+        rhs = zeta_2 - u_n;
+        temp_solution.set_all(0.0f);
+        solver.solve<decltype(define_stride_z(g)), 2>(rhs, temp_solution, z_handler);
+        VectorVariable u_n_plus_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        u_n_plus_1 = temp_solution + u_n;
+
+        // Update for next iteration
+        u_n = u_n_plus_1;
+        eta_n = eta_2;
+        zeta_n = zeta_2;
+
+        // Advance time
+        t_current += g.dt;
+
+        if (step % 10 == 0 || step == num_steps - 1)
+        {
+            printf("  Step %d/%d, t = %.6f\n", step + 1, num_steps, t_current);
+        }
+    }
+
+    // Compute L2 error at final time only
+    initialize_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_current - g.dt, nu);
+    l2_error = compute_L2_error(u_true_next, u_n, g);
 }
 
 // ===============================================================
@@ -361,8 +388,6 @@ int main()
         // Make dt proportional to dx to avoid time discretization error dominating
         Real dt_test = 0.01 * (two_pi / (N - 0.5)); // dt ~ O(dx)
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
-
-        Real T_final = 1.0;
 
         printf("\n=================================================\n");
         printf("Grid: Nx=%d, Ny=%d, Nz=%d, dx=%f, dy=%f, dz=%f, dt=%f\n",
@@ -402,6 +427,7 @@ int main()
 
         auto stride_z = define_stride_z(g);
         DimensionsHandlerVector<decltype(stride_z)> z_handler(g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz, stride_z);
+        Real T_final = g.dt + g.dt;
 
         Real l2_error = 0.0;
         solve(solver,
@@ -417,7 +443,7 @@ int main()
               y_handler,
               z_handler,
               g.dt + g.dt,
-              T_final,
+              10 * g.dt,
               nu,
               beta,
               l2_error);
