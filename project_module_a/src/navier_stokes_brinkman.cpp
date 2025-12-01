@@ -408,6 +408,6 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         velocity_time_series.emplace_back(velocity_solution);
         pressure_time_series.emplace_back(pressure_solution);
-        compute_Boundary_L2_errors(velocity_solution, pressure_solution, mms, t);
+       // compute_Boundary_L2_errors(velocity_solution, pressure_solution, mms, t);
     }
 }

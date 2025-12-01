@@ -49,7 +49,7 @@ void initialize_fields(const Grid &g,
                 y = j * g.dy;
                 z = k * g.dz;
 
-                scalar.set(i, j, k) = sin(x) * sin(t);
+                scalar.set(i, j, k) = sin(x) * sin(t) * sin(y) * sin(z);
             }
 
     // Build RHS = (I - Dxx) * scalar
@@ -165,9 +165,10 @@ int main()
 
         BoundaryFunctions p_boundary;
         std::vector<std::string> neumann_bc = {
-            "cos(x)*sin(t)",
-            "0",
-            "0"};
+            "cos(x)*sin(t)*sin(y)*sin(z)",
+            "sin(x)*sin(t)*cos(y)*sin(z)",
+            "sin(x)*sin(t)*sin(y)*cos(z)",
+        };
 
         p_boundary.set_string_expression(neumann_bc);
 
