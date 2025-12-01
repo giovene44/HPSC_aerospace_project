@@ -102,16 +102,12 @@ void apply_known_faces(VectorVariable &vector,
 // ===============================================================
 // 3. Initialize Fields (interior + RHS)
 // ===============================================================
-void initialize_fields(const Grid &g,
-                       ScalarVariable &gamma_field,
-                       VectorVariable &vector,
-                       VectorVariable &rhs,
-                       BoundaryFunctions &u_boundary,
-                       Real t,
-                       Real nu)
+void initialize_vector_field(const Grid &g,
+                             VectorVariable &vector,
+                             BoundaryFunctions &u_boundary,
+                             Real t)
 {
-
-    // Initialize interior
+    // Initialize interior and boundary
     for (int comp = 0; comp < 3; ++comp)
         for (int k = 0; k < g.Nz; ++k)
             for (int j = 0; j < g.Ny; ++j)
@@ -138,12 +134,34 @@ void initialize_fields(const Grid &g,
                     }
 
                     vector.set(comp, i, j, k) = sin(x) * sin(t) * sin(y) * sin(z);
+
+                    // Apply boundary conditions
+                    if (i == 0 || i == g.Nx - 1 || j == 0 || j == g.Ny - 1 || k == 0 || k == g.Nz - 1)
+                    {
+                        if (comp == 0)
+                        {
+                            vector.set(comp, i, j, k) = u_boundary.value<0>(x, y, z, t);
+                        }
+                        else if (comp == 1)
+                        {
+                            vector.set(comp, i, j, k) = u_boundary.value<1>(x, y, z, t);
+                        }
+                        else
+                        {
+                            vector.set(comp, i, j, k) = u_boundary.value<2>(x, y, z, t);
+                        }
+                    }
                 }
+}
 
-    // Apply known faces
-    // apply_known_faces(vector, u_boundary, g, gamma_field, 0.0);
-
-    // Build RHS = (I - gamma * Dxx) * vector
+void compute_rhs_field(const Grid &g,
+                       ScalarVariable &gamma_field,
+                       VectorVariable &vector,
+                       VectorVariable &rhs,
+                       Real t,
+                       Real nu)
+{
+    // Build RHS based on vector field
     for (int comp = 0; comp < 3; ++comp)
         for (Dim k = 0; k < g.Nz; ++k)
             for (Dim j = 0; j < g.Ny; ++j)
@@ -172,27 +190,21 @@ void initialize_fields(const Grid &g,
                     Real sd = vector.second_derivative(comp, 0, i, j, k);
                     Real time_der = sin(x_coord) * cos(t) * sin(y_coord) * sin(z_coord);
                     Real rhs_val = time_der - nu * gamma_val * sd;
-                    // Apply boundary BCs on VECTOR
 
-                    if (i == 0 || i == g.Nx - 1 || j == 0 || j == g.Ny - 1 || k == 0 || k == g.Nz - 1)
-                    {
-
-                        if (comp == 0)
-                        {
-                            vector.set(comp, i, j, k) = u_boundary.value<0>(x_coord, y_coord, z_coord, t);
-                        }
-
-                        else if (comp == 1)
-                        {
-                            vector.set(comp, i, j, k) = u_boundary.value<1>(x_coord, y_coord, z_coord, t);
-                        }
-                        else
-                        {
-                            vector.set(comp, i, j, k) = u_boundary.value<2>(x_coord, y_coord, z_coord, t);
-                        }
-                    }
                     rhs.set(comp, i, j, k) = rhs_val;
                 }
+}
+
+void initialize_fields(const Grid &g,
+                       ScalarVariable &gamma_field,
+                       VectorVariable &vector,
+                       VectorVariable &rhs,
+                       BoundaryFunctions &u_boundary,
+                       Real t,
+                       Real nu)
+{
+    initialize_vector_field(g, vector, u_boundary, t);
+    compute_rhs_field(g, gamma_field, vector, rhs, t, nu);
 }
 
 // ===============================================================
@@ -268,25 +280,37 @@ void compute_xi_function(VectorVariable &xi_function, VectorVariable &g_function
 }
 
 void solve(VelocitySolver &solver,
-           VectorVariable &xi,
            VectorVariable &eta_1,
            VectorVariable &eta_2,
            VectorVariable &zeta_1,
            VectorVariable &zeta_2,
            VectorVariable &u_1,
-           VectorVariable &u_2_true,
+           VectorVariable &g_function,
+           VectorVariable &xi_function,
            const Grid &g,
            const DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler,
            const DimensionsHandlerVector<decltype(define_stride_y(g))> &y_handler,
            const DimensionsHandlerVector<decltype(define_stride_z(g))> &z_handler,
+           Real t_n_plus_1_start,
+           Real T_final,
+           Real nu,
+           Real beta,
            Real &l2_error)
 {
+    VectorVariable u_true_next(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable rhs_true_next(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+
+    initialize_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_n_plus_1_start, nu);
+    construct_g_function(g_function, rhs_true_next, u_1, eta_1, zeta_1, g, nu);
+    compute_xi_function(xi_function, g_function, g, u_1, beta);
+
     VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable temp_solution(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
+    // iteration => t = t_n_plus_1_start
     temp_solution.set_all(0.0f);
-    // rhs = xi - eta_1
-    rhs = xi - eta_1;
+    // rhs = xi_function - eta_1
+    rhs = xi_function - eta_1;
     // (I - gamma*Dxx)(eta_2 - eta_1) = rhs
     solver.solve<decltype(define_stride_x(g)), 0>(rhs, temp_solution, x_handler);
     // eta_2 = temp_solution + eta_1
@@ -308,8 +332,9 @@ void solve(VelocitySolver &solver,
     // u_2 = temp_solution + u_1
     VectorVariable u_2_comp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     u_2_comp = temp_solution + u_1;
-    // Compute L2 error
-    l2_error = compute_L2_error(u_2_true, u_2_comp, g);
+
+    // Compute L2 error u_next_comp vs u_true_next
+    l2_error = compute_L2_error(u_true_next, u_2_comp, g);
 }
 
 // ===============================================================
@@ -337,6 +362,8 @@ int main()
         Real dt_test = 0.01 * (two_pi / (N - 0.5)); // dt ~ O(dx)
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
+        Real T_final = 1.0;
+
         printf("\n=================================================\n");
         printf("Grid: Nx=%d, Ny=%d, Nz=%d, dx=%f, dy=%f, dz=%f, dt=%f\n",
                g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt);
@@ -351,10 +378,8 @@ int main()
         VectorVariable zeta_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         VectorVariable rhs_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
-        VectorVariable u_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         VectorVariable eta_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         VectorVariable zeta_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable rhs_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
         VectorVariable g_function(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         VectorVariable xi_function(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
@@ -366,13 +391,6 @@ int main()
         initialize_fields(g, gamma_field, u_1, rhs_1, u_boundary, g.dt, nu);
         initialize_fields(g, gamma_field, eta_1, rhs_1, u_boundary, g.dt, nu);
         initialize_fields(g, gamma_field, zeta_1, rhs_1, u_boundary, g.dt, nu);
-
-        initialize_fields(g, gamma_field, u_2, rhs_2, u_boundary, g.dt + g.dt, nu);
-
-        // construct g_function
-        construct_g_function(g_function, rhs_2, u_1, eta_1, zeta_1, g, nu);
-        // compute xi_function
-        compute_xi_function(xi_function, g_function, g, u_1, beta);
 
         VelocitySolver solver = setup_solver(g, gamma_field, u_boundary, g.dt, g.dt + g.dt);
 
@@ -386,8 +404,23 @@ int main()
         DimensionsHandlerVector<decltype(stride_z)> z_handler(g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz, stride_z);
 
         Real l2_error = 0.0;
-        solve(solver, xi_function, eta_1, eta_2, zeta_1, zeta_2, u_1, u_2, g, x_handler,
-              y_handler, z_handler, l2_error);
+        solve(solver,
+              eta_1,
+              eta_2,
+              zeta_1,
+              zeta_2,
+              u_1,
+              g_function,
+              xi_function,
+              g,
+              x_handler,
+              y_handler,
+              z_handler,
+              g.dt + g.dt,
+              T_final,
+              nu,
+              beta,
+              l2_error);
         errors.push_back(l2_error);
         dx_values.push_back(g.dx);
         dt_values.push_back(g.dt);
