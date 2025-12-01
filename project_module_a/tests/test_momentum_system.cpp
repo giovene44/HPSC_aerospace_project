@@ -427,7 +427,7 @@ int main()
 
         auto stride_z = define_stride_z(g);
         DimensionsHandlerVector<decltype(stride_z)> z_handler(g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz, stride_z);
-        Real T_final = g.dt + g.dt;
+        Real T_final = 10 * g.dt;
 
         Real l2_error = 0.0;
         solve(solver,
@@ -443,7 +443,7 @@ int main()
               y_handler,
               z_handler,
               g.dt + g.dt,
-              10 * g.dt,
+              T_final,
               nu,
               beta,
               l2_error);
