@@ -12,5 +12,5 @@ make test
 echo "--- Running Executable ---"
 # executing the binary as requested
 echo -e
-./bin/test_momentum_system
+./bin/test_brinkman_system
 
