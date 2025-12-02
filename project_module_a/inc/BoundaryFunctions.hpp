@@ -66,23 +66,23 @@ public:
 
         if constexpr (component == 0)
         {
-            xp += d;
-            xm -= d;
+            xp += d*Real(0.5);
+            xm -= d*Real(0.5);
         }
         else if constexpr (component == 1)
         {
-            yp += d;
-            ym -= d;
+            yp += d*Real(0.5);
+            ym -= d*Real(0.5);
         }
         else if constexpr (component == 2)
         {
-            zp += d;
-            zm -= d;
+            zp += d*Real(0.5);
+            zm -= d*Real(0.5);
         }
 
         return (value<component>(xp, yp, zp, t_) -
                 value<component>(xm, ym, zm, t_)) /
-               (2.0 * d);
+               (d);
     }
 
     void set_string_expression(const std::vector<std::string> &exprs)

@@ -26,6 +26,11 @@ public:
         t += dt;
     }
 
+    void set_t(Real t)
+    {
+        this->t = t;
+    }
+
 protected:
     Dim Nx; // Grid points in x
     Dim Ny; // Grid points in y
@@ -62,11 +67,6 @@ protected:
         }
     }
 
-public:
-    void set_t(Real t)
-    {
-        this->t = t;
-    }
 };
 
 // Definition of pure virtual destructor
@@ -537,9 +537,6 @@ public:
             for (Dim i = 0; i < Nx; ++i)
             {
                 update_bc(i, index_1, index_2);
-                if (index_1 == 0 && index_2 == 0)
-                {
-                }
             }
         }
         else if constexpr (direction == 1)
@@ -570,7 +567,10 @@ public:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     // on comp1 we have normal components
-                    rhs.set(direction, 0, index_1, index_2) = (u_boundary.value<direction>(0, index_1 * dy, index_2 * dz, t) - u_boundary.value<direction>(0, index_1 * dy, index_2 * dz, t - dt)) - ((u_boundary.first_derivative<1>(0, index_1 * dy, index_2 * dz, t, dy) - u_boundary.first_derivative<1>(0, index_1 * dy, index_2 * dz, t - dt, dy)) + (u_boundary.first_derivative<2>(0, index_1 * dy, index_2 * dz, t, dz) - u_boundary.first_derivative<2>(0, index_1 * dy, index_2 * dz, t - dt, dz))) * dx * Real(0.5);
+                    rhs.set(direction, 0, index_1, index_2) = (u_boundary.value<direction>(0, index_1 * dy, index_2 * dz, t) - u_boundary.value<direction>(0, index_1 * dy, index_2 * dz, t - dt))
+                                                            - ((u_boundary.first_derivative<1>(0, index_1 * dy, index_2 * dz, t, dy) - u_boundary.first_derivative<1>(0, index_1 * dy, index_2 * dz, t - dt, dy))
+                                                            + (u_boundary.first_derivative<2>(0, index_1 * dy, index_2 * dz, t, dz) - u_boundary.first_derivative<2>(0, index_1 * dy, index_2 * dz, t - dt, dz)))
+                                                            * dx * Real(0.5);
                     rhs.set(direction, Nx - 1, index_1, index_2) = u_boundary.value<direction>(Lx, index_1 * dy, index_2 * dz, t) - u_boundary.value<direction>(Lx, index_1 * dy, index_2 * dz, t - dt);
 
                     // on comp2 we have tangent components

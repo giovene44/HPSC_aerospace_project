@@ -133,24 +133,12 @@ void initialize_vector_field(const Grid &g,
                         z = (k + 0.5) * g.dz;
                     }
 
-                    vector.set(comp, i, j, k) = sin(x) * sin(t) * sin(y) * sin(z);
-
-                    // Apply boundary conditions
-                    if (i == 0 || i == g.Nx - 1 || j == 0 || j == g.Ny - 1 || k == 0 || k == g.Nz - 1)
-                    {
-                        if (comp == 0)
-                        {
-                            vector.set(comp, i, j, k) = u_boundary.value<0>(x, y, z, t);
-                        }
-                        else if (comp == 1)
-                        {
-                            vector.set(comp, i, j, k) = u_boundary.value<1>(x, y, z, t);
-                        }
-                        else
-                        {
-                            vector.set(comp, i, j, k) = u_boundary.value<2>(x, y, z, t);
-                        }
-                    }
+                    if (comp == 0)
+                        vector.set(comp, i, j, k) = sin(t)*sin(x)*sin(y)*sin(z);
+                    else if (comp == 1)
+                        vector.set(comp, i, j, k) = sin(t)*cos(x)*cos(y)*cos(z);
+                    else
+                        vector.set(comp, i, j, k) = sin(t)*cos(x)*sin(y)*(sin(z)+cos(z));
                 }
 }
 
@@ -167,29 +155,9 @@ void compute_rhs_field(const Grid &g,
             for (Dim j = 0; j < g.Ny; ++j)
                 for (Dim i = 0; i < g.Nx; ++i)
                 {
-                    Real x_coord, y_coord, z_coord;
-                    if (comp == 0)
-                    {
-                        x_coord = (i + 0.5) * g.dx;
-                        y_coord = j * g.dy;
-                        z_coord = k * g.dz;
-                    }
-                    else if (comp == 1)
-                    {
-                        x_coord = i * g.dx;
-                        y_coord = (j + 0.5) * g.dy;
-                        z_coord = k * g.dz;
-                    }
-                    else
-                    {
-                        x_coord = i * g.dx;
-                        y_coord = j * g.dy;
-                        z_coord = (k + 0.5) * g.dz;
-                    }
                     Real gamma_val = gamma_field.get(i, j, k);
                     Real sd = vector.second_derivative(comp, 0, i, j, k);
-                    Real time_der = sin(x_coord) * cos(t) * sin(y_coord) * sin(z_coord);
-                    Real rhs_val = time_der - nu * gamma_val * sd;
+                    Real rhs_val = vector.value(comp, i, j, k) - nu * gamma_val * sd;
 
                     rhs.set(comp, i, j, k) = rhs_val;
                 }
@@ -355,7 +323,7 @@ void solve(VelocitySolver &solver,
 
         if (step % 10 == 0 || step == num_steps - 1)
         {
-            printf("  Step %d/%d, t = %.6f\n", step + 1, num_steps, t_current);
+            std::cout<<"Error at step "<<step+1<<": "<<compute_L2_error(u_true_next, u_n, g)<<std::scientific<< std::setprecision(8)<<std::endl;
         }
     }
 
@@ -383,10 +351,11 @@ int main()
     std::vector<Real> dx_values;
     std::vector<Real> dt_values;
 
+    // Make dt proportional to dx to avoid time discretization error dominating
+    Real dt_test = 0.01;
+
     for (Dim N : grid_sizes)
     {
-        // Make dt proportional to dx to avoid time discretization error dominating
-        Real dt_test = 0.01 * (two_pi / (N - 0.5)); // dt ~ O(dx)
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
         printf("\n=================================================\n");
@@ -397,7 +366,7 @@ int main()
         ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         Real nu = 0.1f;
         Real beta = 1.0f;
-        gamma_field.set_all((g.dt * nu) / (Real(2.0) * beta));
+        gamma_field.set_all(((g.dt * nu) / (Real(2.0) * beta)));
         VectorVariable u_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         VectorVariable eta_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         VectorVariable zeta_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
@@ -410,7 +379,7 @@ int main()
         VectorVariable xi_function(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
         BoundaryFunctions u_boundary;
-        std::vector<std::string> sin_bc = {"sin(x)*sin(t)*sin(y)*sin(z)", "sin(x)*sin(t)*sin(y)*sin(z)", "sin(x)*sin(t)*sin(y)*sin(z)"};
+        std::vector<std::string> sin_bc = {"sin(t)*sin(x)*sin(y)*sin(z)", "sin(t)*cos(x)*cos(y)*cos(z)", "sin(t)*cos(x)*sin(y)*(sin(z)+cos(z))"};
         u_boundary.set_string_expression(sin_bc);
 
         initialize_fields(g, gamma_field, u_1, rhs_1, u_boundary, g.dt, nu);
@@ -427,7 +396,7 @@ int main()
 
         auto stride_z = define_stride_z(g);
         DimensionsHandlerVector<decltype(stride_z)> z_handler(g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz, stride_z);
-        Real T_final = 10 * g.dt;
+        Real T_final = 10;
 
         Real l2_error = 0.0;
         solve(solver,

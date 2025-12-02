@@ -299,7 +299,7 @@ public:
             throw std::invalid_argument("VectorVariable::operator- dimension mismatch");
 
         VectorVariable out(Nx, Ny, Nz, dx, dy, dz);
-        for (int a = 0; a < static_cast<int>(size()); ++a)
+        for (Dim a = 0; a < Dim(size()); ++a)
         {
             for (Dim i = 0; i < Nx; ++i)
             {
@@ -307,7 +307,7 @@ public:
                 {
                     for (Dim k = 0; k < Nz; ++k)
                     {
-                        out.set(a, i, j, k) = value(a, i, j, k) - rhs.value(a, i, j, k);
+                        out.set(a, i, j, k) = this->value(a, i, j, k) - rhs.value(a, i, j, k);
                     }
                 }
             }

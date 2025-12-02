@@ -12,7 +12,7 @@ Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
 
-    return 1.0f + (dt * nu) / (2.0f * k_val);
+    return 1.0f; // + (dt * nu) / (2.0f * k_val);
 }
 
 Real NavierStokesBrinkmann::compute_beta(Dim index) const
@@ -193,10 +193,11 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // Assemble RHS term
             // -----------------------------------------------------------------
             Real g_val =
-                forcing                                      // f
-                - p_grad                                     // -∇p
-                + Real(0.5) * nu_val * laplacian             // + (ν/2)(∇²η + ∇²ζ + ∇²u)
-                - (nu_val / (Real(2.0) * k_val)) * velocity; // - (ν/(2k))u₀
+                forcing // f
+                //- p_grad                                     // -∇p
+                + Real(0.5) * nu_val * laplacian // + (ν/2)(∇²η + ∇²ζ + ∇²u)
+                //- (nu_val / (Real(2.0) * k_val)) * velocity // - (ν/(2k))u₀
+                ;
 
             // =================================================================
             // DEBUGGING OUTPUT - Final result
@@ -322,6 +323,10 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
     velocity_time_series.emplace_back(velocity_solution);
     pressure_time_series.emplace_back(pressure_solution);
 
+    std::cout << "ERRORS AT TIME t=0" << std::endl;
+    compute_Boundary_L2_errors(velocity_solution, pressure_solution, mms, 0.0);
+    std::cout << "======================================================\n";
+
     // --- Time Stepping Loop ---
     for (Real t = dt; t <= T; t += dt)
     {
@@ -349,6 +354,7 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         // 2. Pressure Projection Step (Calculate phi)
         // -------------------------------------------
+        /*
         compute_rhs_pressure(); // RHS = -div(u*) / dt
 
         // Solve Poisson Equation: Laplacian(phi) = RHS
@@ -361,53 +367,16 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         // Update Pressure: p^{n+1} = phi (assuming phi is total pressure from BCs)
         pressure_solution += other_phi;
-        center_pressure(pressure_solution);
-        /*
-        // Correct Velocity: u^{n+1} = u* - (dt/beta) * grad(phi)
-        // This projects velocity onto the divergence-free space
-        for (Dim k = 0; k < Nz; ++k)
-        {
-            for (Dim j = 0; j < Ny; ++j)
-            {
-                for (Dim i = 0; i < Nx; ++i)
-                {
-                    Real beta_val = compute_beta(i, j, k);
-                    Real coeff = dt / beta_val;
-
-                    // --- Correct U (Component 0) ---
-                    // Condition: Interior points only (i=0 and i=Nx-1 are fixed Dirichlet)
-                    if (i > 0 && i < Nx - 1)
-                    {
-                        // Central Difference: (P_{i+1} - P_{i-1}) / 2dx
-                        Real dp_dx = (other_phi.get(i + 1, j, k) - other_phi.get(i - 1, j, k)) / (2.0 * dx);
-                        velocity_solution.set(0, i, j, k) -= coeff * dp_dx;
-                    }
-
-                    // --- Correct V (Component 1) ---
-                    // Condition: Interior points only (j=0 and j=Ny-1 are fixed Dirichlet)
-                    if (j > 0 && j < Ny - 1)
-                    {
-                        // Central Difference: (P_{j+1} - P_{j-1}) / 2dy
-                        Real dp_dy = (other_phi.get(i, j + 1, k) - other_phi.get(i, j - 1, k)) / (2.0 * dy);
-                        velocity_solution.set(1, i, j, k) -= coeff * dp_dy;
-                    }
-
-                    // --- Correct W (Component 2) ---
-                    // Condition: Interior points only (k=0 and k=Nz-1 are fixed Dirichlet)
-                    if (k > 0 && k < Nz - 1)
-                    {
-                        // Central Difference: (P_{k+1} - P_{k-1}) / 2dz
-                        Real dp_dz = (other_phi.get(i, j, k + 1) - other_phi.get(i, j, k - 1)) / (2.0 * dz);
-                        velocity_solution.set(2, i, j, k) -= coeff * dp_dz;
-                    }
-                }
-            }
-        }
-
         */
 
+        velocity_solver.advance_time();
+
         velocity_time_series.emplace_back(velocity_solution);
-        pressure_time_series.emplace_back(pressure_solution);
-       // compute_Boundary_L2_errors(velocity_solution, pressure_solution, mms, t);
+        // pressure_time_series.emplace_back(pressure_solution);
+        if (t == dt)
+        {
+            std::cout << "ERRORS AT TIME t=dt" << std::endl;
+            compute_Boundary_L2_errors(velocity_solution, pressure_solution, mms, dt);
+        }
     }
 }

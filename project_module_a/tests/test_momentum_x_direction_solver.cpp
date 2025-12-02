@@ -30,76 +30,6 @@ Grid setup_grid(Real dim_x, Real dim_y, Real dim_z, Dim Nx, Dim Ny, Dim Nz, Real
 }
 
 // ===============================================================
-// 2. Apply known Dirichlet faces on vector [NEVER CALLED]
-// ===============================================================
-void apply_known_faces(VectorVariable &vector,
-                       BoundaryFunctions &u_boundary,
-                       const Grid &g,
-                       ScalarVariable &gamma_field,
-                       Real t = 0.0)
-{
-    Real Lx = g.dx * (g.Nx - 0.5);
-    Real Ly = g.dy * (g.Ny - 0.5);
-    Real Lz = g.dz * (g.Nz - 0.5);
-
-    // X-direction faces
-    for (Dim j = 0; j < g.Ny; ++j)
-        for (Dim k = 0; k < g.Nz; ++k)
-        {
-            vector.set(0, 0, j, k) = u_boundary.value<0>(0.0, j * g.dy, k * g.dz, t);
-            vector.set(0, g.Nx - 1, j, k) = u_boundary.value<0>(Lx, j * g.dy, k * g.dz, t);
-            /*
-            vector.set(1, 0, j, k) = u_boundary.value<1>(0.0, 0.5 * g.dy + j * g.dy, k * g.dz, t);
-            Real val = vector.value(1, g.Nx - 1, j, k);
-            Real gamma_val = gamma_field.get(g.Nx - 1, j, k);
-            Real sd = vector.second_derivative(1, 0, g.Nx - 1, j, k);
-            Real rhs_val = val - gamma_val * sd;
-            auto a = -gamma_val / (g.dx * g.dx);
-            auto b = 1.0 + 2.0 * gamma_val / (g.dx * g.dx);
-            auto c = -gamma_val / (g.dx * g.dx);
-            vector.set(1, g.Nx - 1, j, k) = ((rhs_val - 2 * c * u_boundary.value<1>(Lx, 0.5 * g.dy + j * g.dy, k * g.dz, t)) - a * vector.value(1, g.Nx - 2, j, k)) / (b - c);
-            */
-            vector.set(2, 0, j, k) = u_boundary.value<2>(0.0, j * g.dy, 0.5 * g.dz + k * g.dz, t);
-            Real val2 = vector.value(2, g.Nx - 1, j, k);
-            Real gamma_val2 = gamma_field.get(g.Nx - 1, j, k);
-            Real sd2 = vector.second_derivative(2, 0, g.Nx - 1, j, k);
-            Real rhs_val2 = val2 - gamma_val2 * sd2;
-            auto a2 = -gamma_val2 / (g.dx * g.dx);
-            auto b2 = 1.0 + 2.0 * gamma_val2 / (g.dx * g.dx);
-            auto c2 = -gamma_val2 / (g.dx * g.dx);
-            vector.set(2, g.Nx - 1, j, k) = ((rhs_val2 - 2 * c2 * u_boundary.value<2>(Lx, j * g.dy, 0.5 * g.dz + k * g.dz, t)) - a2 * vector.value(2, g.Nx - 2, j, k)) / (b2 - c2);
-        }
-
-    // Y-direction faces
-    for (Dim i = 0; i < g.Nx; ++i)
-        for (Dim k = 0; k < g.Nz; ++k)
-        {
-            vector.set(1, i, 0, k) = u_boundary.value<1>(i * g.dx, 0.0, k * g.dz, t);
-            vector.set(1, i, g.Ny - 1, k) = u_boundary.value<1>(i * g.dx, Ly, k * g.dz, t);
-
-            vector.set(0, i, 0, k) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, 0.0, k * g.dz, t);
-            vector.set(0, i, g.Ny - 1, k) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, Ly, k * g.dz, t);
-
-            vector.set(2, i, 0, k) = u_boundary.value<2>(i * g.dx, 0.0, 0.5 * g.dz + k * g.dz, t);
-            vector.set(2, i, g.Ny - 1, k) = u_boundary.value<2>(i * g.dx, Ly, 0.5 * g.dz + k * g.dz, t);
-        }
-
-    // Z-direction faces
-    for (Dim i = 0; i < g.Nx; ++i)
-        for (Dim j = 0; j < g.Ny; ++j)
-        {
-            vector.set(2, i, j, 0) = u_boundary.value<2>(i * g.dx, j * g.dy, 0.0, t);
-            vector.set(2, i, j, g.Nz - 1) = u_boundary.value<2>(i * g.dx, j * g.dy, Lz, t);
-
-            vector.set(0, i, j, 0) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, j * g.dy, 0.0, t);
-            vector.set(0, i, j, g.Nz - 1) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, j * g.dy, Lz, t);
-
-            vector.set(1, i, j, 0) = u_boundary.value<1>(i * g.dx, 0.5 * g.dy + j * g.dy, 0.0, t);
-            vector.set(1, i, j, g.Nz - 1) = u_boundary.value<1>(i * g.dx, 0.5 * g.dy + j * g.dy, Lz, t);
-        }
-}
-
-// ===============================================================
 // 3. Initialize Fields (interior + RHS)
 // ===============================================================
 void initialize_fields(const Grid &g,
@@ -136,7 +66,12 @@ void initialize_fields(const Grid &g,
                         z = (k + 0.5) * g.dz;
                     }
 
-                    vector.set(comp, i, j, k) = sin(x) * sin(t);
+                    if (comp == 0)
+                        vector.set(comp, i, j, k) = sin(t)*sin(x)*sin(y)*sin(z);
+                    else if (comp == 1)
+                        vector.set(comp, i, j, k) = sin(t)*cos(x)*cos(y)*cos(z);
+                    else
+                        vector.set(comp, i, j, k) = sin(t)*cos(x)*sin(y)*(sin(z)+cos(z));
                 }
 
     // Apply known faces
@@ -153,43 +88,6 @@ void initialize_fields(const Grid &g,
                     Real sd = vector.second_derivative(comp, 0, i, j, k);
                     Real rhs_val = val - gamma_val * sd;
 
-                    // Apply boundary BCs on VECTOR
-
-                    if (i == 0 || i == g.Nx - 1 || j == 0 || j == g.Ny - 1 || k == 0 || k == g.Nz - 1)
-                    {
-                        Real x_coord, y_coord, z_coord;
-                        if (comp == 0)
-                        {
-                            x_coord = (i + 0.5) * g.dx;
-                            y_coord = j * g.dy;
-                            z_coord = k * g.dz;
-                        }
-                        else if (comp == 1)
-                        {
-                            x_coord = i * g.dx;
-                            y_coord = (j + 0.5) * g.dy;
-                            z_coord = k * g.dz;
-                        }
-                        else
-                        {
-                            x_coord = i * g.dx;
-                            y_coord = j * g.dy;
-                            z_coord = (k + 0.5) * g.dz;
-                        }
-                        if (comp == 0)
-                        {
-                            vector.set(comp, i, j, k) = u_boundary.value<0>(x_coord, y_coord, z_coord, t);
-                        }
-
-                        else if (comp == 1)
-                        {
-                            vector.set(comp, i, j, k) = u_boundary.value<1>(x_coord, y_coord, z_coord, t);
-                        }
-                        else
-                        {
-                            vector.set(comp, i, j, k) = u_boundary.value<2>(x_coord, y_coord, z_coord, t);
-                        }
-                    }
                     rhs.set(comp, i, j, k) = rhs_val;
                 }
 }
@@ -288,7 +186,7 @@ int main()
     for (Dim N : grid_sizes)
     {
         // Make dt proportional to dx to avoid time discretization error dominating
-        Real dt_test = 0.01 * (two_pi / (N - 0.5)); // dt ~ O(dx)
+        Real dt_test = 0.003125; //* (two_pi / (N - 0.5)); // dt ~ O(dx)
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
         printf("\n=================================================\n");
@@ -304,7 +202,7 @@ int main()
         VectorVariable rhs_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
         BoundaryFunctions u_boundary;
-        std::vector<std::string> sin_bc = {"sin(x)*sin(t)", "sin(x)*sin(t)", "sin(x)*sin(t)"};
+        std::vector<std::string> sin_bc = {"sin(t)*sin(x)*sin(y)*sin(z)", "sin(t)*cos(x)*cos(y)*cos(z)", "sin(t)*cos(x)*sin(y)*(sin(z)+cos(z))"};
         u_boundary.set_string_expression(sin_bc);
 
         initialize_fields(g, gamma_field, vector_1, rhs_1, u_boundary, g.dt);

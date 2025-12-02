@@ -1,14 +1,14 @@
 #Number of Run
-4
+2
 
 #Dim of X
-2*pi
+1.0*2*pi
 
 #Dim of Y
-2*pi
+1.0*2*pi
 
 #Dim of Z
-2*pi
+1.0*2*pi
 
 # Number of mesh points in X, Y, Z directions (Nx, Ny, Nz)
 10 10 10
@@ -25,13 +25,13 @@
 ./Input/boundary_p0.dat
 
 # fx forcing term
-cos(t)*sin(x)*sin(y)*sin(z)+(3*1e-1)*sin(t)*sin(x)*sin(y)*sin(z)
+cos(t)*sin(x)*sin(y)*sin(z)+sin(t)*((1e-1)*sin(x)*sin(x)*sin(y)*sin(y)*sin(z)*sin(z)-2*1e-1*sin(x)*sin(y)*sin(z))
 
 # fy forcing term
-cos(t)*cos(x)*cos(y)*cos(z)+(3*1e-1)*sin(t)*cos(x)*cos(y)*cos(z)
+cos(t)*cos(x)*cos(y)*cos(z)+sin(t)*((1e-1)*(1/2)*sin(2*x)*sin(2*y)*sin(2*z)-2*1e-1*cos(x)*cos(y)*sin(z))
 
 # fz forcing term
-cos(t)*cos(x)*sin(y)*(cos(z)+sin(z))+(3*1e-1)*(sin(t)*cos(x)*sin(y)*(cos(z)+sin(z)))
+cos(t)*cos(x)*sin(y)*(sin(z)+cos(z))+sin(t)*((1e-1)*(1/2)*sin(2*x)*sin(y)*sin(y)*(sin(z)*sin(z)+(1/2)*sin(2*z))-4*1e-1*cos(x)*sin(y)*(sin(z)+cos(z)))
 
 # u_initial condition term
 sin(t)*sin(x)*sin(y)*sin(z)
@@ -46,7 +46,7 @@ sin(t)*cos(x)*sin(y)*(sin(z)+cos(z))
 sin(t)*2*1e-1*cos(x)*sin(y)*(sin(z)-cos(z))
 
 # k
-1.0e10
+1.0
 
 # nu
 1e-1

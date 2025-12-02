@@ -248,15 +248,15 @@ public:
             {
                 for (Dim i = 0; i < Nx; ++i)
                 {
-                    // --- FILTER: ONLY PROCESS BOUNDARY NODES ---
-                    bool is_boundary = (i == 0 || i == Nx - 1 ||
-                                        j == 0 || j == Ny - 1 ||
-                                        k == 0 || k == Nz - 1);
+                    // // --- FILTER: ONLY PROCESS BOUNDARY NODES ---
+                    // bool is_boundary = (i == 0 || i == Nx - 1 ||
+                    //                     j == 0 || j == Ny - 1 ||
+                    //                     k == 0 || k == Nz - 1);
 
-                    if (!is_boundary)
-                        continue; // Skip internal nodes
+                    // if (!is_boundary)
+                    //     continue; // Skip internal nodes
 
-                    boundary_node_count++;
+                    // boundary_node_count++;
 
                     // Physical Coordinates
                     Real x = i * dx;
@@ -284,6 +284,9 @@ public:
                     // --- Pressure Error Accumulation ---
                     err_p += (p_val - p_ex) * (p_val - p_ex);
                     norm_p += p_ex * p_ex;
+
+                    std::cout << "Numerical u: (" << u_num_x << ", " << u_num_y << ", " << u_num_z << ") "
+                              << "Exact u: (" << u_ex[0] << ", " << u_ex[1] << ", " << u_ex[2] << ")\n";
                 }
             }
         }
@@ -299,11 +302,11 @@ public:
         Real rel_err_p = (norm_p > 1e-15) ? err_p / norm_p : 0.0;
 
         // 6. PRINT DIAGNOSTICS
-        std::cout << "------------------------------------------\n";
-        std::cout << " BOUNDARY ERRORS at t = " << t << " (Nodes: " << boundary_node_count << ")\n";
-        std::cout << " Velocity -> Abs: " << err_u << " | Rel: " << rel_err_u << "\n";
-        std::cout << " Pressure -> Abs: " << err_p << " | Rel: " << rel_err_p << "\n";
-        std::cout << "------------------------------------------\n";
+        // std::cout << "------------------------------------------\n";
+        // std::cout << " BOUNDARY ERRORS at t = " << t << " (Nodes: " << boundary_node_count << ")\n";
+        // std::cout << " Velocity -> Abs: " << err_u << " | Rel: " << rel_err_u << "\n";
+        // std::cout << " Pressure -> Abs: " << err_p << " | Rel: " << rel_err_p << "\n";
+        // std::cout << "------------------------------------------\n";
 
         return {rel_err_u, rel_err_p};
     }

@@ -42,7 +42,7 @@ std::pair<Real, Real> single_run(
     std::cout << "Manufactured solution initialized.\n";
 
     // 3) SOLVER INITIALIZATION
-    NavierStokesBrinkmann solver(
+    NavierStokesBrinkmann nsb_solver(
         Nx_in, Ny_in, Nz_in,
         dt_in, T_final,
         forcing_func,
@@ -55,7 +55,7 @@ std::pair<Real, Real> single_run(
     std::cout << "Solver initialized (nu=" << nu << ").\n";
 
     // 4) RUN SOLVER
-    solver.solve(mms);
+    nsb_solver.solve(mms);
     std::cout << "\nSolver run completed.\n";
 
     // 5) COMPUTE ERRORS
@@ -79,17 +79,19 @@ std::pair<Real, Real> single_run(
                 auto u_ex_y = mms.velocity(x, y+dy_in*0.5, z, T_final);
                 auto u_ex_z = mms.velocity(x, y, z+dz_in*0.5, T_final);
                 std::vector<Real> u_ex = {u_ex_x[0], u_ex_y[1], u_ex_z[2]};
+
+
                 Real p_ex = mms.pressure(x, y, z, T_final);
 
-                Real ux = solver.velocity_solution.value(0, i, j, k);
-                Real uy = solver.velocity_solution.value(1, i, j, k);
-                Real uz = solver.velocity_solution.value(2, i, j, k);
-                Real pN = solver.pressure_solution.get(i, j, k);
+                Real ux = nsb_solver.velocity_solution.value(0, i, j, k);
+                Real uy = nsb_solver.velocity_solution.value(1, i, j, k);
+                Real uz = nsb_solver.velocity_solution.value(2, i, j, k);
+                Real pN = nsb_solver.pressure_solution.get(i, j, k);
 
                 Real dux = ux - u_ex[0];
                 Real duy = uy - u_ex[1];
                 Real duz = uz - u_ex[2];
-
+                
                 err_u += dux * dux + duy * duy + duz * duz;
                 norm_u += u_ex[0] * u_ex[0] + u_ex[1] * u_ex[1] + u_ex[2] * u_ex[2];
 
@@ -159,7 +161,7 @@ int run_multiple()
             Dim Ny_curr = N_initial_y * refinement_factor;
             Dim Nz_curr = N_initial_z * refinement_factor;
 
-            Real dt_curr = dt_initial / refinement_factor;
+            Real dt_curr = dt_initial;// / refinement_factor;
 
             // dx/dy/dz must be scaled inversely to N_curr (halved when N_curr is doubled)
             Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
