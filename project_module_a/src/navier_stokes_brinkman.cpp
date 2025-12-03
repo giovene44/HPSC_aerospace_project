@@ -241,7 +241,7 @@ void NavierStokesBrinkmann::compute_rhs_pressure()
             for (Dim z = 1; z < Nz; ++z)
             {
                 rhs.set(x, y, z) =
-                    -(1.0f / dt) *
+                    -(Real(1.0) / dt) *
                     velocity_solution.divergence(x, y, z);
             }
         }
@@ -323,15 +323,16 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
     velocity_time_series.emplace_back(velocity_solution);
     pressure_time_series.emplace_back(pressure_solution);
 
-    std::cout << "ERRORS AT TIME t=0" << std::endl;
-    compute_Boundary_L2_errors(velocity_solution, pressure_solution, mms, 0.0);
-    std::cout << "======================================================\n";
+    Dim total_steps = static_cast<int>(T / dt);
 
     // --- Time Stepping Loop ---
-    for (Real t = dt; t <= T; t += dt)
+    for (Dim step = 1; step <= total_steps; ++step)
     {
         // 1. Momentum Predictor Step (Calculate u*)
         // ------------------------------------------
+
+        Real t = step * dt;
+
         compute_vector_g(t);
         compute_vector_xi();
 
@@ -368,15 +369,14 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
         // Update Pressure: p^{n+1} = phi (assuming phi is total pressure from BCs)
         pressure_solution += other_phi;
         */
-
         velocity_solver.advance_time();
-
         velocity_time_series.emplace_back(velocity_solution);
-        // pressure_time_series.emplace_back(pressure_solution);
-        if (t == dt)
+
+        if(int(t/dt) % 10 == 0)
         {
-            std::cout << "ERRORS AT TIME t=dt" << std::endl;
-            compute_Boundary_L2_errors(velocity_solution, pressure_solution, mms, dt);
+            std::cout << "Time: " << t << " / " << T << "\n";
         }
+
+        // pressure_time_series.emplace_back(pressure_solution);
     }
 }

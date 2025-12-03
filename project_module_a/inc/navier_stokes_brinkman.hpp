@@ -284,9 +284,6 @@ public:
                     // --- Pressure Error Accumulation ---
                     err_p += (p_val - p_ex) * (p_val - p_ex);
                     norm_p += p_ex * p_ex;
-
-                    std::cout << "Numerical u: (" << u_num_x << ", " << u_num_y << ", " << u_num_z << ") "
-                              << "Exact u: (" << u_ex[0] << ", " << u_ex[1] << ", " << u_ex[2] << ")\n";
                 }
             }
         }

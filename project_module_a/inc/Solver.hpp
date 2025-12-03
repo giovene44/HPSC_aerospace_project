@@ -507,15 +507,11 @@ public:
         throw std::invalid_argument("Invalid component");
     }
 
-    template <Dim direction, typename StrideFunc>
-    bool handle_known_face(const DimensionsHandlerVector<StrideFunc> &dim_handler, VectorVariable &solution, Dim index_1, Dim index_2, Dim component)
+    template <Dim direction>
+    bool handle_known_face(VectorVariable &solution, Dim index_1, Dim index_2, Dim component)
     {
         if (!is_known_face<direction>(index_1, index_2, component))
             return false;
-
-        Dim Comp1 = dim_handler.Comp1;
-        Dim Comp2 = dim_handler.Comp2;
-        Dim Comp3 = dim_handler.Comp3;
 
         auto update_bc = [&](Dim i, Dim j, Dim k)
         {
@@ -527,9 +523,9 @@ public:
             }
             Real t_prev = t - dt;
 
-            solution.set(Comp1, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t) - u_boundary.value<0>(x + dx / Real(2.0), y, z, t_prev);
-            solution.set(Comp2, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t) - u_boundary.value<1>(x, y + dy / Real(2.0), z, t_prev);
-            solution.set(Comp3, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t) - u_boundary.value<2>(x, y, z + dz / Real(2.0), t_prev);
+            solution.set(0, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t) - u_boundary.value<0>(x + dx / Real(2.0), y, z, t_prev);
+            solution.set(1, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t) - u_boundary.value<1>(x, y + dy / Real(2.0), z, t_prev);
+            solution.set(2, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t) - u_boundary.value<2>(x, y, z + dz / Real(2.0), t_prev);
         };
 
         if constexpr (direction == 0)
@@ -590,7 +586,10 @@ public:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     // on comp2 we have normal components
-                    rhs.set(direction, index_1, 0, index_2) = (u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t - dt)) - ((u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t, dx) - u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t - dt, dx)) + (u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t, dz) - u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t - dt, dz))) * dy * Real(0.5);
+                    rhs.set(direction, index_1, 0, index_2) = (u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t - dt)) 
+                                                            - ((u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t, dx) - u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t - dt, dx)) 
+                                                            + (u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t, dz) - u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t - dt, dz))) 
+                                                            * dy * Real(0.5);
                     rhs.set(direction, index_1, Ny - 1, index_2) = u_boundary.value<direction>(index_1 * dx, Ly, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, Ly, index_2 * dz, t - dt);
 
                     // on comp1 we have tangent components
@@ -609,7 +608,10 @@ public:
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
                     // on comp3 we have normal components
-                    rhs.set(direction, index_1, index_2, 0) = (u_boundary.value<direction>(index_1 * dx, index_2 * dy, 0, t) - u_boundary.value<direction>(index_1 * dx, index_2 * dy, 0, t - dt)) - ((u_boundary.first_derivative<0>(index_1 * dx, index_2 * dy, 0, t, dx) - u_boundary.first_derivative<0>(index_1 * dx, index_2 * dy, 0, t - dt, dx)) + (u_boundary.first_derivative<1>(index_1 * dx, index_2 * dy, 0, t, dy) - u_boundary.first_derivative<1>(index_1 * dx, index_2 * dy, 0, t - dt, dy))) * dz * Real(0.5);
+                    rhs.set(direction, index_1, index_2, 0) = (u_boundary.value<direction>(index_1 * dx, index_2 * dy, 0, t) - u_boundary.value<direction>(index_1 * dx, index_2 * dy, 0, t - dt)) 
+                                                            - ((u_boundary.first_derivative<0>(index_1 * dx, index_2 * dy, 0, t, dx) - u_boundary.first_derivative<0>(index_1 * dx, index_2 * dy, 0, t - dt, dx)) 
+                                                            + (u_boundary.first_derivative<1>(index_1 * dx, index_2 * dy, 0, t, dy) - u_boundary.first_derivative<1>(index_1 * dx, index_2 * dy, 0, t - dt, dy))) 
+                                                            * dz * Real(0.5);
                     rhs.set(direction, index_1, index_2, Nz - 1) = (u_boundary.value<direction>(index_1 * dx, index_2 * dy, dz + (Nz - 1) * dz, t) - u_boundary.value<direction>(index_1 * dx, index_2 * dy, dz + (Nz - 1) * dz, t - dt));
 
                     // on comp1 we have tangent components
@@ -635,8 +637,8 @@ public:
 
         std::vector<Real> a(N), b(N), c(N), d(N), x(N);
 
-        Dim Outer1 = (direction == 0) ? Ny : ((direction == 1) ? Nx : Nx);
-        Dim Outer2 = (direction == 0) ? Nz : ((direction == 1) ? Nz : Ny);
+        Dim Outer1 = dim_handler.N2;
+        Dim Outer2 = dim_handler.N3;
 
         for (Dim i1 = 0; i1 < Outer1; ++i1)
         {
@@ -648,7 +650,7 @@ public:
                         return gamma_field.get(i, i1, i2);
                     else if constexpr (direction == 1)
                         return gamma_field.get(i1, i, i2);
-                    else
+                    else if constexpr (direction == 2)
                         return gamma_field.get(i1, i2, i);
                 };
                 auto get_rhs_comp = [&](Dim comp, Dim i)
@@ -657,7 +659,7 @@ public:
                         return rhs.value(comp, i, i1, i2);
                     else if constexpr (direction == 1)
                         return rhs.value(comp, i1, i, i2);
-                    else
+                    else if constexpr (direction == 2)
                         return rhs.value(comp, i1, i2, i);
                 };
                 auto set_sol_comp = [&](Dim comp, Dim i, Real val)
@@ -666,12 +668,12 @@ public:
                         solution.set(comp, i, i1, i2) = val;
                     else if constexpr (direction == 1)
                         solution.set(comp, i1, i, i2) = val;
-                    else
+                    else if constexpr (direction == 2)
                         solution.set(comp, i1, i2, i) = val;
                 };
 
                 // Comp1 (Normal)
-                if (!handle_known_face<direction>(dim_handler, solution, i1, i2, Comp1))
+                if (!handle_known_face<direction>(solution, i1, i2, Comp1))
                 {
                     setup_TDMA_internal(N, h, a, b, c, d, [&](Dim i)
                                         { return get_rhs_comp(Comp1, i); }, get_gamma);
@@ -689,7 +691,8 @@ public:
                         set_sol_comp(Comp1, i, x[i]);
                 }
 
-                if (!handle_known_face<direction>(dim_handler, solution, i1, i2, Comp2))
+                // Comp2 (Tangent)
+                if (!handle_known_face<direction>(solution, i1, i2, Comp2))
                 {
                     setup_TDMA_internal(N, h, a, b, c, d, [&](Dim i)
                                         { return get_rhs_comp(Comp2, i); }, get_gamma);
@@ -709,7 +712,7 @@ public:
                 }
 
                 // Comp3 (Tangent)
-                if (!handle_known_face<direction>(dim_handler, solution, i1, i2, Comp3))
+                if (!handle_known_face<direction>(solution, i1, i2, Comp3))
                 {
                     setup_TDMA_internal(N, h, a, b, c, d, [&](Dim i)
                                         { return get_rhs_comp(Comp3, i); }, get_gamma);
@@ -739,7 +742,6 @@ public:
     {
         apply_bc<direction>(rhs);
         block_solver<direction, StrideFunc>(rhs, solution, dim_handler);
-        advance_time();
     };
     void set_gamma(ScalarVariable &g) { gamma_field = g; }
     BoundaryFunctions &set_u_boundary() { return u_boundary; }
