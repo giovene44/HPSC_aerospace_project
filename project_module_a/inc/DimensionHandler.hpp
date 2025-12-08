@@ -1,3 +1,6 @@
+#ifndef DIMENSIONHANDLER_HPP
+#define DIMENSIONHANDLER_HPP
+
 #include "Variables.hpp"
 
 template <typename StrideFunction>
@@ -27,3 +30,5 @@ struct DimensionsHandlerVector : public DimensionsHandlerScalar<StrideFunction>
     {
     }
 };
+
+#endif // DIMENSIONHANDLER_HPP

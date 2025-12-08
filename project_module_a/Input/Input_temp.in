@@ -11,7 +11,7 @@
 1.0
 
 # Number of mesh points in X, Y, Z directions (Nx, Ny, Nz)
-50 50 50
+60 60 60
 
 # Time step size (dt)
 0.0001

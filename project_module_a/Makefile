@@ -1,8 +1,20 @@
 # ==========================================
 # 1. CONFIGURAZIONE
 # ==========================================
+
+# MPI support: set USE_MPI=1 to enable parallel execution
+USE_MPI ?= 0
+NP ?= 4
+
+ifeq ($(USE_MPI),1)
+CXX      := mpicxx
+CXXFLAGS := -std=c++17 -Wall -Wextra -DUSE_MPI
+RUN_CMD  := mpirun -np $(NP)
+else
 CXX      := g++
 CXXFLAGS := -std=c++17 -Wall -Wextra
+RUN_CMD  :=
+endif
 
 # Modalità build: release (default) o debug
 BUILD ?= release
@@ -62,11 +74,22 @@ TEST_EXES := $(patsubst $(TEST_DIR)/%.cpp, $(BIN_DIR)/%, $(TEST_SRCS))
 # 4. TARGET PRINCIPALI
 # ==========================================
 
-.PHONY: all main test debug clean clean-all setup run-tests
+.PHONY: all main test debug clean clean-all setup run-tests run info
 
 all: main
 
 main: setup $(MAIN_EXE)
+
+info:
+	@echo "Build configuration:"
+	@echo "  CXX         = $(CXX)"
+	@echo "  USE_MPI     = $(USE_MPI)"
+	@echo "  BUILD       = $(BUILD)"
+	@echo "  NP          = $(NP)"
+	@echo "  RUN_CMD     = $(RUN_CMD)"
+	@echo ""
+	@echo "To build with MPI: make USE_MPI=1"
+	@echo "To run with MPI:   make USE_MPI=1 NP=4 run"
 
 # Il target 'test' ora compila TUTTI gli eseguibili separati
 test: setup $(TEST_EXES)
@@ -76,9 +99,14 @@ test: setup $(TEST_EXES)
 run-tests: test
 	@for test_bin in $(TEST_EXES); do \
 		echo "Running $$test_bin..."; \
-		./$$test_bin || exit 1; \
+		$(RUN_CMD) $$test_bin || exit 1; \
 		echo "--------------------------------"; \
 	done
+
+# Run main application
+run: main
+	@echo "Running main application..."
+	$(RUN_CMD) $(MAIN_EXE)
 
 # ============================
 # Modalità DEBUG

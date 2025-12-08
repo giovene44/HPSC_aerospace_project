@@ -2,19 +2,52 @@
 #define VECTORVARIABLES_HPP
 #include "ScalarVariable.hpp"
 #include "BoundaryFunctions.hpp"
+#include "DomainDecomposition.hpp"
 #include <vector>
 #include <iostream>
+
+#ifdef USE_MPI
+#include <mpi.h>
+#endif
 
 class VectorVariable
 {
 public:
     VectorVariable(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_)
         : Nx(Nx_), Ny(Ny_), Nz(Nz_), dx(dx_), dy(dy_), dz(dz_)
+#ifdef USE_MPI
+        , decomp(nullptr)
+#endif
     {
         data.clear();
         for (int a = 0; a < 3; ++a)
             data.push_back(ScalarVariable(Nx, Ny, Nz, dx, dy, dz));
     }
+
+#ifdef USE_MPI
+    /**
+     * @brief Constructor with domain decomposition for MPI
+     */
+    VectorVariable(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_,
+                   DomainDecomposition* decomp_ptr)
+        : Nx(Nx_), Ny(Ny_), Nz(Nz_), dx(dx_), dy(dy_), dz(dz_), decomp(decomp_ptr)
+    {
+        data.clear();
+        for (int a = 0; a < 3; ++a) {
+            data.push_back(ScalarVariable(Nx, Ny, Nz, dx, dy, dz, decomp_ptr));
+        }
+    }
+
+    /**
+     * @brief Set domain decomposition pointer
+     */
+    void set_decomposition(DomainDecomposition* decomp_ptr) {
+        decomp = decomp_ptr;
+        for (int a = 0; a < 3; ++a) {
+            data[a].set_decomposition(decomp_ptr);
+        }
+    }
+#endif
 
     inline Dim size() const noexcept
     {
@@ -338,10 +371,49 @@ public:
     inline ScalarVariable &y() { return component(1); }
     inline ScalarVariable &z() { return component(2); }
 
+#ifdef USE_MPI
+    /**
+     * @brief Exchange halo layers for all components
+     * @param direction 0=x, 1=y, 2=z
+     */
+    void exchange_halos(Dim direction) {
+        for (int a = 0; a < 3; ++a) {
+            data[a].exchange_halos(direction);
+        }
+    }
+
+    /**
+     * @brief Gather distributed data to root process for all components
+     * @param global_data Output vector of vectors (only valid on rank 0)
+     */
+    void gather_to_root(std::vector<std::vector<Real>>& global_data) const {
+        global_data.resize(3);
+        for (int a = 0; a < 3; ++a) {
+            data[a].gather_to_root(global_data[a]);
+        }
+    }
+
+    /**
+     * @brief Scatter global data from root to all processes for all components
+     * @param global_data Input vector of vectors (only valid on rank 0)
+     */
+    void scatter_from_root(const std::vector<std::vector<Real>>& global_data) {
+        if (global_data.size() != 3) {
+            throw std::runtime_error("VectorVariable::scatter_from_root: global_data must have 3 components");
+        }
+        for (int a = 0; a < 3; ++a) {
+            data[a].scatter_from_root(global_data[a]);
+        }
+    }
+#endif
+
 private:
     std::vector<ScalarVariable> data;
     Dim Nx, Ny, Nz;
     Real dx, dy, dz;
+#ifdef USE_MPI
+    DomainDecomposition* decomp;
+#endif
 };
 
 #endif // VECTORVARIABLES_HPP

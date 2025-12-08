@@ -53,6 +53,9 @@ public:
     std::string k_expression; // Can be "1e10" or "sin(x)"
     Real nu;                  // Explicit viscosity (e.g., 6.0)
 
+    // MPI DECOMPOSITION PARAMETERS (Optional, -1 for automatic)
+    int Px, Py, Pz;
+
     // --- Helpers to generate std::function objects ---
     std::function<std::vector<Real>(Real, Real, Real, Real)> get_forcing_function() const;
     std::function<std::vector<Real>(Real, Real, Real, Real)> get_exact_velocity_function() const;
@@ -182,6 +185,21 @@ public:
         next_value(k_expression); // Reads "1e10"
         next_value(nu);           // Reads 6.0
 
+        // 6. Optional MPI Decomposition Parameters (default -1 for automatic)
+        Px = -1;
+        Py = -1;
+        Pz = -1;
+        try {
+            next_value(Px);
+            next_value(Py);
+            next_value(Pz);
+        } catch (...) {
+            // Optional parameters not provided, use defaults
+            Px = -1;
+            Py = -1;
+            Pz = -1;
+        }
+
         std::cout << "\n===== Input Parameters Loaded =====\n";
         std::cout << "Forcing (Fx): " << fx_expression << "\n";
         std::cout << "Forcing (Fy): " << fy_expression << "\n";
@@ -192,6 +210,9 @@ public:
         std::cout << "Exact P:      " << p_exact_expression << "\n";
         std::cout << "K Function:   " << k_expression << "\n";
         std::cout << "Viscosity (nu): " << nu << "\n";
+#ifdef USE_MPI
+        std::cout << "MPI Decomposition: Px=" << Px << ", Py=" << Py << ", Pz=" << Pz << " (-1=auto)\n";
+#endif
         std::cout << "===================================\n";
     }
 };

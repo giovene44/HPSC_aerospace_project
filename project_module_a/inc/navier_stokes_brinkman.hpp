@@ -2,10 +2,17 @@
 #include <cmath>
 #include <functional>
 #include <vector>
+#include <iostream>
 #include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
 #include "Solver.hpp"
 #include "manufactured_solution_technique.hpp"
+#include "DomainDecomposition.hpp"
+#include "ParseInput.hpp"
+
+#ifdef USE_MPI
+#include <mpi.h>
+#endif
 
 class NavierStokesBrinkmann
 {
@@ -37,6 +44,9 @@ public:
           // GRID, MATERIAL, AND TIME INFO
           // ============================
           grid(),
+#ifdef USE_MPI
+          decomp(nullptr),
+#endif
           dt(dt),
           Nx(Nx),
           Ny(Ny),
@@ -117,7 +127,47 @@ public:
         p_boundary.setParsing(p_boundary_file);
         initialize_k_field();
         initialize_gamma_field();
+
+#ifdef USE_MPI
+        // Initialize MPI domain decomposition
+        int rank, size;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &size);
+        
+        if (size > 1) {
+            // Get optional decomposition parameters from input
+            auto &parser = ParseInput::getInstance();
+            int Px_user = parser.Px;
+            int Py_user = parser.Py;
+            int Pz_user = parser.Pz;
+            
+            // Create domain decomposition (uses parsed Px, Py, Pz or automatic if -1)
+            decomp = new DomainDecomposition(Nx, Ny, Nz, MPI_COMM_WORLD, Px_user, Py_user, Pz_user);
+            
+            // Set decomposition for solvers
+            velocity_solver.set_decomposition(decomp);
+            pressure_solver.set_decomposition(decomp);
+            
+            if (rank == 0) {
+                auto [px, py, pz] = decomp->get_process_grid();
+                std::cout << "MPI decomposition: " << px << "x" << py << "x" << pz << " = " << size << " processes" << std::endl;
+            }
+        }
+#endif
     }
+
+#ifdef USE_MPI
+    /**
+     * @brief Destructor - cleanup MPI resources
+     */
+    ~NavierStokesBrinkmann() {
+        if (decomp != nullptr) {
+            delete decomp;
+            decomp = nullptr;
+        }
+    }
+#endif
+
     // initialization methods:
     void initialize_gamma_field();
     void initialize_k_field();
@@ -311,6 +361,10 @@ public:
     // GRID, MATERIAL, AND TIME INFORMATION
     // ============================================================================
     Grid grid; // Grid geometry and domain decomposition
+
+#ifdef USE_MPI
+    DomainDecomposition* decomp; // MPI domain decomposition (nullptr in serial mode)
+#endif
 
     Real dt; // Time step
 
