@@ -38,6 +38,7 @@ void apply_known_faces(VectorVariable &vector,
                        ScalarVariable &gamma_field,
                        Real t = 0.0)
 {
+    (void)gamma_field; // Unused parameter
     Real Lx = g.dx * (g.Nx - 0.5);
     Real Ly = g.dy * (g.Ny - 0.5);
     Real Lz = g.dz * (g.Nz - 0.5);
@@ -95,6 +96,7 @@ void initialize_fields(const Grid &g,
                        BoundaryFunctions &u_boundary,
                        Real t)
 {
+    (void)u_boundary; // Unused parameter
 
     // Initialize interior
     for (int comp = 0; comp < 3; ++comp)

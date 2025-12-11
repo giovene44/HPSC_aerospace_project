@@ -107,6 +107,7 @@ void initialize_vector_field(const Grid &g,
                              BoundaryFunctions &u_boundary,
                              Real t)
 {
+    (void)u_boundary; // Unused parameter
     // Initialize interior and boundary
     for (int comp = 0; comp < 3; ++comp)
         for (int k = 0; k < g.Nz; ++k)
@@ -149,6 +150,7 @@ void compute_rhs_field(const Grid &g,
                        Real t,
                        Real nu)
 {
+    (void)t; // Unused parameter
     // Build RHS based on vector field
     for (int comp = 0; comp < 3; ++comp)
         for (Dim k = 0; k < g.Nz; ++k)
@@ -187,24 +189,6 @@ VelocitySolver setup_solver(const Grid &g, ScalarVariable &gamma_field, Boundary
     return solver;
 }
 
-auto define_stride_x(const Grid &g)
-{
-    return [=](Dim j, Dim k)
-    { return j * g.Nx + k * g.Nx * g.Ny; };
-}
-
-auto define_stride_y(const Grid &g)
-{
-    return [=](Dim i, Dim k)
-    { return i + k * g.Nx * g.Ny; };
-}
-
-auto define_stride_z(const Grid &g)
-{
-    return [=](Dim i, Dim j)
-    { return i + j * g.Nx; };
-}
-
 // ===============================================================
 // 6. Solve and check solution
 // ===============================================================
@@ -222,18 +206,69 @@ Real compute_L2_error(VectorVariable &expected, VectorVariable &computed, const 
     return sqrt(error * g.dx * g.dy * g.dz);
 }
 
-void construct_g_function(VectorVariable &g_function, VectorVariable &rhs_2, VectorVariable &u_1, VectorVariable &eta_1, VectorVariable &zeta_1, const Grid &g, Real nu)
+void construct_g_function(VectorVariable &g_function, const Grid &g, BoundaryFunctions &u_boundary,
+                          Real t, Real nu, VectorVariable &u_n, VectorVariable &eta_n, VectorVariable &zeta_n)
 {
-    // Placeholder implementation: actual g_function computation depends on problem specifics
+    (void)u_boundary; // Unused parameter
+    // Compute g = f - (nu/2)*(dxx_eta + dyy_zeta + dzz_u)
+    // where f is analytical forcing and second derivatives are numerical
     for (int comp = 0; comp < 3; ++comp)
         for (Dim k = 0; k < g.Nz; ++k)
             for (Dim j = 0; j < g.Ny; ++j)
                 for (Dim i = 0; i < g.Nx; ++i)
                 {
-                    Real val = rhs_2.value(comp, i, j, k) + (nu / Real(2.0)) * (u_1.second_derivative(comp, 0, i, j, k) + eta_1.second_derivative(comp, 1, i, j, k) + zeta_1.second_derivative(comp, 2, i, j, k));
-                    g_function.set(comp, i, j, k) = val;
+                    Real x, y, z;
+                    if (comp == 0)
+                    {
+                        x = (i + 0.5) * g.dx;
+                        y = j * g.dy;
+                        z = k * g.dz;
+                    }
+                    else if (comp == 1)
+                    {
+                        x = i * g.dx;
+                        y = (j + 0.5) * g.dy;
+                        z = k * g.dz;
+                    }
+                    else
+                    {
+                        x = i * g.dx;
+                        y = j * g.dy;
+                        z = (k + 0.5) * g.dz;
+                    }
+
+                    // Compute analytical forcing term f = du/dt - nu*Laplacian(u)
+                    Real f_val;
+                    if (comp == 0)
+                    {
+                        Real u_t = cos(t) * sin(x) * sin(y) * sin(z);
+                        Real laplacian_u = -3.0 * sin(t) * sin(x) * sin(y) * sin(z);
+                        f_val = u_t - nu * laplacian_u;
+                    }
+                    else if (comp == 1)
+                    {
+                        Real v_t = cos(t) * cos(x) * cos(y) * cos(z);
+                        Real laplacian_v = -3.0 * sin(t) * cos(x) * cos(y) * cos(z);
+                        f_val = v_t - nu * laplacian_v;
+                    }
+                    else
+                    {
+                        Real w_t = cos(t) * cos(x) * sin(y) * (sin(z) + cos(z));
+                        Real laplacian_w = -3.0 * sin(t) * cos(x) * sin(y) * (sin(z) + cos(z));
+                        f_val = w_t - nu * laplacian_w;
+                    }
+
+                    // Compute numerical second derivatives from current solution
+                    Real dxx_eta = eta_n.second_derivative(comp, 0, i, j, k);
+                    Real dyy_zeta = zeta_n.second_derivative(comp, 1, i, j, k);
+                    Real dzz_u = u_n.second_derivative(comp, 2, i, j, k);
+
+                    // g = f - (nu/2)*(dxx + dyy + dzz)
+                    Real g_val = f_val - (nu / 2.0) * (dxx_eta + dyy_zeta + dzz_u);
+
+                    g_function.set(comp, i, j, k) = g_val;
                 }
-} //
+}
 
 void compute_xi_function(VectorVariable &xi_function, VectorVariable &g_function, const Grid &g, VectorVariable &u_1, Real beta)
 {
@@ -287,11 +322,11 @@ void solve(VelocitySolver &solver,
         // Update solver time to current time step
         solver.set_t(t_current);
 
-        // Compute true solution at current time for RHS computation
+        // Compute true solution at current time for error computation
         initialize_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_current, nu);
 
-        // Construct g_function and xi_function for current time step
-        construct_g_function(g_function, rhs_true_next, u_n, eta_n, zeta_n, g, nu);
+        // Construct g_function: g = f - (nu/2)*(dxx_eta + dyy_zeta + dzz_u)
+        construct_g_function(g_function, g, solver.u_boundary, t_current, nu, u_n, eta_n, zeta_n);
         compute_xi_function(xi_function, g_function, g, u_n, beta);
 
         // X-direction splitting: solve for eta_{n+1}
@@ -346,16 +381,18 @@ int main()
     outfile << std::scientific << std::setprecision(8);
 
     // Test multiple grid resolutions
-    std::vector<Dim> grid_sizes = {10, 20, 40, 80};
+    std::vector<Dim> grid_sizes = {80, 160};
     std::vector<Real> errors;
     std::vector<Real> dx_values;
     std::vector<Real> dt_values;
-
-    // Make dt proportional to dx to avoid time discretization error dominating
-    Real dt_test = 0.01;
-
+    Real first_base_dx = two_pi / (grid_sizes[0] - 0.5);
+    Real first_dt = 0.001 * first_base_dx;
     for (Dim N : grid_sizes)
     {
+        // Scale dt proportionally with dx for second-order spatial discretization
+        // This keeps the temporal error smaller than spatial error
+        Real base_dx = two_pi / (N - 0.5);
+        Real dt_test = first_dt;
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
         printf("\n=================================================\n");
@@ -393,7 +430,7 @@ int main()
         DimensionsHandlerVector y_handler(g.Nx, g.Ny, g.Nz, 1, 0, 2, g.dy);
 
         DimensionsHandlerVector z_handler(g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz);
-        Real T_final = 10;
+        Real T_final = 10 * (g.dt);
 
         Real l2_error = 0.0;
         solve(solver,

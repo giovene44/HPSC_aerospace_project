@@ -29,9 +29,9 @@ void thomas_algorithm(const std::vector<Real> &a, const std::vector<Real> &b, co
         x[i] = rhs_prime[i] - c_prime[i] * x[i + 1];
     }
 };
-Real f(Real x)
+Real f(Real /* x */)
 {
-    return 0.0f;
+    return 1.0;
 }
 
 int main()

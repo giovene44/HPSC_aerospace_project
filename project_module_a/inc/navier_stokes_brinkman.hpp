@@ -239,7 +239,6 @@ public:
 
         Real err_u = 0.0, err_p = 0.0;
         Real norm_u = 0.0, norm_p = 0.0;
-        size_t boundary_node_count = 0;
 
         // 3. Loop over grid
         for (Dim k = 0; k < Nz; ++k)

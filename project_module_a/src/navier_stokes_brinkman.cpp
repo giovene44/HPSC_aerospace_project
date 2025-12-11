@@ -159,13 +159,13 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // Physical properties
             // -----------------------------------------------------------------
             Real nu_val = nu;
-            Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k
+            // Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k (unused)
 
             // Evaluate forcing function
             std::vector<Real> forcing_vec = forcing_function(x, y, z, t);
             Real forcing = forcing_vec[comp];
-            Real p_grad = gradient_pressure_predictor.value(comp, idx);
-            Real velocity = velocity_solution.value(comp, idx);
+            // Real p_grad = gradient_pressure_predictor.value(comp, idx); // unused
+            // Real velocity = velocity_solution.value(comp, idx); // unused
 
             // =================================================================
             // DEBUGGING OUTPUT
@@ -295,6 +295,7 @@ void NavierStokesBrinkmann::compute_rhs_pressure()
 
 void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 {
+    (void)mms; // Unused parameter
     DimensionsHandlerScalar x_scalar_handler(Nx, Ny, Nz, dx);
     DimensionsHandlerScalar y_scalar_handler(Ny, Nx, Nz, dy);
     DimensionsHandlerScalar z_scalar_handler(Nz, Nx, Ny, dz);

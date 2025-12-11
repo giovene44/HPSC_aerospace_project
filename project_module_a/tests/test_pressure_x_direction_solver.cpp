@@ -38,6 +38,7 @@ void initialize_fields(const Grid &g,
                        BoundaryFunctions &p_boundary,
                        Real t)
 {
+    (void)p_boundary; // Unused parameter
 
     // Initialize interior
     for (int k = 0; k < g.Nz; ++k)

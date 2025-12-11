@@ -256,6 +256,7 @@ public:
             if (component == 2)
                 return (index_1 == 0 || index_2 == 0);
         }
+        return false;
     }
     template <Dim direction>
     bool handle_known_face(VectorVariable &solution, Dim index_1, Dim index_2, Dim component)
@@ -386,20 +387,6 @@ public:
         {
             for (Dim i2 = 0; i2 < Outer2; ++i2) // Nz in direction == 1
             {
-                if constexpr (direction == 0)
-                {
-                    if (i1 == 0 && i2 == 0)
-                    {
-                        printf("Y-SWEEP: N=%d Outer1=%d Outer2=%d\n", N, Outer1, Outer2);
-                    }
-                }
-                if constexpr (direction == 1)
-                {
-                    if (i1 == 0 && i2 == 0)
-                    {
-                        printf("Y-SWEEP: N=%d Outer1=%d Outer2=%d\n", N, Outer1, Outer2);
-                    }
-                }
                 auto get_gamma = [&](Dim i)
                 {
                     if constexpr (direction == 0)

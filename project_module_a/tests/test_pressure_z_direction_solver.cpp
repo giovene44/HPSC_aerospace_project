@@ -38,15 +38,16 @@ void initialize_fields(const Grid &g,
                        BoundaryFunctions &p_boundary,
                        Real t)
 {
+    (void)p_boundary; // Unused parameter
 
     // Initialize interior
     for (int k = 0; k < g.Nz; ++k)
         for (int j = 0; j < g.Ny; ++j)
             for (int i = 0; i < g.Nx; ++i)
             {
-                Real x, y, z;
-                x = i * g.dx;
-                y = j * g.dy;
+                Real z;
+                // Real x = i * g.dx; (unused)
+                // Real y = j * g.dy; (unused)
                 z = k * g.dz;
 
                 scalar.set(i, j, k) = sin(z) * sin(t);
