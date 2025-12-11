@@ -67,11 +67,11 @@ void initialize_fields(const Grid &g,
                     }
 
                     if (comp == 0)
-                        vector.set(comp, i, j, k) = sin(t)*sin(x)*sin(y)*sin(z);
+                        vector.set(comp, i, j, k) = sin(t) * sin(x) * sin(y) * sin(z);
                     else if (comp == 1)
-                        vector.set(comp, i, j, k) = sin(t)*cos(x)*cos(y)*cos(z);
+                        vector.set(comp, i, j, k) = sin(t) * cos(x) * cos(y) * cos(z);
                     else
-                        vector.set(comp, i, j, k) = sin(t)*cos(x)*sin(y)*(sin(z)+cos(z));
+                        vector.set(comp, i, j, k) = sin(t) * cos(x) * sin(y) * (sin(z) + cos(z));
                 }
 
     // Apply known faces
@@ -130,7 +130,7 @@ Real compute_L2_error(VectorVariable &expected, VectorVariable &computed, const 
 bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
                      VectorVariable &vector_1, VectorVariable &rhs_2,
                      VectorVariable &vector_2, const Grid &g,
-                     DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler,
+                     DimensionsHandlerVector &x_handler,
                      Real &l2_error)
 {
     VectorVariable rhs_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
@@ -142,7 +142,7 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
     VectorVariable computed_sol(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     computed_sol.set_all(0.0);
 
-    solver.solve<decltype(define_stride_x(g)), 0>(rhs_delta, computed_sol, x_handler);
+    solver.solve<0>(rhs_delta, computed_sol, x_handler);
 
     // Compute L2 error
     l2_error = compute_L2_error(vector_delta, computed_sol, g);
@@ -178,7 +178,7 @@ int main()
     outfile << std::scientific << std::setprecision(8);
 
     // Test multiple grid resolutions
-    std::vector<Dim> grid_sizes = {10, 20, 40, 80, 100};
+    std::vector<Dim> grid_sizes = {5, 10, 20, 40, 80, 160};
     std::vector<Real> errors;
     std::vector<Real> dx_values;
     std::vector<Real> dt_values;
@@ -210,8 +210,7 @@ int main()
 
         VelocitySolver solver = setup_solver(g, gamma_field, u_boundary, g.dt, g.dt + g.dt);
 
-        auto stride_x = define_stride_x(g);
-        DimensionsHandlerVector<decltype(stride_x)> x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx, stride_x);
+        DimensionsHandlerVector x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx);
 
         Real l2_error = 0.0;
         bool success = solve_and_check(solver, rhs_1, vector_1, rhs_2, vector_2, g, x_handler, l2_error);

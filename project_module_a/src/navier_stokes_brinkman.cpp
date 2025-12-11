@@ -295,20 +295,13 @@ void NavierStokesBrinkmann::compute_rhs_pressure()
 
 void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 {
-    auto stride_x = [this](Dim j, Dim k)
-    { return j * Nx + k * Nx * Ny; };
-    auto stride_y = [this](Dim i, Dim k)
-    { return i + k * Nx * Ny; };
-    auto stride_z = [this](Dim i, Dim j)
-    { return i + j * Nx; };
+    DimensionsHandlerScalar x_scalar_handler(Nx, Ny, Nz, dx);
+    DimensionsHandlerScalar y_scalar_handler(Ny, Nx, Nz, dy);
+    DimensionsHandlerScalar z_scalar_handler(Nz, Nx, Ny, dz);
 
-    DimensionsHandlerScalar<decltype(stride_x)> x_scalar_handler(Nx, Ny, Nz, dx, stride_x);
-    DimensionsHandlerScalar<decltype(stride_y)> y_scalar_handler(Nx, Ny, Nz, dy, stride_y);
-    DimensionsHandlerScalar<decltype(stride_z)> z_scalar_handler(Nx, Ny, Nz, dz, stride_z);
-
-    DimensionsHandlerVector<decltype(stride_x)> x_vector_handler(Nx, Ny, Nz, 0, 1, 2, dx, stride_x);
-    DimensionsHandlerVector<decltype(stride_y)> y_vector_handler(Nx, Ny, Nz, 1, 0, 2, dy, stride_y);
-    DimensionsHandlerVector<decltype(stride_z)> z_vector_handler(Nx, Ny, Nz, 2, 0, 1, dz, stride_z);
+    DimensionsHandlerVector x_vector_handler(Nx, Ny, Nz, 0, 1, 2, dx);
+    DimensionsHandlerVector y_vector_handler(Ny, Nx, Nz, 1, 0, 2, dy);
+    DimensionsHandlerVector z_vector_handler(Nz, Nx, Ny, 2, 0, 1, dz);
 
     // Initialize
     velocity_solution.set_all(u_boundary, Real(0.0));
@@ -338,17 +331,17 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         // X-Sweep
         vector_rhs = xi - eta;
-        velocity_solver.solve<decltype(stride_x), 0>(vector_rhs, vector_intermediate_solution, x_vector_handler);
+        velocity_solver.solve<0>(vector_rhs, vector_intermediate_solution, x_vector_handler);
         eta += vector_intermediate_solution;
 
         // Y-Sweep
         vector_rhs = eta - zeta;
-        velocity_solver.solve<decltype(stride_y), 1>(vector_rhs, vector_intermediate_solution, y_vector_handler);
+        velocity_solver.solve<1>(vector_rhs, vector_intermediate_solution, y_vector_handler);
         zeta += vector_intermediate_solution;
 
         // Z-Sweep
         vector_rhs = zeta - velocity_solution;
-        velocity_solver.solve<decltype(stride_z), 2>(vector_rhs, vector_intermediate_solution, z_vector_handler);
+        velocity_solver.solve<2>(vector_rhs, vector_intermediate_solution, z_vector_handler);
 
         // Update to Intermediate Velocity u*
         velocity_solution += vector_intermediate_solution;
@@ -372,7 +365,7 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
         velocity_solver.advance_time();
         velocity_time_series.emplace_back(velocity_solution);
 
-        if(int(t/dt) % 10 == 0)
+        if (int(t / dt) % 10 == 0)
         {
             std::cout << "Time: " << t << " / " << T << "\n";
         }

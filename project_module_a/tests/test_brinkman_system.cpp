@@ -134,11 +134,11 @@ void initialize_vector_field(const Grid &g,
                     }
 
                     if (comp == 0)
-                        vector.set(comp, i, j, k) = sin(t)*sin(x)*sin(y)*sin(z);
+                        vector.set(comp, i, j, k) = sin(t) * sin(x) * sin(y) * sin(z);
                     else if (comp == 1)
-                        vector.set(comp, i, j, k) = sin(t)*cos(x)*cos(y)*cos(z);
+                        vector.set(comp, i, j, k) = sin(t) * cos(x) * cos(y) * cos(z);
                     else
-                        vector.set(comp, i, j, k) = sin(t)*cos(x)*sin(y)*(sin(z)+cos(z));
+                        vector.set(comp, i, j, k) = sin(t) * cos(x) * sin(y) * (sin(z) + cos(z));
                 }
 }
 
@@ -256,9 +256,9 @@ void solve(VelocitySolver &solver,
            VectorVariable &g_function,
            VectorVariable &xi_function,
            const Grid &g,
-           const DimensionsHandlerVector<decltype(define_stride_x(g))> &x_handler,
-           const DimensionsHandlerVector<decltype(define_stride_y(g))> &y_handler,
-           const DimensionsHandlerVector<decltype(define_stride_z(g))> &z_handler,
+           const DimensionsHandlerVector &x_handler,
+           const DimensionsHandlerVector &y_handler,
+           const DimensionsHandlerVector &z_handler,
            Real t_n_plus_1_start,
            Real T_final,
            Real nu,
@@ -297,19 +297,19 @@ void solve(VelocitySolver &solver,
         // X-direction splitting: solve for eta_{n+1}
         temp_solution.set_all(0.0f);
         rhs = xi_function - eta_n;
-        solver.solve<decltype(define_stride_x(g)), 0>(rhs, temp_solution, x_handler);
+        solver.solve<0>(rhs, temp_solution, x_handler);
         eta_2 = temp_solution + eta_n;
 
         // Y-direction splitting: solve for zeta_{n+1}
         rhs = eta_2 - zeta_n;
         temp_solution.set_all(0.0f);
-        solver.solve<decltype(define_stride_y(g)), 1>(rhs, temp_solution, y_handler);
+        solver.solve<1>(rhs, temp_solution, y_handler);
         zeta_2 = temp_solution + zeta_n;
 
         // Z-direction splitting: solve for u_{n+1}
         rhs = zeta_2 - u_n;
         temp_solution.set_all(0.0f);
-        solver.solve<decltype(define_stride_z(g)), 2>(rhs, temp_solution, z_handler);
+        solver.solve<2>(rhs, temp_solution, z_handler);
         VectorVariable u_n_plus_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         u_n_plus_1 = temp_solution + u_n;
 
@@ -323,7 +323,7 @@ void solve(VelocitySolver &solver,
 
         if (step % 10 == 0 || step == num_steps - 1)
         {
-            std::cout<<"Error at step "<<step+1<<": "<<compute_L2_error(u_true_next, u_n, g)<<std::scientific<< std::setprecision(8)<<std::endl;
+            std::cout << "Error at step " << step + 1 << ": " << compute_L2_error(u_true_next, u_n, g) << std::scientific << std::setprecision(8) << std::endl;
         }
     }
 
@@ -388,14 +388,11 @@ int main()
 
         VelocitySolver solver = setup_solver(g, gamma_field, u_boundary, g.dt, g.dt + g.dt);
 
-        auto stride_x = define_stride_x(g);
-        DimensionsHandlerVector<decltype(stride_x)> x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx, stride_x);
+        DimensionsHandlerVector x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx);
 
-        auto stride_y = define_stride_y(g);
-        DimensionsHandlerVector<decltype(stride_y)> y_handler(g.Nx, g.Ny, g.Nz, 1, 0, 2, g.dy, stride_y);
+        DimensionsHandlerVector y_handler(g.Nx, g.Ny, g.Nz, 1, 0, 2, g.dy);
 
-        auto stride_z = define_stride_z(g);
-        DimensionsHandlerVector<decltype(stride_z)> z_handler(g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz, stride_z);
+        DimensionsHandlerVector z_handler(g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz);
         Real T_final = 10;
 
         Real l2_error = 0.0;

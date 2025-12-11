@@ -105,14 +105,14 @@ Real compute_L2_error(const ScalarVariable &expected, const ScalarVariable &comp
 // ===============================================================
 bool solve_and_check(PressureSolver &solver, ScalarVariable &rhs,
                      ScalarVariable &scalar, const Grid &g,
-                     DimensionsHandlerVector<decltype(define_stride_y(g))> &y_handler,
+                     DimensionsHandlerVector &y_handler,
                      Real &l2_error)
 {
 
     ScalarVariable computed_sol(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     computed_sol.set_all(0.0);
 
-    solver.solve_pressure<decltype(define_stride_y(g)), 1>(rhs, computed_sol, y_handler);
+    solver.solve_pressure<1>(rhs, computed_sol, y_handler);
 
     l2_error = compute_L2_error(scalar, computed_sol, g);
 
@@ -174,8 +174,7 @@ int main()
         initialize_fields(g, scalar, rhs, p_boundary, g.dt);
         PressureSolver solver = setup_solver(g, p_boundary, g.dt);
 
-        auto stride_y = define_stride_y(g);
-        DimensionsHandlerVector<decltype(stride_y)> y_handler(g.Nx, g.Ny, g.Nz, 1, 0, 2, g.dy, stride_y);
+        DimensionsHandlerVector y_handler(g.Nx, g.Ny, g.Nz, 1, 0, 2, g.dy);
 
         Real l2_error = 0.0;
         bool success = solve_and_check(solver, rhs, scalar, g, y_handler, l2_error);
