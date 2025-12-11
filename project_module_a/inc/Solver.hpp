@@ -83,7 +83,6 @@ public:
     template <Dim direction>
     void apply_bc(ScalarVariable &rhs)
     {
-        return;
         if constexpr (direction == 0) // X direction
         {
             for (Dim index_1 = 0; index_1 < Ny; ++index_1)

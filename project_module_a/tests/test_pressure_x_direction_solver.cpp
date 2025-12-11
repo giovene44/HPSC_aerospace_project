@@ -41,6 +41,7 @@ void initialize_fields(const Grid &g,
     (void)p_boundary; // Unused parameter
 
     // Initialize interior
+    // Use cos() solution which satisfies Neumann BC (zero normal derivative at boundaries)
     for (int k = 0; k < g.Nz; ++k)
         for (int j = 0; j < g.Ny; ++j)
             for (int i = 0; i < g.Nx; ++i)
@@ -50,7 +51,7 @@ void initialize_fields(const Grid &g,
                 y = j * g.dy;
                 z = k * g.dz;
 
-                scalar.set(i, j, k) = sin(x) * sin(t) * sin(y) * sin(z);
+                scalar.set(i, j, k) = cos(x) * cos(y) * cos(z) * sin(t);
             }
 
     // Build RHS = (I - Dxx) * scalar
@@ -151,9 +152,11 @@ int main()
     std::ofstream outfile("convergence_pressure_x.txt");
     outfile << "# Nx Ny Nz dx dt L2_error convergence_rate\n";
 
+    Real dt = 0.01 * (two_pi / (80 - 0.5));
+
     for (Dim N : grid_sizes)
     {
-        Real dt = 0.01 * (two_pi / (N - 0.5));
+
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt);
 
         printf("=================================================\n");
@@ -166,9 +169,9 @@ int main()
 
         BoundaryFunctions p_boundary;
         std::vector<std::string> neumann_bc = {
-            "cos(x)*sin(t)*sin(y)*sin(z)",
-            "sin(x)*sin(t)*cos(y)*sin(z)",
-            "sin(x)*sin(t)*sin(y)*cos(z)",
+            "0",
+            "0",
+            "0",
         };
 
         p_boundary.set_string_expression(neumann_bc);
