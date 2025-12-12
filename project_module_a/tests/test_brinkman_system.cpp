@@ -5,7 +5,7 @@
 #include <iomanip>
 #include <fstream>
 #include "navier_stokes_brinkman.hpp"
-
+#include <chrono>
 // ===============================================================
 // 1. Setup Grid Parameters
 // ===============================================================
@@ -298,8 +298,11 @@ void solve(VelocitySolver &solver,
            Real T_final,
            Real nu,
            Real beta,
-           Real &l2_error)
+           Real &l2_error,
+           Real &time,
+           bool parallel = false)
 {
+    auto start_time = std::chrono::high_resolution_clock::now();
     VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable temp_solution(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable u_true_next(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
@@ -332,19 +335,19 @@ void solve(VelocitySolver &solver,
         // X-direction splitting: solve for eta_{n+1}
         temp_solution.set_all(0.0f);
         rhs = xi_function - eta_n;
-        solver.solve<0>(rhs, temp_solution, x_handler);
+        solver.solve<0>(rhs, temp_solution, x_handler, parallel);
         eta_2 = temp_solution + eta_n;
 
         // Y-direction splitting: solve for zeta_{n+1}
         rhs = eta_2 - zeta_n;
         temp_solution.set_all(0.0f);
-        solver.solve<1>(rhs, temp_solution, y_handler);
+        solver.solve<1>(rhs, temp_solution, y_handler, parallel);
         zeta_2 = temp_solution + zeta_n;
 
         // Z-direction splitting: solve for u_{n+1}
         rhs = zeta_2 - u_n;
         temp_solution.set_all(0.0f);
-        solver.solve<2>(rhs, temp_solution, z_handler);
+        solver.solve<2>(rhs, temp_solution, z_handler, parallel);
         VectorVariable u_n_plus_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         u_n_plus_1 = temp_solution + u_n;
 
@@ -361,6 +364,8 @@ void solve(VelocitySolver &solver,
             std::cout << "Error at step " << step + 1 << ": " << compute_L2_error(u_true_next, u_n, g) << std::scientific << std::setprecision(8) << std::endl;
         }
     }
+    auto end_time = std::chrono::high_resolution_clock::now();
+    time = std::chrono::duration<Real>(end_time - start_time).count();
 
     // Compute L2 error at final time only
     initialize_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_current - g.dt, nu);
@@ -381,18 +386,22 @@ int main()
     outfile << std::scientific << std::setprecision(8);
 
     // Test multiple grid resolutions
-    std::vector<Dim> grid_sizes = {80, 160};
+    std::vector<Dim> grid_sizes = {40, 80, 160};
     std::vector<Real> errors;
+    std::vector<Real> speed_ups;
     std::vector<Real> dx_values;
     std::vector<Real> dt_values;
+    /*
     Real first_base_dx = two_pi / (grid_sizes[0] - 0.5);
     Real first_dt = 0.001 * first_base_dx;
+    */
+
     for (Dim N : grid_sizes)
     {
         // Scale dt proportionally with dx for second-order spatial discretization
         // This keeps the temporal error smaller than spatial error
         Real base_dx = two_pi / (N - 0.5);
-        Real dt_test = first_dt;
+        Real dt_test = 0.001 * base_dx;
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
         printf("\n=================================================\n");
@@ -404,24 +413,39 @@ int main()
         Real nu = 0.1f;
         Real beta = 1.0f;
         gamma_field.set_all(((g.dt * nu) / (Real(2.0) * beta)));
-        VectorVariable u_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable eta_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable zeta_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable rhs_1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable u_1_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable eta_1_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable zeta_1_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable rhs_1_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
-        VectorVariable eta_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable zeta_2(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable eta_2_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable zeta_2_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
-        VectorVariable g_function(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable xi_function(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable g_function_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable xi_function_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+
+        VectorVariable u_1_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable eta_1_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable zeta_1_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable rhs_1_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+
+        VectorVariable eta_2_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable zeta_2_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+
+        VectorVariable g_function_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable xi_function_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
         BoundaryFunctions u_boundary;
         std::vector<std::string> sin_bc = {"sin(t)*sin(x)*sin(y)*sin(z)", "sin(t)*cos(x)*cos(y)*cos(z)", "sin(t)*cos(x)*sin(y)*(sin(z)+cos(z))"};
         u_boundary.set_string_expression(sin_bc);
 
-        initialize_fields(g, gamma_field, u_1, rhs_1, u_boundary, g.dt, nu);
-        initialize_fields(g, gamma_field, eta_1, rhs_1, u_boundary, g.dt, nu);
-        initialize_fields(g, gamma_field, zeta_1, rhs_1, u_boundary, g.dt, nu);
+        initialize_fields(g, gamma_field, u_1_sequential, rhs_1_sequential, u_boundary, g.dt, nu);
+        initialize_fields(g, gamma_field, eta_1_sequential, rhs_1_sequential, u_boundary, g.dt, nu);
+        initialize_fields(g, gamma_field, zeta_1_sequential, rhs_1_sequential, u_boundary, g.dt, nu);
+
+        initialize_fields(g, gamma_field, u_1_parallel, rhs_1_parallel, u_boundary, g.dt, nu);
+        initialize_fields(g, gamma_field, eta_1_parallel, rhs_1_parallel, u_boundary, g.dt, nu);
+        initialize_fields(g, gamma_field, zeta_1_parallel, rhs_1_parallel, u_boundary, g.dt, nu);
 
         VelocitySolver solver = setup_solver(g, gamma_field, u_boundary, g.dt, g.dt + g.dt);
 
@@ -433,14 +457,17 @@ int main()
         Real T_final = 10 * (g.dt);
 
         Real l2_error = 0.0;
+        Real time_sequential = 0.0;
+        bool parallel = false;
+
         solve(solver,
-              eta_1,
-              eta_2,
-              zeta_1,
-              zeta_2,
-              u_1,
-              g_function,
-              xi_function,
+              eta_1_sequential,
+              eta_2_sequential,
+              zeta_1_sequential,
+              zeta_2_sequential,
+              u_1_sequential,
+              g_function_sequential,
+              xi_function_sequential,
               g,
               x_handler,
               y_handler,
@@ -449,10 +476,42 @@ int main()
               T_final,
               nu,
               beta,
+<<<<<<< HEAD
               l2_error);
         errors.emplace_back(l2_error);
         dx_values.emplace_back(g.dx);
         dt_values.emplace_back(g.dt);
+=======
+              l2_error, time_sequential, parallel);
+        errors.push_back(l2_error);
+        dx_values.push_back(g.dx);
+        dt_values.push_back(g.dt);
+>>>>>>> e26488d6130715440034abd3a7ae8bd8122a62c2
+
+        l2_error = 0.0;
+        Real time_parallel = 0.0;
+        parallel = true;
+
+        solve(solver,
+              eta_1_parallel,
+              eta_2_parallel,
+              zeta_1_parallel,
+              zeta_2_parallel,
+              u_1_parallel,
+              g_function_parallel,
+              xi_function_parallel,
+              g,
+              x_handler,
+              y_handler,
+              z_handler,
+              g.dt + g.dt,
+              T_final,
+              nu,
+              beta,
+              l2_error, time_parallel, parallel);
+
+        Real speed_up = time_sequential / time_parallel;
+        speed_ups.push_back(speed_up);
 
         // Compute convergence rate if we have at least 2 data points
         Real conv_rate = 0.0;
@@ -475,13 +534,13 @@ int main()
     printf("\n=================================================\n");
     printf("CONVERGENCE STUDY SUMMARY\n");
     printf("=================================================\n");
-    printf("Grid Size    dx          dt          L2 Error      Conv. Rate\n");
+    printf("Grid Size    dx          dt          L2 Error      Conv. Rate    Speed Up\n");
     printf("---------------------------------------------------------------\n");
     for (size_t i = 0; i < errors.size(); ++i)
     {
         Real rate = (i > 0) ? log(errors[i - 1] / errors[i]) / log(dx_values[i - 1] / dx_values[i]) : 0.0;
-        printf("%-12d %.6e  %.6e  %.6e  %.4f\n",
-               grid_sizes[i], dx_values[i], dt_values[i], errors[i], rate);
+        printf("%-12d %.6e  %.6e  %.6e  %.4f  %.4f\n",
+               grid_sizes[i], dx_values[i], dt_values[i], errors[i], rate, speed_ups[i]);
     }
     printf("=================================================\n");
     printf("Results written to: convergence_momentum_x.txt\n");
