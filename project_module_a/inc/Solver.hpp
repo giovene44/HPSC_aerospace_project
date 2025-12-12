@@ -3,13 +3,16 @@
 #include <string>
 #include <cmath>
 #include <functional> // For std::function/lambdas
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include "Variables.hpp"
 #include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
 #include "DimensionHandler.hpp"
 #include "BoundaryFunctions.hpp"
 
-constexpr bool DEBUG_BLOCK = true; // set to false to disable all debug prints
+constexpr bool DEBUG_BLOCK = false; // set to true to enable debug prints
 
 class Solver
 {
@@ -273,6 +276,7 @@ public:
             }
             Real t_prev = t - dt;
 
+            // BoundaryFunctions::value is now thread-safe via thread_local parser
             solution.set(0, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t) - u_boundary.value<0>(x + dx / Real(2.0), y, z, t_prev);
             solution.set(1, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t) - u_boundary.value<1>(x, y + dy / Real(2.0), z, t_prev);
             solution.set(2, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t) - u_boundary.value<2>(x, y, z + dz / Real(2.0), t_prev);
@@ -368,7 +372,7 @@ public:
         }
     };
     template <Dim direction>
-    void block_solver(const VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector &dim_handler)
+    void block_solver(const VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector &dim_handler, bool use_omp = false)
     {
         Dim N = (direction == 0) ? Nx : ((direction == 1) ? Ny : Nz);
         Real h = (direction == 0) ? dx : ((direction == 1) ? dy : dz);
@@ -382,108 +386,128 @@ public:
         Dim Outer1 = dim_handler.N2;
         Dim Outer2 = dim_handler.N3;
 
-        for (Dim i1 = 0; i1 < Outer1; ++i1) // Nx in direction == 1
+        auto worker = [&](Dim i1, Dim i2)
         {
-            for (Dim i2 = 0; i2 < Outer2; ++i2) // Nz in direction == 1
+            std::vector<Real> a_loc = a, b_loc = b, c_loc = c, d_loc = d, x_loc = x;
+
+            auto get_gamma = [&](Dim i)
             {
-                auto get_gamma = [&](Dim i)
-                {
-                    if constexpr (direction == 0)
-                        return gamma_field.get(i, i1, i2);
-                    else if constexpr (direction == 1)
-                        return gamma_field.get(i1, i, i2);
-                    else if constexpr (direction == 2)
-                        return gamma_field.get(i1, i2, i);
-                };
-                auto get_rhs_comp = [&](Dim comp, Dim i)
-                {
-                    if constexpr (direction == 0)
-                        return rhs.value(comp, i, i1, i2);
-                    else if constexpr (direction == 1)
-                        return rhs.value(comp, i1, i, i2);
-                    else if constexpr (direction == 2)
-                        return rhs.value(comp, i1, i2, i);
-                };
-                auto set_sol_comp = [&](Dim comp, Dim i, Real val)
-                {
-                    if constexpr (direction == 0)
-                        solution.set(comp, i, i1, i2) = val;
-                    else if constexpr (direction == 1)
-                        solution.set(comp, i1, i, i2) = val;
-                    else if constexpr (direction == 2)
-                        solution.set(comp, i1, i2, i) = val;
-                };
+                if constexpr (direction == 0)
+                    return gamma_field.get(i, i1, i2);
+                else if constexpr (direction == 1)
+                    return gamma_field.get(i1, i, i2);
+                else
+                    return gamma_field.get(i1, i2, i);
+            };
+            auto get_rhs_comp = [&](Dim comp, Dim i)
+            {
+                if constexpr (direction == 0)
+                    return rhs.value(comp, i, i1, i2);
+                else if constexpr (direction == 1)
+                    return rhs.value(comp, i1, i, i2);
+                else
+                    return rhs.value(comp, i1, i2, i);
+            };
+            auto set_sol_comp = [&](Dim comp, Dim i, Real val)
+            {
+                if constexpr (direction == 0)
+                    solution.set(comp, i, i1, i2) = val;
+                else if constexpr (direction == 1)
+                    solution.set(comp, i1, i, i2) = val;
+                else
+                    solution.set(comp, i1, i2, i) = val;
+            };
 
-                // Comp1 (Normal)
-                if (!handle_known_face<direction>(solution, i1, i2, Comp1))
-                {
-                    setup_TDMA_internal(N, h, a, b, c, d, [&](Dim i)
-                                        { return get_rhs_comp(Comp1, i); }, get_gamma);
+            // Comp1 (Normal)
+            if (!handle_known_face<direction>(solution, i1, i2, Comp1))
+            {
+                setup_TDMA_internal(N, h, a_loc, b_loc, c_loc, d_loc, [&](Dim i)
+                                    { return get_rhs_comp(Comp1, i); }, get_gamma);
 
-                    a[0] = 0.0;
-                    b[0] = 1.0;
-                    c[0] = 0.0;
-                    d[0] = get_rhs_comp(Comp1, 0);
-                    a[N - 1] = 0.0;
-                    b[N - 1] = 1.0;
-                    c[N - 1] = 0.0;
-                    d[N - 1] = get_rhs_comp(Comp1, N - 1);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim i = 0; i < N; ++i)
-                        set_sol_comp(Comp1, i, x[i]);
-                }
-
-                // Comp2 (Tangent)
-                if (!handle_known_face<direction>(solution, i1, i2, Comp2))
-                {
-                    setup_TDMA_internal(N, h, a, b, c, d, [&](Dim i)
-                                        { return get_rhs_comp(Comp2, i); }, get_gamma);
-                    a[0] = 0.0;
-                    b[0] = 1.0;
-                    c[0] = 0.0;
-                    d[0] = get_rhs_comp(Comp2, 0);
-                    Real gamma_N = get_gamma(N - 1);
-                    Real coeff = gamma_N / (h * h);
-                    a[N - 1] = -coeff;
-                    b[N - 1] = (1.0f + 2.0f * coeff) - (-coeff);
-                    c[N - 1] = 0.0;
-                    d[N - 1] = get_rhs_comp(Comp2, N - 1);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim i = 0; i < N; ++i)
-                        set_sol_comp(Comp2, i, x[i]);
-                }
-
-                // Comp3 (Tangent)
-                if (!handle_known_face<direction>(solution, i1, i2, Comp3))
-                {
-                    setup_TDMA_internal(N, h, a, b, c, d, [&](Dim i)
-                                        { return get_rhs_comp(Comp3, i); }, get_gamma);
-                    a[0] = 0.0;
-                    b[0] = 1.0;
-                    c[0] = 0.0;
-                    d[0] = get_rhs_comp(Comp3, 0);
-                    Real gamma_N = get_gamma(N - 1);
-                    Real coeff = gamma_N / (h * h);
-                    a[N - 1] = -coeff;
-                    b[N - 1] = (1.0f + 2.0f * coeff) - (-coeff);
-                    c[N - 1] = 0.0;
-                    d[N - 1] = get_rhs_comp(Comp3, N - 1);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim i = 0; i < N; ++i)
-                        set_sol_comp(Comp3, i, x[i]);
-                }
+                a_loc[0] = 0.0;
+                b_loc[0] = 1.0;
+                c_loc[0] = 0.0;
+                d_loc[0] = get_rhs_comp(Comp1, 0);
+                a_loc[N - 1] = 0.0;
+                b_loc[N - 1] = 1.0;
+                c_loc[N - 1] = 0.0;
+                d_loc[N - 1] = get_rhs_comp(Comp1, N - 1);
+                thomas_algorithm(a_loc, b_loc, c_loc, d_loc, x_loc);
+                for (Dim i = 0; i < N; ++i)
+                    set_sol_comp(Comp1, i, x_loc[i]);
             }
+
+            // Comp2 (Tangent)
+            if (!handle_known_face<direction>(solution, i1, i2, Comp2))
+            {
+                setup_TDMA_internal(N, h, a_loc, b_loc, c_loc, d_loc, [&](Dim i)
+                                    { return get_rhs_comp(Comp2, i); }, get_gamma);
+                a_loc[0] = 0.0;
+                b_loc[0] = 1.0;
+                c_loc[0] = 0.0;
+                d_loc[0] = get_rhs_comp(Comp2, 0);
+                Real gamma_N = get_gamma(N - 1);
+                Real coeff = gamma_N / (h * h);
+                a_loc[N - 1] = -coeff;
+                b_loc[N - 1] = (1.0f + 2.0f * coeff) - (-coeff);
+                c_loc[N - 1] = 0.0;
+                d_loc[N - 1] = get_rhs_comp(Comp2, N - 1);
+                thomas_algorithm(a_loc, b_loc, c_loc, d_loc, x_loc);
+                for (Dim i = 0; i < N; ++i)
+                    set_sol_comp(Comp2, i, x_loc[i]);
+            }
+
+            // Comp3 (Tangent)
+            if (!handle_known_face<direction>(solution, i1, i2, Comp3))
+            {
+                setup_TDMA_internal(N, h, a_loc, b_loc, c_loc, d_loc, [&](Dim i)
+                                    { return get_rhs_comp(Comp3, i); }, get_gamma);
+                a_loc[0] = 0.0;
+                b_loc[0] = 1.0;
+                c_loc[0] = 0.0;
+                d_loc[0] = get_rhs_comp(Comp3, 0);
+                Real gamma_N = get_gamma(N - 1);
+                Real coeff = gamma_N / (h * h);
+                a_loc[N - 1] = -coeff;
+                b_loc[N - 1] = (1.0f + 2.0f * coeff) - (-coeff);
+                c_loc[N - 1] = 0.0;
+                d_loc[N - 1] = get_rhs_comp(Comp3, N - 1);
+                thomas_algorithm(a_loc, b_loc, c_loc, d_loc, x_loc);
+                for (Dim i = 0; i < N; ++i)
+                    set_sol_comp(Comp3, i, x_loc[i]);
+            }
+        };
+
+#ifdef _OPENMP
+        if (use_omp)
+        {
+            if (DEBUG_BLOCK)
+            {
+                int max_threads = omp_get_max_threads();
+                printf("[OMP] block_solver<%d>: using up to %d threads\n", int(direction), max_threads);
+            }
+#pragma omp parallel for collapse(2) default(none) shared(Outer1, Outer2, worker)
+            for (Dim i2 = 0; i2 < Outer2; ++i2)
+                for (Dim i1 = 0; i1 < Outer1; ++i1)
+                    worker(i1, i2);
+            return;
         }
+
+#endif
+
+        for (Dim i2 = 0; i2 < Outer2; ++i2)
+            for (Dim i1 = 0; i1 < Outer1; ++i1)
+                worker(i1, i2);
     }
 
     VelocitySolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, Real dt_, ScalarVariable &gam, BoundaryFunctions &u_bnd)
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), gamma_field(gam), u_boundary(u_bnd) {}
 
     template <Dim direction>
-    void solve(VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector &dim_handler)
+    void solve(VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector &dim_handler, bool use_omp = false)
     {
         apply_bc<direction>(rhs);
-        block_solver<direction>(rhs, solution, dim_handler);
+        block_solver<direction>(rhs, solution, dim_handler, use_omp);
     };
     void set_gamma(ScalarVariable &g) { gamma_field = g; }
     BoundaryFunctions &set_u_boundary() { return u_boundary; }

@@ -3,6 +3,14 @@
 # ==========================================
 CXX      := g++
 CXXFLAGS := -std=c++17 -Wall -Wextra
+LDFLAGS  :=
+
+# Enable OpenMP by passing OMP=1 to make (default: off)
+OMP ?= 0
+ifeq ($(OMP),1)
+CXXFLAGS += -fopenmp
+LDFLAGS  += -fopenmp
+endif
 
 # Modalità build: release (default) o debug
 BUILD ?= release
@@ -94,14 +102,14 @@ debug:
 # Link dell'applicazione principale
 $(MAIN_EXE): $(OBJ_MAIN) $(OBJS_CORE) $(MUP_LIB)
 	@echo "[LINK APP] $@"
-	$(CXX) $(OBJ_MAIN) $(OBJS_CORE) $(MUP_LIB) -o $@
+	$(CXX) $(OBJ_MAIN) $(OBJS_CORE) $(MUP_LIB) $(LDFLAGS) -o $@
 
 # Link dinamico per i TEST separati
 # La regola % matcha il nome del file (senza estensione) dentro bin/
 # Dipende dal corrispondente .o in obj/test/, dai file CORE e dalla LIB
 $(BIN_DIR)/%: $(OBJ_DIR)/test/%.o $(OBJS_CORE) $(MUP_LIB)
 	@echo "[LINK TEST] $@"
-	$(CXX) $< $(OBJS_CORE) $(MUP_LIB) -o $@
+	$(CXX) $< $(OBJS_CORE) $(MUP_LIB) $(LDFLAGS) -o $@
 
 # ==========================================
 # 6. COMPILAZIONE

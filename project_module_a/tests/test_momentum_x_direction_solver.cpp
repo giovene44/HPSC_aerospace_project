@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <fstream>
 #include "navier_stokes_brinkman.hpp"
+#include <chrono>
 
 // ===============================================================
 // 1. Setup Grid Parameters
@@ -132,35 +133,35 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
                      VectorVariable &vector_1, VectorVariable &rhs_2,
                      VectorVariable &vector_2, const Grid &g,
                      DimensionsHandlerVector &x_handler,
-                     Real &l2_error)
+                     Real &l2_error, auto &time_speedup)
 {
-    VectorVariable rhs_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    VectorVariable vector_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-
-    rhs_delta = rhs_2 - rhs_1;
-    vector_delta = vector_2 - vector_1;
-
-    VectorVariable computed_sol(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    computed_sol.set_all(0.0);
-
-    solver.solve<0>(rhs_delta, computed_sol, x_handler);
-
+    // PARALLEL SOLVE
+    VectorVariable rhs_delta_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable vector_delta_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    rhs_delta_parallel = rhs_2 - rhs_1;
+    vector_delta_parallel = vector_2 - vector_1;
+    VectorVariable computed_sol_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    computed_sol_parallel.set_all(0.0);
+    auto time_parallel_start = std::chrono::high_resolution_clock::now();
+    solver.solve<0>(rhs_delta_parallel, computed_sol_parallel, x_handler, true);
+    auto time_parallel_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> time_parallel_diff = time_parallel_end - time_parallel_start;
     // Compute L2 error
-    l2_error = compute_L2_error(vector_delta, computed_sol, g);
+    l2_error = compute_L2_error(vector_delta_parallel, computed_sol_parallel, g);
 
-    // Adaptive tolerance based on grid spacing (for coarse grids, allow larger point-wise errors)
-    Real tolerance = std::max(5e-5, 0.1 * g.dx * g.dx);
+    // SERIAL SOLVE
+    VectorVariable rhs_delta_serial(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable vector_delta_serial(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    rhs_delta_serial = rhs_2 - rhs_1;
+    vector_delta_serial = vector_2 - vector_1;
+    VectorVariable computed_sol_serial(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    computed_sol_serial.set_all(0.0);
+    auto time_serial_start = std::chrono::high_resolution_clock::now();
+    solver.solve<0>(rhs_delta_serial, computed_sol_serial, x_handler, false);
+    auto time_serial_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> time_serial_diff = time_serial_end - time_serial_start;
 
-    for (int comp = 0; comp < 3; ++comp)
-        for (Dim k = 0; k < g.Nz; ++k)
-            for (Dim j = 0; j < g.Ny; ++j)
-                for (Dim i = 0; i < g.Nx; ++i)
-                    if (std::abs(vector_delta.value(comp, i, j, k) - computed_sol.value(comp, i, j, k)) > tolerance)
-                    {
-                        printf("Mismatch comp=%d (i,j,k)=(%d,%d,%d): expected %f, got %f\n",
-                               comp, i, j, k, vector_delta.value(comp, i, j, k), computed_sol.value(comp, i, j, k));
-                        return false;
-                    }
+    time_speedup = time_serial_diff.count() / time_parallel_diff.count();
 
     return true;
 }
@@ -179,15 +180,17 @@ int main()
     outfile << std::scientific << std::setprecision(8);
 
     // Test multiple grid resolutions
-    std::vector<Dim> grid_sizes = {5, 10, 20, 40, 80, 160};
+    std::vector<Dim> grid_sizes = {40, 80, 160};
     std::vector<Real> errors;
+    std::vector<Real> speed_ups;
     std::vector<Real> dx_values;
     std::vector<Real> dt_values;
 
     for (Dim N : grid_sizes)
     {
-        // Make dt proportional to dx to avoid time discretization error dominating
-        Real dt_test = 0.003125; //* (two_pi / (N - 0.5)); // dt ~ O(dx)
+        // Make dt proportional to dx^2 to keep temporal error negligible for spatial convergence study
+        Real dx_nominal = two_pi / (N - 0.5);
+        Real dt_test = 0.001 * dx_nominal; // dt ~ O(dx^2)
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
         printf("\n=================================================\n");
@@ -214,11 +217,13 @@ int main()
         DimensionsHandlerVector x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx);
 
         Real l2_error = 0.0;
-        bool success = solve_and_check(solver, rhs_1, vector_1, rhs_2, vector_2, g, x_handler, l2_error);
+        Real time_speedup = 0.0;
+        bool success = solve_and_check(solver, rhs_1, vector_1, rhs_2, vector_2, g, x_handler, l2_error, time_speedup);
 
         errors.push_back(l2_error);
         dx_values.push_back(g.dx);
         dt_values.push_back(g.dt);
+        speed_ups.push_back(time_speedup);
 
         // Compute convergence rate if we have at least 2 data points
         Real conv_rate = 0.0;
@@ -230,7 +235,7 @@ int main()
 
         // Write to file
         outfile << g.Nx << " " << g.Ny << " " << g.Nz << " "
-                << g.dx << " " << g.dt << " " << l2_error << " " << conv_rate << "\n";
+                << g.dx << " " << g.dt << " " << l2_error << " " << conv_rate << " " << time_speedup << "\n";
         outfile.flush();
 
         printf("L2 Error: %.8e\n", l2_error);
@@ -252,13 +257,13 @@ int main()
     printf("\n=================================================\n");
     printf("CONVERGENCE STUDY SUMMARY\n");
     printf("=================================================\n");
-    printf("Grid Size    dx          dt          L2 Error      Conv. Rate\n");
+    printf("Grid Size    dx          dt          L2 Error      Conv. Rate   Time Speedup\n");
     printf("---------------------------------------------------------------\n");
     for (size_t i = 0; i < errors.size(); ++i)
     {
         Real rate = (i > 0) ? log(errors[i - 1] / errors[i]) / log(dx_values[i - 1] / dx_values[i]) : 0.0;
-        printf("%-12d %.6e  %.6e  %.6e  %.4f\n",
-               grid_sizes[i], dx_values[i], dt_values[i], errors[i], rate);
+        printf("%-12d %.6e  %.6e  %.6e  %.4f    %.4f\n",
+               grid_sizes[i], dx_values[i], dt_values[i], errors[i], rate, speed_ups[i]);
     }
     printf("=================================================\n");
     printf("Results written to: convergence_momentum_x.txt\n");

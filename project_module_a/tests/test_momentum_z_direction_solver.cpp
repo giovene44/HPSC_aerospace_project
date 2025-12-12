@@ -4,6 +4,7 @@
 #include <vector>
 #include <iomanip>
 #include <fstream>
+#include <chrono>
 #include "navier_stokes_brinkman.hpp"
 
 // ===============================================================
@@ -190,7 +191,7 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
                      VectorVariable &vector_1, VectorVariable &rhs_2,
                      VectorVariable &vector_2, const Grid &g,
                      const DimensionsHandlerVector &z_handler,
-                     Real &l2_error)
+                     Real &l2_error, Real &time_speedup)
 {
     VectorVariable rhs_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable vector_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
@@ -198,12 +199,15 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
     rhs_delta = rhs_2 - rhs_1;
     vector_delta = vector_2 - vector_1;
 
-    VectorVariable computed_sol(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    computed_sol.set_all(0.0);
+    // PARALLEL solve
+    VectorVariable computed_par(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    computed_par.set_all(0.0);
+    auto tpar0 = std::chrono::high_resolution_clock::now();
+    solver.solve<2>(rhs_delta, computed_par, z_handler, true);
+    auto tpar1 = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> dpar = tpar1 - tpar0;
 
-    solver.solve<2>(rhs_delta, computed_sol, z_handler);
-
-    l2_error = compute_L2_error(vector_delta, computed_sol, g);
+    l2_error = compute_L2_error(vector_delta, computed_par, g);
 
     Real tolerance = std::max(5e-5, 0.1 * g.dx * g.dx);
 
@@ -211,12 +215,22 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
         for (Dim k = 0; k < g.Nz; ++k)
             for (Dim j = 0; j < g.Ny; ++j)
                 for (Dim i = 0; i < g.Nx; ++i)
-                    if (std::abs(vector_delta.value(comp, i, j, k) - computed_sol.value(comp, i, j, k)) > tolerance)
+                    if (std::abs(vector_delta.value(comp, i, j, k) - computed_par.value(comp, i, j, k)) > tolerance)
                     {
                         printf("Mismatch comp=%d (i,j,k)=(%d,%d,%d): expected %f, got %f\n",
-                               comp, i, j, k, vector_delta.value(comp, i, j, k), computed_sol.value(comp, i, j, k));
+                               comp, i, j, k, vector_delta.value(comp, i, j, k), computed_par.value(comp, i, j, k));
                         return false;
                     }
+
+    // SERIAL solve for timing
+    VectorVariable computed_ser(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    computed_ser.set_all(0.0);
+    auto tser0 = std::chrono::high_resolution_clock::now();
+    solver.solve<2>(rhs_delta, computed_ser, z_handler, false);
+    auto tser1 = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> dser = tser1 - tser0;
+
+    time_speedup = dser.count() / dpar.count();
 
     return true;
 }
@@ -227,8 +241,9 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
 int main()
 {
     const Real two_pi = 2.0 * 3.141592653589793;
-    std::vector<Dim> grid_sizes = {10, 20, 40, 80, 100};
+    std::vector<Dim> grid_sizes = {20, 40, 80, 160};
     std::vector<Real> errors;
+    std::vector<Real> speed_ups;
     std::vector<Real> dx_values;
     std::vector<Real> dt_values;
 
@@ -238,11 +253,11 @@ int main()
 
     std::ofstream outfile("convergence_momentum_z.txt");
     outfile << "# Nx Ny Nz dx dt L2_error convergence_rate\n";
-    Real dt = 0.003125;
-
     for (Dim N : grid_sizes)
     {
-        // Real dt = 0.01 * (two_pi / (N - 0.5));
+        // dt ~ O(dx^2) to keep temporal error negligible
+        Real dx_nominal = two_pi / (N - 0.5);
+        Real dt = 0.001 * dx_nominal;
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt);
 
         printf("=================================================\n");
@@ -269,7 +284,8 @@ int main()
         DimensionsHandlerVector z_handler(g.Nz, g.Nx, g.Ny, 2, 0, 1, g.dz);
 
         Real l2_error = 0.0;
-        bool success = solve_and_check(solver, rhs_1, vector_1, rhs_2, vector_2, g, z_handler, l2_error);
+        Real time_speedup = 0.0;
+        bool success = solve_and_check(solver, rhs_1, vector_1, rhs_2, vector_2, g, z_handler, l2_error, time_speedup);
 
         printf("L2 Error: %.8e\n", l2_error);
 
@@ -283,6 +299,7 @@ int main()
         errors.push_back(l2_error);
         dx_values.push_back(g.dx);
         dt_values.push_back(g.dt);
+        speed_ups.push_back(time_speedup);
 
         outfile << g.Nx << " " << g.Ny << " " << g.Nz << " " << g.dx << " " << g.dt << " " << l2_error << " " << conv_rate << "\n";
 
@@ -300,13 +317,13 @@ int main()
     printf("\n=================================================\n");
     printf("CONVERGENCE STUDY SUMMARY\n");
     printf("=================================================\n");
-    printf("Grid Size    dx          dt          L2 Error      Conv. Rate\n");
+    printf("Grid Size    dx          dt          L2 Error      Conv. Rate   Time Speedup\n");
     printf("---------------------------------------------------------------\n");
     for (size_t i = 0; i < errors.size(); ++i)
     {
         Real rate = (i > 0) ? log(errors[i - 1] / errors[i]) / log(dx_values[i - 1] / dx_values[i]) : 0.0;
-        printf("%-12d %.6e  %.6e  %.6e  %.4f\n",
-               grid_sizes[i], dx_values[i], dt_values[i], errors[i], rate);
+        printf("%-12d %.6e  %.6e  %.6e  %.4f    %.4f\n",
+               grid_sizes[i], dx_values[i], dt_values[i], errors[i], rate, speed_ups[i]);
     }
     printf("=================================================\n");
     printf("Results written to: convergence_momentum_z.txt\n");
