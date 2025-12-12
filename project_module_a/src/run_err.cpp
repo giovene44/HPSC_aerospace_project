@@ -161,8 +161,10 @@ int run_multiple()
             Dim Ny_curr = N_initial_y * refinement_factor;
             Dim Nz_curr = N_initial_z * refinement_factor;
 
-            Real dt_curr = dt_initial;// / refinement_factor;
+            Real dt_curr = dt_initial / refinement_factor;// / refinement_factor;
 
+            T_final = dt_curr *10;
+            
             // dx/dy/dz must be scaled inversely to N_curr (halved when N_curr is doubled)
             Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
             Real dy_curr = parser.DimY / (Real)(Ny_curr - 0.5);

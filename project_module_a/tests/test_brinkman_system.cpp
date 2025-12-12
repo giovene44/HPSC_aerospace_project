@@ -377,16 +377,16 @@ void solve(VelocitySolver &solver,
 // ===============================================================
 int main()
 {
-    const Real two_pi = 2.0 * 3.141592653589793;
+    const Real two_pi = 6.0;
 
     // Open output file
-    std::ofstream outfile("convergence_momentum_x.txt");
+    std::ofstream outfile("test_heat_equation.txt");
     outfile << "# Convergence study for momentum x-direction solver\n";
     outfile << "# Nx Ny Nz dx dt L2_error convergence_rate\n";
     outfile << std::scientific << std::setprecision(8);
 
     // Test multiple grid resolutions
-    std::vector<Dim> grid_sizes = {40, 80, 160};
+    std::vector<Dim> grid_sizes = {10, 20};
     std::vector<Real> errors;
     std::vector<Real> speed_ups;
     std::vector<Real> dx_values;
@@ -401,7 +401,8 @@ int main()
         // Scale dt proportionally with dx for second-order spatial discretization
         // This keeps the temporal error smaller than spatial error
         Real base_dx = two_pi / (N - 0.5);
-        Real dt_test = 0.001 * base_dx;
+        // Real dt_test = 0.001 * base_dx;
+        Real dt_test = 0.0025;
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
         printf("\n=================================================\n");
@@ -454,39 +455,29 @@ int main()
         DimensionsHandlerVector y_handler(g.Nx, g.Ny, g.Nz, 1, 0, 2, g.dy);
 
         DimensionsHandlerVector z_handler(g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz);
-        Real T_final = 10 * (g.dt);
+        Real T_final = Real(1.0);// * (g.dt);
 
         Real l2_error = 0.0;
         Real time_sequential = 0.0;
         bool parallel = false;
 
-        solve(solver,
-              eta_1_sequential,
-              eta_2_sequential,
-              zeta_1_sequential,
-              zeta_2_sequential,
-              u_1_sequential,
-              g_function_sequential,
-              xi_function_sequential,
-              g,
-              x_handler,
-              y_handler,
-              z_handler,
-              g.dt + g.dt,
-              T_final,
-              nu,
-              beta,
-<<<<<<< HEAD
-              l2_error);
-        errors.emplace_back(l2_error);
-        dx_values.emplace_back(g.dx);
-        dt_values.emplace_back(g.dt);
-=======
-              l2_error, time_sequential, parallel);
-        errors.push_back(l2_error);
-        dx_values.push_back(g.dx);
-        dt_values.push_back(g.dt);
->>>>>>> e26488d6130715440034abd3a7ae8bd8122a62c2
+        // solve(solver,
+        //       eta_1_sequential,
+        //       eta_2_sequential,
+        //       zeta_1_sequential,
+        //       zeta_2_sequential,
+        //       u_1_sequential,
+        //       g_function_sequential,
+        //       xi_function_sequential,
+        //       g,
+        //       x_handler,
+        //       y_handler,
+        //       z_handler,
+        //       g.dt + g.dt,
+        //       T_final,
+        //       nu,
+        //       beta,
+        //       l2_error, time_sequential, parallel);
 
         l2_error = 0.0;
         Real time_parallel = 0.0;
@@ -510,8 +501,11 @@ int main()
               beta,
               l2_error, time_parallel, parallel);
 
-        Real speed_up = time_sequential / time_parallel;
-        speed_ups.push_back(speed_up);
+        // Real speed_up = time_sequential / time_parallel;
+        // speed_ups.push_back(speed_up);
+        errors.emplace_back(l2_error);
+        dx_values.emplace_back(g.dx);
+        dt_values.emplace_back(g.dt);
 
         // Compute convergence rate if we have at least 2 data points
         Real conv_rate = 0.0;
@@ -540,10 +534,10 @@ int main()
     {
         Real rate = (i > 0) ? log(errors[i - 1] / errors[i]) / log(dx_values[i - 1] / dx_values[i]) : 0.0;
         printf("%-12d %.6e  %.6e  %.6e  %.4f  %.4f\n",
-               grid_sizes[i], dx_values[i], dt_values[i], errors[i], rate, speed_ups[i]);
+               grid_sizes[i], dx_values[i], dt_values[i], errors[i], rate); //, speed_ups[i]);
     }
     printf("=================================================\n");
-    printf("Results written to: convergence_momentum_x.txt\n");
+    printf("Results written to: test_heat_equation.txt\n");
 
     return 0;
 }

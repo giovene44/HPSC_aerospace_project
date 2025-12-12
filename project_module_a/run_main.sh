@@ -16,3 +16,4 @@ echo -e
 echo "vector_1 = sin(x)sin(dt),    vector_2 = sin(x)sin(dt+dt) \n"
 echo " (I - Gamma * Dxx) (delta_vector) = delta_rhs "
 OMP_NUM_THREADS=8 OMP_PROC_BIND=close ./bin/main_app
+python ./utils/plot.py ./velocity_error.dat

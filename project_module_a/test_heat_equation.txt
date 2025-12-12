@@ -1,3 +1,3 @@
 # Convergence study for momentum x-direction solver
 # Nx Ny Nz dx dt L2_error convergence_rate
-10 10 10 6.61387920e-01 2.49999994e-03 1.88743806e+00 0.00000000e+00
+10 10 10 6.31578922e-01 2.49999994e-03 1.79385114e+00 0.00000000e+00
