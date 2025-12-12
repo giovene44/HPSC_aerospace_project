@@ -13,7 +13,7 @@ public:
     {
         data.clear();
         for (int a = 0; a < 3; ++a)
-            data.push_back(ScalarVariable(Nx, Ny, Nz, dx, dy, dz));
+            data.emplace_back(ScalarVariable(Nx, Ny, Nz, dx, dy, dz));
     }
 
     inline Dim size() const noexcept

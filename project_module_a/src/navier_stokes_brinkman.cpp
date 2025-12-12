@@ -332,17 +332,17 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         // X-Sweep
         vector_rhs = xi - eta;
-        velocity_solver.solve<0>(vector_rhs, vector_intermediate_solution, x_vector_handler);
+        velocity_solver.solve<0>(vector_rhs, vector_intermediate_solution, x_vector_handler, true);
         eta += vector_intermediate_solution;
 
         // Y-Sweep
         vector_rhs = eta - zeta;
-        velocity_solver.solve<1>(vector_rhs, vector_intermediate_solution, y_vector_handler);
+        velocity_solver.solve<1>(vector_rhs, vector_intermediate_solution, y_vector_handler, true);
         zeta += vector_intermediate_solution;
 
         // Z-Sweep
         vector_rhs = zeta - velocity_solution;
-        velocity_solver.solve<2>(vector_rhs, vector_intermediate_solution, z_vector_handler);
+        velocity_solver.solve<2>(vector_rhs, vector_intermediate_solution, z_vector_handler, true);
 
         // Update to Intermediate Velocity u*
         velocity_solution += vector_intermediate_solution;
@@ -366,10 +366,10 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
         velocity_solver.advance_time();
         velocity_time_series.emplace_back(velocity_solution);
 
-        if (int(t / dt) % 10 == 0)
-        {
+        // if (int(t / dt) % 10 == 0)
+        // {
             std::cout << "Time: " << t << " / " << T << "\n";
-        }
+        // }
 
         // pressure_time_series.emplace_back(pressure_solution);
     }
