@@ -180,7 +180,7 @@ int main()
     outfile << std::scientific << std::setprecision(8);
 
     // Test multiple grid resolutions
-    std::vector<Dim> grid_sizes = {40, 80, 160};
+    std::vector<Dim> grid_sizes = {20, 40, 80, 160};
     std::vector<Real> errors;
     std::vector<Real> speed_ups;
     std::vector<Real> dx_values;
@@ -190,7 +190,7 @@ int main()
     {
         // Make dt proportional to dx^2 to keep temporal error negligible for spatial convergence study
         Real dx_nominal = two_pi / (N - 0.5);
-        Real dt_test = 0.001 * dx_nominal; // dt ~ O(dx^2)
+        Real dt_test = 0.0025; //* dx_nominal; // dt ~ O(dx^2)
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
         printf("\n=================================================\n");
@@ -220,10 +220,10 @@ int main()
         Real time_speedup = 0.0;
         bool success = solve_and_check(solver, rhs_1, vector_1, rhs_2, vector_2, g, x_handler, l2_error, time_speedup);
 
-        errors.push_back(l2_error);
-        dx_values.push_back(g.dx);
-        dt_values.push_back(g.dt);
-        speed_ups.push_back(time_speedup);
+        errors.emplace_back(l2_error);
+        dx_values.emplace_back(g.dx);
+        dt_values.emplace_back(g.dt);
+        speed_ups.emplace_back(time_speedup);
 
         // Compute convergence rate if we have at least 2 data points
         Real conv_rate = 0.0;

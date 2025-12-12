@@ -411,9 +411,9 @@ int main()
               k_permeability,
               l2_error);
 
-        errors.push_back(l2_error);
-        dx_values.push_back(g.dx);
-        dt_values.push_back(g.dt);
+        errors.emplace_back(l2_error);
+        dx_values.emplace_back(g.dx);
+        dt_values.emplace_back(g.dt);
 
         // Compute convergence rate if we have at least 2 data points
         Real conv_rate = 0.0;

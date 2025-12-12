@@ -189,9 +189,9 @@ int main()
             printf("Convergence rate: %.4f (expected ~2.0 for 2nd order)\n", conv_rate);
         }
 
-        errors.push_back(l2_error);
-        dx_values.push_back(g.dx);
-        dt_values.push_back(g.dt);
+        errors.emplace_back(l2_error);
+        dx_values.emplace_back(g.dx);
+        dt_values.emplace_back(g.dt);
 
         outfile << g.Nx << " " << g.Ny << " " << g.Nz << " " << g.dx << " " << g.dt << " " << l2_error << " " << conv_rate << "\n";
 

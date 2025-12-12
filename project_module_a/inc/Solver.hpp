@@ -338,7 +338,7 @@ public:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     // on comp2 we have normal components
-                    rhs.set(direction, index_1, 0, index_2) = (u_boundary.value<direction>(index_1 * dx, 0.5 * dy, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, 0.5 * dy, index_2 * dz, t - dt)) - ((u_boundary.first_derivative<0>(index_1 * dx, 0.5 * dy, index_2 * dz, t, dx) - u_boundary.first_derivative<0>(index_1 * dx, 0.5 * dy, index_2 * dz, t - dt, dx)) + (u_boundary.first_derivative<2>(index_1 * dx, 0.5 * dy, index_2 * dz, t, dz) - u_boundary.first_derivative<2>(index_1 * dx, 0.5 * dy, index_2 * dz, t - dt, dz))) * dy * Real(0.5);
+                    rhs.set(direction, index_1, 0, index_2) = (u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t - dt)) - ((u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t, dx) - u_boundary.first_derivative<0>(index_1 * dx,0 , index_2 * dz, t - dt, dx)) + (u_boundary.first_derivative<2>(index_1 * dx,0, index_2 * dz, t, dz) - u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t - dt, dz))) * dy * Real(0.5);
                     rhs.set(direction, index_1, Ny - 1, index_2) = u_boundary.value<direction>(index_1 * dx, Ly, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, Ly, index_2 * dz, t - dt);
 
                     // on comp1 we have tangent components
@@ -357,7 +357,7 @@ public:
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
                     // on comp3 we have normal components
-                    rhs.set(direction, index_1, index_2, 0) = (u_boundary.value<direction>(index_1 * dx, index_2 * dy, 0.5 * dz, t) - u_boundary.value<direction>(index_1 * dx, index_2 * dy, 0.5 * dz, t - dt)) - ((u_boundary.first_derivative<0>(index_1 * dx, index_2 * dy, 0.5 * dz, t, dx) - u_boundary.first_derivative<0>(index_1 * dx, index_2 * dy, 0.5 * dz, t - dt, dx)) + (u_boundary.first_derivative<1>(index_1 * dx, index_2 * dy, 0.5 * dz, t, dy) - u_boundary.first_derivative<1>(index_1 * dx, index_2 * dy, 0.5 * dz, t - dt, dy))) * dz * Real(0.5);
+                    rhs.set(direction, index_1, index_2, 0) = (u_boundary.value<direction>(index_1 * dx, index_2 * dy, 0, t) - u_boundary.value<direction>(index_1 * dx, index_2 * dy, 0, t - dt)) - ((u_boundary.first_derivative<0>(index_1 * dx, index_2 * dy, 0, t, dx) - u_boundary.first_derivative<0>(index_1 * dx, index_2 * dy, 0, t - dt, dx)) + (u_boundary.first_derivative<1>(index_1 * dx, index_2 * dy, 0, t, dy) - u_boundary.first_derivative<1>(index_1 * dx, index_2 * dy, 0, t - dt, dy))) * dz * Real(0.5);
                     rhs.set(direction, index_1, index_2, Nz - 1) = u_boundary.value<direction>(index_1 * dx, index_2 * dy, Lz, t) - u_boundary.value<direction>(index_1 * dx, index_2 * dy, Lz, t - dt);
 
                     // on comp1 we have tangent components
