@@ -165,16 +165,33 @@ void compute_rhs_field(const Grid &g,
                 }
 }
 
-void initialize_fields(const Grid &g,
-                       ScalarVariable &gamma_field,
-                       VectorVariable &vector,
-                       VectorVariable &rhs,
-                       BoundaryFunctions &u_boundary,
-                       Real t,
-                       Real nu)
+void initialize_velocity_fields(const Grid &g,
+                                ScalarVariable &gamma_field,
+                                VectorVariable &vector,
+                                VectorVariable &rhs,
+                                BoundaryFunctions &u_boundary,
+                                Real t,
+                                Real nu)
 {
     initialize_vector_field(g, vector, u_boundary, t);
     compute_rhs_field(g, gamma_field, vector, rhs, t, nu);
+}
+
+void initialize_scalar_fields(const Grid &g,
+                              ScalarVariable &scalar,
+                              Real t)
+{
+    for (int k = 0; k < g.Nz; ++k)
+        for (int j = 0; j < g.Ny; ++j)
+            for (int i = 0; i < g.Nx; ++i)
+            {
+                Real x, y, z;
+                x = i * g.dx;
+                y = j * g.dy;
+                z = k * g.dz;
+
+                scalar.set(i, j, k) = cos(x) * cos(y) * cos(z) * sin(t);
+            }
 }
 
 // ===============================================================
@@ -237,25 +254,25 @@ void construct_g_function(VectorVariable &g_function, const Grid &g, BoundaryFun
                         z = (k + 0.5) * g.dz;
                     }
 
-                    // Compute analytical forcing term f = du/dt - nu*Laplacian(u)
+                    // Compute analytical forcing term f = du/dt - nu*Laplacian(u)  + (nu/k)*u
                     Real f_val;
                     if (comp == 0)
                     {
                         Real u_t = cos(t) * sin(x) * sin(y) * sin(z);
                         Real laplacian_u = -3.0 * sin(t) * sin(x) * sin(y) * sin(z);
-                        f_val = u_t - nu * laplacian_u;
+                        f_val = u_t - nu * laplacian_u + (nu / k) * (sin(t) * sin(x) * sin(y) * sin(z));
                     }
                     else if (comp == 1)
                     {
                         Real v_t = cos(t) * cos(x) * cos(y) * cos(z);
                         Real laplacian_v = -3.0 * sin(t) * cos(x) * cos(y) * cos(z);
-                        f_val = v_t - nu * laplacian_v;
+                        f_val = v_t - nu * laplacian_v + (nu / k) * (sin(t) * cos(x) * cos(y) * cos(z));
                     }
                     else
                     {
                         Real w_t = cos(t) * cos(x) * sin(y) * (sin(z) + cos(z));
                         Real laplacian_w = -3.0 * sin(t) * cos(x) * sin(y) * (sin(z) + cos(z));
-                        f_val = w_t - nu * laplacian_w;
+                        f_val = w_t - nu * laplacian_w + (nu / k) * (sin(t) * cos(x) * sin(y) * (sin(z) + cos(z)));
                     }
 
                     // Compute numerical second derivatives from current solution
@@ -290,6 +307,9 @@ void solve(VelocitySolver &solver,
            VectorVariable &u_1,
            VectorVariable &g_function,
            VectorVariable &xi_function,
+           ScalarVariable &psi,
+           ScalarVariable &phi,
+           ScalarVariable &varphi,
            const Grid &g,
            const DimensionsHandlerVector &x_handler,
            const DimensionsHandlerVector &y_handler,
@@ -306,6 +326,7 @@ void solve(VelocitySolver &solver,
     VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable temp_solution(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable u_true_next(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+
     VectorVariable rhs_true_next(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable u_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable eta_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
@@ -326,10 +347,10 @@ void solve(VelocitySolver &solver,
         solver.set_t(t_current);
 
         // Compute true solution at current time for error computation
-        initialize_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_current, nu);
+        initialize_velocity_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_current, nu);
 
         // Construct g_function: g = f - (nu/2)*(dxx_eta + dyy_zeta + dzz_u)
-        construct_g_function(g_function, g, solver.u_boundary, t_current - (g.dt / 2), nu, u_n, eta_n, zeta_n);
+        construct_g_function(g_function, g, solver.u_boundary, t_current, nu, u_n, eta_n, zeta_n);
         compute_xi_function(xi_function, g_function, g, u_n, beta);
 
         // X-direction splitting: solve for eta_{n+1}
@@ -368,7 +389,7 @@ void solve(VelocitySolver &solver,
     time = std::chrono::duration<Real>(end_time - start_time).count();
 
     // Compute L2 error at final time only
-    initialize_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_current - g.dt, nu);
+    initialize_velocity_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_current - g.dt, nu);
     l2_error = compute_L2_error(u_true_next, u_n, g);
 }
 
@@ -412,7 +433,12 @@ int main()
         ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         Real nu = 0.1f;
         Real beta = 1.0f;
+        Real k = 1.0f;
         gamma_field.set_all(((g.dt * nu) / (Real(2.0) * beta)));
+
+        /*
+        MOMENTUM EQUATION
+        */
         VectorVariable u_1_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         VectorVariable eta_1_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         VectorVariable zeta_1_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
@@ -439,15 +465,31 @@ int main()
         std::vector<std::string> sin_bc = {"sin(t)*sin(x)*sin(y)*sin(z)", "sin(t)*cos(x)*cos(y)*cos(z)", "sin(t)*cos(x)*sin(y)*(sin(z)+cos(z))"};
         u_boundary.set_string_expression(sin_bc);
 
-        initialize_fields(g, gamma_field, u_1_sequential, rhs_1_sequential, u_boundary, g.dt, nu);
-        initialize_fields(g, gamma_field, eta_1_sequential, rhs_1_sequential, u_boundary, g.dt, nu);
-        initialize_fields(g, gamma_field, zeta_1_sequential, rhs_1_sequential, u_boundary, g.dt, nu);
+        initialize_velocity_fields(g, gamma_field, u_1_sequential, rhs_1_sequential, u_boundary, g.dt, nu);
+        initialize_velocity_fields(g, gamma_field, eta_1_sequential, rhs_1_sequential, u_boundary, g.dt, nu);
+        initialize_velocity_fields(g, gamma_field, zeta_1_sequential, rhs_1_sequential, u_boundary, g.dt, nu);
 
-        initialize_fields(g, gamma_field, u_1_parallel, rhs_1_parallel, u_boundary, g.dt, nu);
-        initialize_fields(g, gamma_field, eta_1_parallel, rhs_1_parallel, u_boundary, g.dt, nu);
-        initialize_fields(g, gamma_field, zeta_1_parallel, rhs_1_parallel, u_boundary, g.dt, nu);
+        initialize_velocity_fields(g, gamma_field, u_1_parallel, rhs_1_parallel, u_boundary, g.dt, nu);
+        initialize_velocity_fields(g, gamma_field, eta_1_parallel, rhs_1_parallel, u_boundary, g.dt, nu);
+        initialize_velocity_fields(g, gamma_field, zeta_1_parallel, rhs_1_parallel, u_boundary, g.dt, nu);
 
         VelocitySolver solver = setup_solver(g, gamma_field, u_boundary, g.dt, g.dt + g.dt);
+
+        /*
+        PRESSURE EQUATION
+        */
+        ScalarVariable psi(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        ScalarVariable phi(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        ScalarVariable varphi(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+
+        BoundaryFunctions p_boundary;
+        std::vector<std::string> neumann_bc = {
+            "0",
+            "0",
+            "0",
+        };
+
+        p_boundary.set_string_expression(neumann_bc);
 
         DimensionsHandlerVector x_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx);
 
@@ -468,6 +510,9 @@ int main()
               u_1_sequential,
               g_function_sequential,
               xi_function_sequential,
+              psi,
+              phi,
+              varphi,
               g,
               x_handler,
               y_handler,
@@ -493,6 +538,9 @@ int main()
               u_1_parallel,
               g_function_parallel,
               xi_function_parallel,
+              psi,
+              phi,
+              varphi,
               g,
               x_handler,
               y_handler,
