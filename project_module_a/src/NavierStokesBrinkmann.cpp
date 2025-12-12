@@ -334,14 +334,11 @@ void NavierStokesBrinkmann::solve_for_eta(double time) {
                 d[i] = g_rhs[0][idx]; // for eta_x
             }
 
-            // Apply BCs:
-            //b[0] = 1.0;
-            //c[0] = 0.0;
 
             //taylor technique:
-            b[0]-=2.0*a[0];
-            c[0]+=1.0/3.0*a[0];
-            d[0]-=8.0/3.0*a[0]*delta_u(0,0,y,z,time);
+            //b[0]-=2.0*a[0];
+            //c[0]+=1.0/3.0*a[0];
+            //d[0]-=8.0/3.0*a[0]*delta_u(0,0,y,z,time);
 
             b[N - 1] = 1.0;
             a[N - 1] = 0.0;
@@ -349,10 +346,10 @@ void NavierStokesBrinkmann::solve_for_eta(double time) {
             d[N-1]=exact_solution.value(0, L, j*dx, k*dx, time)
                     -exact_solution.value(0,L, j*dx, k*dx,time-dt);
 
-             // Dirichlet BC at the end
             
-            /*
             //use divergence trick: 
+            b[0] = 1.0;
+            c[0] = 0.0;
             double dvdy = delta_u(1,0,y+dx/2,z,time)-delta_u(1,0,y-dx/2,z,time);                 
             dvdy /= dx;
 
@@ -363,7 +360,7 @@ void NavierStokesBrinkmann::solve_for_eta(double time) {
             double dudx = -dvdy - dwdz;
 
             d[0]= delta_u(0,0,y,z,time) + dudx*dx/2.0; // Dirichlet BC at the start
-            */
+            
 
             tridiagonal_solver(a, b, c, d, N);
             
@@ -583,14 +580,14 @@ void NavierStokesBrinkmann::solve_for_zeta(double time) {
             }
 
             //Taylor technique:
-            b[0]-=2.0*a[0];
-            c[0]+=1.0/3.0*a[0];
-            d[0]-=8.0/3.0*a[0]*delta_u(1,x,0,z,time);
+            //b[0]-=2.0*a[0];
+            //c[0]+=1.0/3.0*a[0];
+            //d[0]-=8.0/3.0*a[0]*delta_u(1,x,0,z,time);
 
 
             // Apply BCs:
             //use divergence trick at j=0
-            /*
+            
 
             b[0] = 1.0;
             c[0] = 0.0;
@@ -600,7 +597,7 @@ void NavierStokesBrinkmann::solve_for_zeta(double time) {
             dwdz /= dx;
             double dvdy = -dudx - dwdz;
             d[0] = delta_u(1,x,0.0,z,time) + dvdy*dx/2.0; // Dirichlet BC at the start 
-            */
+            
             
 
             //simple Dirichlet at j=N-1
@@ -821,11 +818,11 @@ void NavierStokesBrinkmann::solve_for_velocity(double time){
 
 
             //Taylor technique:
-            b[0]-=2.0*a[0];
-            c[0]+=1.0/3.0*a[0];
-            d[0]-=8.0/3.0*a[0]*delta_u(2,x,y,0,time);
+            //b[0]-=2.0*a[0];
+            //c[0]+=1.0/3.0*a[0];
+            //d[0]-=8.0/3.0*a[0]*delta_u(2,x,y,0,time);
 
-            /*
+            
             //use divergence trick at k=0
             b[0] = 1.0;
             c[0] = 0.0;
@@ -835,7 +832,7 @@ void NavierStokesBrinkmann::solve_for_velocity(double time){
             dvdy /= dx;
             double dwdz = -dudx - dvdy;
             d[0] = delta_u(2,x,y,0.0,time) + dwdz*dx/2.0; // Dirichlet BC at the start
-            */
+            
 
             //simple Dirichlet at k=N-1
             b[N - 1] = 1.0;
@@ -1327,5 +1324,58 @@ void NavierStokesBrinkmann::compute_velocity_divergence(double time) {
     }
 }
 
+void NavierStokesBrinkmann::get_error(double &total_error_vel, double &total_error_pres, double current_time){
+
+        // Compute error norms between numerical and exact solutions
+    double error_u = 0.0;
+    double error_v = 0.0;
+    double error_w = 0.0;
+    double error_p = 0.0;
+    double vel_norm = 0.0;
+    double pres_norm = 0.0;
+    double vel_norm_comparison = 0.0;
+    double pres_norm_comparison = 0.0;
+
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
+            for (int k = 0; k < N; ++k) {
+                double x = i * dx;
+                double y = j * dx;
+                double z = k * dx;
+
+                int idx = Idx(i, j, k, N);
+
+                double u_exact = exact_solution.value(0, x+dx/2, y, z, current_time);
+                double v_exact = exact_solution.value(1, x, y+dx/2, z, current_time);
+                double w_exact = exact_solution.value(2, x, y, z+dx/2, current_time);
+                double p_exact = exact_solution.value(3, x, y, z, current_time);
+
+                error_u += (velocity[0][idx] - u_exact) * (velocity[0][idx] - u_exact);
+                error_v += (velocity[1][idx] - v_exact) * (velocity[1][idx] - v_exact);
+                error_w += (velocity[2][idx] - w_exact) * (velocity[2][idx] - w_exact);
+                error_p += (pressure[idx] - p_exact) * (pressure[idx] - p_exact);
+
+                double u_exact1 = exact_solution.value(0, x+dx/2, y, z, 1.0);
+                double v_exact1 = exact_solution.value(1, x, y+dx/2, z, 1.0);
+                double w_exact1 = exact_solution.value(2, x, y, z+dx/2, 1.0);
+                double p_exact1 = exact_solution.value(3, x, y, z, 1.0);
+
+
+                
+
+                vel_norm_comparison += u_exact1 * u_exact1 + v_exact1 * v_exact1 + w_exact1 * w_exact1;
+                pres_norm_comparison += p_exact1 * p_exact1;
+                vel_norm += u_exact * u_exact + v_exact * v_exact + w_exact * w_exact;
+                pres_norm += p_exact * p_exact;
+            }
+        }
+    }
+
+    double dV = dx * dx * dx;
+
+    total_error_vel = std::sqrt((error_u + error_v + error_w)*dV);
+    total_error_pres = std::sqrt(error_p * dV);
+
+}
 
 

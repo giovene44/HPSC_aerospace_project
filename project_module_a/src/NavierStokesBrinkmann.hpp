@@ -181,6 +181,8 @@ class NavierStokesBrinkmann {
         void solve_pressure_iterative_adi(); 
         void correct_velocity();
 
+        void get_error(double &total_error_vel, double &total_error_pres, double current_time);
+
 
 
 
