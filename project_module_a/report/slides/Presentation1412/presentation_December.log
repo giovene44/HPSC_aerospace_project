@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2025.11.10)  14 DEC 2025 17:22
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2025.11.10)  14 DEC 2025 18:31
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -806,24 +806,24 @@ File: l3backend-pdftex.def 2025-10-09 L3 backend support: PDF output (pdfTeX)
 (./presentation_December.aux)
 \openout1 = `presentation_December.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 21.
+LaTeX Font Info:    ... okay on input line 21.
 
 *geometry* driver: auto-detecting
 *geometry* detected driver: pdftex
@@ -881,64 +881,64 @@ Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
 File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Liv
 e
 ))
-Package hyperref Info: Link coloring OFF on input line 16.
+Package hyperref Info: Link coloring OFF on input line 21.
 
 (./presentation_December.out) (./presentation_December.out)
 \@outlinefile=\write5
 \openout5 = `presentation_December.out'.
 
 LaTeX Font Info:    Overwriting symbol font `operators' in version `normal'
-(Font)                  OT1/cmr/m/n --> OT1/cmss/m/n on input line 16.
+(Font)                  OT1/cmr/m/n --> OT1/cmss/m/n on input line 21.
 LaTeX Font Info:    Overwriting symbol font `operators' in version `bold'
-(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 16.
+(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 21.
 \symnumbers=\mathgroup6
 \sympureletters=\mathgroup7
 LaTeX Font Info:    Overwriting math alphabet `\mathrm' in version `normal'
-(Font)                  OT1/cmss/m/n --> OT1/cmr/m/n on input line 16.
-LaTeX Font Info:    Redeclaring math alphabet \mathbf on input line 16.
+(Font)                  OT1/cmss/m/n --> OT1/cmr/m/n on input line 21.
+LaTeX Font Info:    Redeclaring math alphabet \mathbf on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `normal'
-(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 16.
+(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `bold'
-(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 16.
-LaTeX Font Info:    Redeclaring math alphabet \mathsf on input line 16.
+(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 21.
+LaTeX Font Info:    Redeclaring math alphabet \mathsf on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `normal'
-(Font)                  OT1/cmss/m/n --> OT1/cmss/m/n on input line 16.
+(Font)                  OT1/cmss/m/n --> OT1/cmss/m/n on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
-(Font)                  OT1/cmss/bx/n --> OT1/cmss/m/n on input line 16.
-LaTeX Font Info:    Redeclaring math alphabet \mathit on input line 16.
+(Font)                  OT1/cmss/bx/n --> OT1/cmss/m/n on input line 21.
+LaTeX Font Info:    Redeclaring math alphabet \mathit on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `normal'
-(Font)                  OT1/cmr/m/it --> OT1/cmss/m/it on input line 16.
+(Font)                  OT1/cmr/m/it --> OT1/cmss/m/it on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `bold'
-(Font)                  OT1/cmr/bx/it --> OT1/cmss/m/it on input line 16.
-LaTeX Font Info:    Redeclaring math alphabet \mathtt on input line 16.
+(Font)                  OT1/cmr/bx/it --> OT1/cmss/m/it on input line 21.
+LaTeX Font Info:    Redeclaring math alphabet \mathtt on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `normal'
-(Font)                  OT1/cmtt/m/n --> OT1/cmtt/m/n on input line 16.
+(Font)                  OT1/cmtt/m/n --> OT1/cmtt/m/n on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
-(Font)                  OT1/cmtt/m/n --> OT1/cmtt/m/n on input line 16.
+(Font)                  OT1/cmtt/m/n --> OT1/cmtt/m/n on input line 21.
 LaTeX Font Info:    Overwriting symbol font `numbers' in version `bold'
-(Font)                  OT1/cmss/m/n --> OT1/cmss/b/n on input line 16.
+(Font)                  OT1/cmss/m/n --> OT1/cmss/b/n on input line 21.
 LaTeX Font Info:    Overwriting symbol font `pureletters' in version `bold'
-(Font)                  OT1/cmss/m/it --> OT1/cmss/b/it on input line 16.
+(Font)                  OT1/cmss/m/it --> OT1/cmss/b/it on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathrm' in version `bold'
-(Font)                  OT1/cmss/b/n --> OT1/cmr/b/n on input line 16.
+(Font)                  OT1/cmss/b/n --> OT1/cmr/b/n on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `bold'
-(Font)                  OT1/cmss/b/n --> OT1/cmss/b/n on input line 16.
+(Font)                  OT1/cmss/b/n --> OT1/cmss/b/n on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
-(Font)                  OT1/cmss/m/n --> OT1/cmss/b/n on input line 16.
+(Font)                  OT1/cmss/m/n --> OT1/cmss/b/n on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `bold'
-(Font)                  OT1/cmss/m/it --> OT1/cmss/b/it on input line 16.
+(Font)                  OT1/cmss/m/it --> OT1/cmss/b/it on input line 21.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
-(Font)                  OT1/cmtt/m/n --> OT1/cmtt/b/n on input line 16.
-LaTeX Font Info:    Redeclaring symbol font `pureletters' on input line 16.
+(Font)                  OT1/cmtt/m/n --> OT1/cmtt/b/n on input line 21.
+LaTeX Font Info:    Redeclaring symbol font `pureletters' on input line 21.
 LaTeX Font Info:    Overwriting symbol font `pureletters' in version `normal'
-(Font)                  OT1/cmss/m/it --> OT1/mathkerncmss/m/sl on input line 1
-6.
+(Font)                  OT1/cmss/m/it --> OT1/mathkerncmss/m/sl on input line 2
+1.
 LaTeX Font Info:    Overwriting symbol font `pureletters' in version `bold'
-(Font)                  OT1/cmss/b/it --> OT1/mathkerncmss/m/sl on input line 1
-6.
+(Font)                  OT1/cmss/b/it --> OT1/mathkerncmss/m/sl on input line 2
+1.
 LaTeX Font Info:    Overwriting symbol font `pureletters' in version `bold'
 (Font)                  OT1/mathkerncmss/m/sl --> OT1/mathkerncmss/bx/sl on inp
-ut line 16.
+ut line 21.
 
 (/usr/local/texlive/2025/texmf-dist/tex/latex/translator/translator-basic-dicti
 onary-English.dict
@@ -968,32 +968,32 @@ Dictionary: translator-theorem-dictionary, Language: English
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
 Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 19.
+ line 26.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
 
-Overfull \hbox (36.42175pt too wide) in paragraph at lines 19--19
+Overfull \hbox (36.42175pt too wide) in paragraph at lines 26--26
 [][]  
  []
 
 
-Overfull \hbox (36.42175pt too wide) in paragraph at lines 19--19
+Overfull \hbox (36.42175pt too wide) in paragraph at lines 26--26
 [][]  
  []
 
 
-Overfull \hbox (36.42175pt too wide) in paragraph at lines 19--19
+Overfull \hbox (36.42175pt too wide) in paragraph at lines 26--26
 [][]  
  []
 
 
-Overfull \vbox (16.73277pt too high) detected at line 19
+Overfull \vbox (16.73277pt too high) detected at line 26
  []
 
 <beamerthemepolimi_img/bgphoto_cut.jpg, id=15, 1505.625pt x 683.55376pt>
 File: beamerthemepolimi_img/bgphoto_cut.jpg Graphic file (type jpg)
 <use beamerthemepolimi_img/bgphoto_cut.jpg>
 Package pdftex.def Info: beamerthemepolimi_img/bgphoto_cut.jpg  used on input l
-ine 19.
+ine 26.
 (pdftex.def)             Requested size: 364.19536pt x 165.33916pt.
 <beamerthemepolimi_img/logo_centrato_COL_negativo.png, id=16, 227.6505pt x 167.
 4255pt>
@@ -1001,13 +1001,13 @@ File: beamerthemepolimi_img/logo_centrato_COL_negativo.png Graphic file (type p
 ng)
 <use beamerthemepolimi_img/logo_centrato_COL_negativo.png>
 Package pdftex.def Info: beamerthemepolimi_img/logo_centrato_COL_negativo.png  
-used on input line 19.
+used on input line 26.
 (pdftex.def)             Requested size: 109.2597pt x 80.3531pt.
 <beamerthemepolimi_img/decoration.pdf, id=17, 720.56299pt x 14.22635pt>
 File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
 <use beamerthemepolimi_img/decoration.pdf>
 Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input li
-ne 19.
+ne 26.
 (pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
 [1
 
@@ -1017,158 +1017,44 @@ gativo.png> <./beamerthemepolimi_img/decoration.pdf>]
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
 Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 30.
+ line 49.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-<img/UML.jpg, id=61, 984.67876pt x 775.89874pt>
-File: img/UML.jpg Graphic file (type jpg)
-<use img/UML.jpg>
-Package pdftex.def Info: img/UML.jpg  used on input line 30.
-(pdftex.def)             Requested size: 229.0857pt x 180.51299pt.
-
-Overfull \vbox (5.68399pt too high) detected at line 30
- []
-
 File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
 <use beamerthemepolimi_img/decoration.pdf>
 Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input li
-ne 30.
+ne 49.
 (pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
 Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 30.
+ line 49.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-[2
+ [2
 
- <./img/UML.jpg> <./beamerthemepolimi_img/logo_bandiera.png>]
+ <./beamerthemepolimi_img/logo_bandiera.png>]
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
 Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 58.
+ line 62.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-LaTeX Font Info:    Trying to load font information for U+msa on input line 58.
-
-
-(/usr/local/texlive/2025/texmf-dist/tex/latex/amsfonts/umsa.fd
-File: umsa.fd 2013/01/14 v3.01 AMS symbols A
-)
-LaTeX Font Info:    Trying to load font information for U+msb on input line 58.
-
-
-(/usr/local/texlive/2025/texmf-dist/tex/latex/amsfonts/umsb.fd
-File: umsb.fd 2013/01/14 v3.01 AMS symbols B
-)
-LaTeX Font Info:    Trying to load font information for OT1+mathkerncmss on inp
-ut line 58.
-
-(/usr/local/texlive/2025/texmf-dist/tex/latex/sansmathaccent/ot1mathkerncmss.fd
-File: ot1mathkerncmss.fd 2020/01/31 Fontinst v1.933 font definitions for OT1/ma
-thkerncmss.
-)
+<img/hyperCube.png, id=71, 2280.52pt x 1895.08pt>
+File: img/hyperCube.png Graphic file (type png)
+<use img/hyperCube.png>
+Package pdftex.def Info: img/hyperCube.png  used on input line 62.
+(pdftex.def)             Requested size: 101.36624pt x 84.24432pt.
 File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
 <use beamerthemepolimi_img/decoration.pdf>
 Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input li
-ne 58.
+ne 62.
 (pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
 File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
 <use beamerthemepolimi_img/logo_bandiera.png>
 Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 58.
+ line 62.
 (pdftex.def)             Requested size: 124.62083pt x 7.0pt.
  [3
 
-]
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
-<use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 64.
-(pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-<img/boundary.jpeg, id=79, 1606.0pt x 1241.63875pt>
-File: img/boundary.jpeg Graphic file (type jpg)
-<use img/boundary.jpeg>
-Package pdftex.def Info: img/boundary.jpeg  used on input line 64.
-(pdftex.def)             Requested size: 233.48892pt x 180.51613pt.
-File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
-<use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input li
-ne 64.
-(pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
-<use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 64.
-(pdftex.def)             Requested size: 124.62083pt x 7.0pt.
- [4
-
- <./img/boundary.jpeg>]
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
-<use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 124.
-(pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-
-
-Class beamer Warning: Frame text is shrunk by a factor of 31.05164 percent inst
-ead of 0 percent on input line 124.
-
-File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
-<use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input li
-ne 124.
-(pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
-<use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 124.
-(pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-[5
-
-]
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
-<use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 147.
-(pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-<img/block_solver.png, id=94, 671.50874pt x 582.175pt>
-File: img/block_solver.png Graphic file (type png)
-<use img/block_solver.png>
-Package pdftex.def Info: img/block_solver.png  used on input line 147.
-(pdftex.def)             Requested size: 131.10744pt x 113.66136pt.
-
-Overfull \vbox (27.53656pt too high) detected at line 147
- []
-
-File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
-<use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input li
-ne 147.
-(pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
-<use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 147.
-(pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-[6
-
- <./img/block_solver.png>]
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
-<use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 164.
-(pdftex.def)             Requested size: 124.62083pt x 7.0pt.
-File: beamerthemepolimi_img/decoration.pdf Graphic file (type pdf)
-<use beamerthemepolimi_img/decoration.pdf>
-Package pdftex.def Info: beamerthemepolimi_img/decoration.pdf  used on input li
-ne 164.
-(pdftex.def)             Requested size: 364.19536pt x 7.19064pt.
-File: beamerthemepolimi_img/logo_bandiera.png Graphic file (type png)
-<use beamerthemepolimi_img/logo_bandiera.png>
-Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
- line 164.
-(pdftex.def)             Requested size: 124.62083pt x 7.0pt.
- [7
-
-]
+ <./img/hyperCube.png (PNG copy)>]
 \tf@nav=\write6
 \openout6 = `presentation_December.nav'.
 
@@ -1178,7 +1064,8 @@ Package pdftex.def Info: beamerthemepolimi_img/logo_bandiera.png  used on input
 \tf@snm=\write8
 \openout8 = `presentation_December.snm'.
 
- (./presentation_December.aux)
+
+(./presentation_December.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2025-10-24>
@@ -1187,30 +1074,24 @@ Package rerunfilecheck Info: File `presentation_December.out' has not changed.
 (rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 25184 strings out of 467538
- 502218 string characters out of 5419551
- 895321 words of memory out of 5000000
- 53569 multiletter control sequences out of 15000+600000
- 639622 words of font info for 83 fonts, out of 8000000 for 9000
+ 24866 strings out of 467538
+ 493949 string characters out of 5419551
+ 875854 words of memory out of 5000000
+ 53280 multiletter control sequences out of 15000+600000
+ 631902 words of font info for 54 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  128i,18n,123p,1333b,916s stack positions out of 10000i,1000n,20000p,200000b,200000s
-</usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb
-></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb>
-</usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb></
-usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmss10.pfb></u
-sr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmss12.pfb></us
-r/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmss8.pfb></usr/
-local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmssbx10.pfb></usr
-/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi10.pfb></usr
-/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi8.pfb></usr/
-local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/l
-ocal/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/loc
-al/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/loca
-l/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/symbols/msam10.pfb>
-Output written on presentation_December.pdf (7 pages, 1631701 bytes).
+</usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmss10.pfb
+></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmss12.pfb>
+</usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmss8.pfb></
+usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmssbx10.pfb><
+/usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi10.pfb><
+/usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi8.pfb></
+usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb>
+Output written on presentation_December.pdf (3 pages, 6120898 bytes).
 PDF statistics:
- 194 PDF objects out of 1000 (max. 8388607)
- 102 compressed objects within 2 object streams
- 15 named destinations out of 1000 (max. 500000)
- 156 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 111 PDF objects out of 1000 (max. 8388607)
+ 52 compressed objects within 1 object stream
+ 7 named destinations out of 1000 (max. 500000)
+ 68 words of extra memory for PDF output out of 10000 (max. 10000000)
 
