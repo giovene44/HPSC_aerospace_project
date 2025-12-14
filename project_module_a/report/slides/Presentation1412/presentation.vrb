@@ -1,0 +1,29 @@
+\frametitle{Boundary Conditions: Indexing Pattern}
+
+    We found a structural pattern that simplifies boundary condition (BC) logic.
+
+    \begin{itemize}
+        \item Let \textbf{$x_0$} be the solving direction.
+        \item Let \textbf{$x_1$} and \textbf{$x_2$} be the boundary plane directions, with indices \textbf{$i_1$} and \textbf{$i_2$}.
+    \end{itemize}
+
+    \vspace{1em}
+
+    The component type (Normal vs. Tangential) depends \textbf{only on the parity} of the boundary indices:
+
+    \begin{itemize}
+        \item \textbf{Normal Component:} $i_1$ is \textbf{even} AND $i_2$ is \textbf{even}.
+        \item \textbf{Tangential Component:} $i_1$ is \textbf{odd} OR $i_2$ is \textbf{odd}.
+    \end{itemize}
+
+    \vspace{1em}
+
+    This pattern (visualized below) allows for highly efficient and readable code, replacing complex checks with a simple `if` statement.
+
+
+    \begin{figure}
+        \centering
+        \includegraphics[width=\textwidth, keepaspectratio]{img/3dGrid.png}
+        \caption{Grid visualizing the even/odd pattern.}
+    \end{figure}
+
