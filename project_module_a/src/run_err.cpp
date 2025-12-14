@@ -91,14 +91,14 @@ std::pair<Real, Real> single_run(
                 Real dux = ux - u_ex[0];
                 Real duy = uy - u_ex[1];
                 Real duz = uz - u_ex[2];
-                
+
                 err_u += dux * dux + duy * duy + duz * duz;
                 norm_u += u_ex[0] * u_ex[0] + u_ex[1] * u_ex[1] + u_ex[2] * u_ex[2];
 
                 err_p += (pN - p_ex) * (pN - p_ex);
                 norm_p += p_ex * p_ex;
 
-                
+
             }
         }
     }
@@ -161,10 +161,10 @@ int run_multiple()
             Dim Ny_curr = N_initial_y * refinement_factor;
             Dim Nz_curr = N_initial_z * refinement_factor;
 
-            Real dt_curr = dt_initial / refinement_factor;// / refinement_factor;
+            Real dt_curr = dt_initial;
 
             T_final = dt_curr *10;
-            
+
             // dx/dy/dz must be scaled inversely to N_curr (halved when N_curr is doubled)
             Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
             Real dy_curr = parser.DimY / (Real)(Ny_curr - 0.5);
