@@ -155,7 +155,7 @@ public:
             Real rhs = get(i + 1, j, k);
             return (rhs - lhs) / dx;
         }
-        else 
+        else
             return 0.0; // g not used at the boundary!
     }
 
@@ -173,7 +173,6 @@ public:
         {
             return 0.0; // g not used at the boundary!
         }
-     
     }
 
     Real getGradient_z(Dim i, Dim j, Dim k) const
@@ -187,7 +186,7 @@ public:
         }
         else
         {
-            return 0.0; // g not used at the boundary!  
+            return 0.0; // g not used at the boundary!
         }
     }
 
@@ -313,6 +312,17 @@ public:
         else
         {
             throw std::invalid_argument("Invalid direction for second_derivative");
+        }
+    }
+
+    void print() const
+    {
+        std::cout << "ScalarVariable: " << Nx << "x" << Ny << "x" << Nz << std::endl;
+        for (size_t idx = 0; idx < data.size(); ++idx)
+        {
+            std::cout << data[idx] << " ";
+            if ((idx + 1) % Nx == 0)
+                std::cout << std::endl;
         }
     }
 

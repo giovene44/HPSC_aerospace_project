@@ -344,6 +344,16 @@ public:
         return data[axes];
     }
 
+    void print() const
+    {
+        std::cout << "VectorVariable: " << Nx << "x" << Ny << "x" << Nz << std::endl;
+        for (int a = 0; a < 3; ++a)
+        {
+            std::cout << "Component " << a << ":" << std::endl;
+            data[a].print();
+        }
+    }
+
     // Convenient named accessors
     inline ScalarVariable &x() { return component(0); }
     inline ScalarVariable &y() { return component(1); }

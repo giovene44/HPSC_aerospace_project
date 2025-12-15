@@ -30,76 +30,6 @@ Grid setup_grid(Real dim_x, Real dim_y, Real dim_z, Dim Nx, Dim Ny, Dim Nz, Real
 }
 
 // ===============================================================
-// 2. Apply known Dirichlet faces on vector [NEVER CALLED]
-// ===============================================================
-void apply_known_faces(VectorVariable &vector,
-                       BoundaryFunctions &u_boundary,
-                       const Grid &g,
-                       ScalarVariable &gamma_field,
-                       Real t = 0.0)
-{
-    Real Lx = g.dx * (g.Nx - 0.5);
-    Real Ly = g.dy * (g.Ny - 0.5);
-    Real Lz = g.dz * (g.Nz - 0.5);
-
-    // X-direction faces
-    for (Dim j = 0; j < g.Ny; ++j)
-        for (Dim k = 0; k < g.Nz; ++k)
-        {
-            vector.set(0, 0, j, k) = u_boundary.value<0>(0.0, j * g.dy, k * g.dz, t);
-            vector.set(0, g.Nx - 1, j, k) = u_boundary.value<0>(Lx, j * g.dy, k * g.dz, t);
-            /*
-            vector.set(1, 0, j, k) = u_boundary.value<1>(0.0, 0.5 * g.dy + j * g.dy, k * g.dz, t);
-            Real val = vector.value(1, g.Nx - 1, j, k);
-            Real gamma_val = gamma_field.get(g.Nx - 1, j, k);
-            Real sd = vector.second_derivative(1, 0, g.Nx - 1, j, k);
-            Real rhs_val = val - gamma_val * sd;
-            auto a = -gamma_val / (g.dx * g.dx);
-            auto b = 1.0 + 2.0 * gamma_val / (g.dx * g.dx);
-            auto c = -gamma_val / (g.dx * g.dx);
-            vector.set(1, g.Nx - 1, j, k) = ((rhs_val - 2 * c * u_boundary.value<1>(Lx, 0.5 * g.dy + j * g.dy, k * g.dz, t)) - a * vector.value(1, g.Nx - 2, j, k)) / (b - c);
-            */
-            vector.set(2, 0, j, k) = u_boundary.value<2>(0.0, j * g.dy, 0.5 * g.dz + k * g.dz, t);
-            Real val2 = vector.value(2, g.Nx - 1, j, k);
-            Real gamma_val2 = gamma_field.get(g.Nx - 1, j, k);
-            Real sd2 = vector.second_derivative(2, 0, g.Nx - 1, j, k);
-            Real rhs_val2 = val2 - gamma_val2 * sd2;
-            auto a2 = -gamma_val2 / (g.dx * g.dx);
-            auto b2 = 1.0 + 2.0 * gamma_val2 / (g.dx * g.dx);
-            auto c2 = -gamma_val2 / (g.dx * g.dx);
-            vector.set(2, g.Nx - 1, j, k) = ((rhs_val2 - 2 * c2 * u_boundary.value<2>(Lx, j * g.dy, 0.5 * g.dz + k * g.dz, t)) - a2 * vector.value(2, g.Nx - 2, j, k)) / (b2 - c2);
-        }
-
-    // Y-direction faces
-    for (Dim i = 0; i < g.Nx; ++i)
-        for (Dim k = 0; k < g.Nz; ++k)
-        {
-            vector.set(1, i, 0, k) = u_boundary.value<1>(i * g.dx, 0.0, k * g.dz, t);
-            vector.set(1, i, g.Ny - 1, k) = u_boundary.value<1>(i * g.dx, Ly, k * g.dz, t);
-
-            vector.set(0, i, 0, k) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, 0.0, k * g.dz, t);
-            vector.set(0, i, g.Ny - 1, k) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, Ly, k * g.dz, t);
-
-            vector.set(2, i, 0, k) = u_boundary.value<2>(i * g.dx, 0.0, 0.5 * g.dz + k * g.dz, t);
-            vector.set(2, i, g.Ny - 1, k) = u_boundary.value<2>(i * g.dx, Ly, 0.5 * g.dz + k * g.dz, t);
-        }
-
-    // Z-direction faces
-    for (Dim i = 0; i < g.Nx; ++i)
-        for (Dim j = 0; j < g.Ny; ++j)
-        {
-            vector.set(2, i, j, 0) = u_boundary.value<2>(i * g.dx, j * g.dy, 0.0, t);
-            vector.set(2, i, j, g.Nz - 1) = u_boundary.value<2>(i * g.dx, j * g.dy, Lz, t);
-
-            vector.set(0, i, j, 0) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, j * g.dy, 0.0, t);
-            vector.set(0, i, j, g.Nz - 1) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, j * g.dy, Lz, t);
-
-            vector.set(1, i, j, 0) = u_boundary.value<1>(i * g.dx, 0.5 * g.dy + j * g.dy, 0.0, t);
-            vector.set(1, i, j, g.Nz - 1) = u_boundary.value<1>(i * g.dx, 0.5 * g.dy + j * g.dy, Lz, t);
-        }
-}
-
-// ===============================================================
 // 3. Initialize Fields (interior + RHS)
 // ===============================================================
 void initialize_vector_field(const Grid &g,
@@ -143,28 +73,6 @@ void initialize_vector_field(const Grid &g,
                 }
 }
 
-void compute_rhs_field(const Grid &g,
-                       ScalarVariable &gamma_field,
-                       VectorVariable &vector,
-                       VectorVariable &rhs,
-                       Real t,
-                       Real nu)
-{
-    (void)t; // Unused parameter
-    // Build RHS based on vector field
-    for (int comp = 0; comp < 3; ++comp)
-        for (Dim k = 0; k < g.Nz; ++k)
-            for (Dim j = 0; j < g.Ny; ++j)
-                for (Dim i = 0; i < g.Nx; ++i)
-                {
-                    Real gamma_val = gamma_field.get(i, j, k);
-                    Real sd = vector.second_derivative(comp, 0, i, j, k);
-                    Real rhs_val = vector.value(comp, i, j, k) - nu * gamma_val * sd;
-
-                    rhs.set(comp, i, j, k) = rhs_val;
-                }
-}
-
 void initialize_fields(const Grid &g,
                        ScalarVariable &gamma_field,
                        VectorVariable &vector,
@@ -174,7 +82,6 @@ void initialize_fields(const Grid &g,
                        Real nu)
 {
     initialize_vector_field(g, vector, u_boundary, t);
-    compute_rhs_field(g, gamma_field, vector, rhs, t, nu);
 }
 
 // ===============================================================
@@ -206,7 +113,8 @@ Real compute_L2_error(VectorVariable &expected, VectorVariable &computed, const 
     return sqrt(error * g.dx * g.dy * g.dz);
 }
 
-void construct_g_function(VectorVariable &g_function,
+void construct_f_function(VectorVariable &f_function,
+                          ScalarVariable &gamma_field,
                           const Grid &g,
                           Real t_half,
                           Real nu)
@@ -258,14 +166,15 @@ void construct_g_function(VectorVariable &g_function,
                         f_val = ut - nu * uxx;
                     }
 
-                    g_function.set(comp, i, j, k) = f_val;
+                    f_function.set(comp, i, j, k) = f_val;
                 }
 }
 
 void solve(VelocitySolver &solver,
            VectorVariable &u_n,
            VectorVariable &u_np1,
-           VectorVariable &g_function,
+           VectorVariable &f_function,
+           ScalarVariable &gamma_field,
            const Grid &g,
            const DimensionsHandlerVector &x_handler,
            Real t_start,
@@ -283,18 +192,19 @@ void solve(VelocitySolver &solver,
     VectorVariable u_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable rhs_dummy(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
-    Real t = t_start;
+    Real t_current = t_start;
     int nsteps = int((T_final - t_start) / g.dt);
 
     for (int n = 0; n < nsteps; ++n)
     {
-        Real t_half = t + 0.5 * g.dt;
+
+        Real t_half = t_current + 0.5 * g.dt;
         solver.set_t(t_half);
 
         /* ------------------------------
          * Build forcing f^{n+1/2}
          * ------------------------------ */
-        construct_g_function(g_function, g, t_half, nu);
+        construct_f_function(f_function, gamma_field, g, t_half, nu);
 
         /* ------------------------------
          * RHS:
@@ -307,7 +217,7 @@ void solve(VelocitySolver &solver,
                     {
                         Real Dxx_u = u_n.second_derivative(comp, 0, i, j, k);
                         rhs.set(comp, i, j, k) =
-                            g.dt * g_function.value(comp, i, j, k) + g.dt * (nu / beta) * Dxx_u;
+                            g.dt * f_function.value(comp, i, j, k) + g.dt * (nu)*Dxx_u;
                     }
 
         /* ------------------------------
@@ -322,19 +232,19 @@ void solve(VelocitySolver &solver,
          * ------------------------------ */
         u_np1 = u_n + delta_u;
         u_n = u_np1;
-        t += g.dt;
+        t_current += g.dt;
 
         /* ------------------------------
          * Monitor error
          * ------------------------------ */
-        if (n % 10 == 0 || n == nsteps - 1)
+        if (n % 100 == 0 || n == nsteps - 1)
         {
             initialize_fields(g,
                               solver.gamma_field,
                               u_true,
                               rhs_dummy,
                               solver.u_boundary,
-                              t,
+                              t_current,
                               nu);
 
             std::cout << "Step " << n
@@ -352,7 +262,7 @@ void solve(VelocitySolver &solver,
                       u_true,
                       rhs_dummy,
                       solver.u_boundary,
-                      t,
+                      t_current,
                       nu);
 
     l2_error = compute_L2_error(u_true, u_n, g);
@@ -361,14 +271,14 @@ void solve(VelocitySolver &solver,
 // ===============================================================
 int main()
 {
-    const Real two_pi = 6.0;
+    const Real two_pi = 6.283185307179586;
 
     std::ofstream outfile("test_heat_equation.txt");
     outfile << "# Convergence study for x-direction heat solver\n";
     outfile << "# Nx Ny Nz dx dt L2_error convergence_rate\n";
     outfile << std::scientific << std::setprecision(8);
 
-    std::vector<Dim> grid_sizes = {10, 20, 40, 80};
+    std::vector<Dim> grid_sizes = {20, 40, 80};
     std::vector<Real> errors;
     std::vector<Real> dx_values;
     std::vector<Real> dt_values;
@@ -377,7 +287,9 @@ int main()
 
     for (Dim N : grid_sizes)
     {
-        Real dt_test = 0.001 / std::pow(2.0, iteration);
+        // Keep final T fixed; scale dt ~ dx^2 so temporal error (O(dt^2)) stays well below spatial (O(dx^2))
+        Real base_dx = two_pi / (N - 0.5);
+        Real dt_test = 0.001 * base_dx; // parabolic scaling
         iteration++;
 
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
@@ -396,14 +308,14 @@ int main()
          * Gamma field (dt*nu/2)
          * --------------------------------------------- */
         ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        gamma_field.set_all((g.dt * nu) / (2.0 * beta));
+        gamma_field.set_all(nu * g.dt / 2.0);
 
         /* ---------------------------------------------
          * Solution variables
          * --------------------------------------------- */
         VectorVariable u_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         VectorVariable u_np1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable g_fun(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable f_fun(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
         /* ---------------------------------------------
          * Boundary conditions
@@ -421,6 +333,7 @@ int main()
          * --------------------------------------------- */
         VectorVariable rhs_dummy(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         initialize_fields(g, gamma_field, u_n, rhs_dummy, u_boundary, g.dt, nu);
+        initialize_fields(g, gamma_field, u_np1, rhs_dummy, u_boundary, g.dt + g.dt, nu);
 
         /* ---------------------------------------------
          * Solver setup
@@ -434,16 +347,18 @@ int main()
             g.dx);
 
         /* ---------------------------------------------
-         * Time integration
+         * Time integration with constant physical end time
+         * dt scales with dx^2 to keep temporal error < spatial error
          * --------------------------------------------- */
-        Real T_final = 0.01;
+        Real T_final = 0.005; // Larger T to get measurable discretization errors
         Real l2_error = 0.0;
         Real runtime = 0.0;
 
         solve(solver,
               u_n,
               u_np1,
-              g_fun,
+              f_fun,
+              gamma_field,
               g,
               x_handler,
               g.dt,
