@@ -1,9 +1,12 @@
 #ifndef BOUNDARY_FUNCTIONS_HPP
 #define BOUNDARY_FUNCTIONS_HPP
+
 #include "Variables.hpp"
 #include "mpParser.h"
 #include <string>
 #include <fstream>
+#include <vector>
+#include <iostream>
 
 using namespace mup;
 
@@ -18,34 +21,34 @@ public:
             throw std::runtime_error("Unable to open file: " + input_file);
         }
         std::string line;
-        // std::cout<<"File is open: " << input_file << std::endl;
+        string_expression.clear();
         while (std::getline(file, line))
         {
-            if (line[0] == '#') // Skip comment lines
+            if (line.empty() || line[0] == '#') 
                 continue;
             string_expression.emplace_back(line);
-            // std::cout<<"Read line: " << line << std::endl;
         }
-        // std::cout<<"Get all line " << std::endl;
     }
+
+
 
     template <Dim component = 0>
     Real value(Real x_, Real y_, Real z_, Real t_) const
     {
-        // Thread-local parser and values: each thread gets its own instance
+        // Thread-local variables to persist across function calls
         thread_local ParserX p_local;
-        thread_local Value xval_local;
-        thread_local Value yval_local;
-        thread_local Value zval_local;
-        thread_local Value tval_local;
+        thread_local Value xval_local(0.0);
+        thread_local Value yval_local(0.0);
+        thread_local Value zval_local(0.0);
+        thread_local Value tval_local(0.0);
+        
+        // Track which expression is currently loaded in this thread's parser
+        thread_local std::string current_expr = ""; 
         thread_local bool initialized = false;
 
         if (!initialized)
         {
-            xval_local = Value(Real(0.0));
-            yval_local = Value(Real(0.0));
-            zval_local = Value(Real(0.0));
-            tval_local = Value(Real(0.0));
+            // Define variables only ONCE per thread
             p_local.DefineVar("x", Variable(&xval_local));
             p_local.DefineVar("y", Variable(&yval_local));
             p_local.DefineVar("z", Variable(&zval_local));
@@ -53,24 +56,40 @@ public:
             initialized = true;
         }
 
-        try
+        // OPTIMIZATION: Only Parse if the string changed!
+        // This is the "Parse Once" logic you wanted.
+        if (component < string_expression.size()) 
         {
-            p_local.SetExpr(string_expression[component]);
+            if (current_expr != string_expression[component]) 
+            {
+                try 
+                {
+                    p_local.SetExpr(string_expression[component]);
+                    current_expr = string_expression[component];
+                }
+                catch (ParserError &e)
+                {
+                    std::cerr << "Parser error: " << e.GetMsg() << std::endl;
+                    throw;
+                }
+            }
         }
-        catch (ParserError &e)
+        else 
         {
-            std::cerr << "Parser error in BoundaryFunctions::value(): " << e.GetMsg() << std::endl;
-            throw;
+            return 0.0;
         }
+
+        // Just update values (Fast)
         xval_local = Value(x_);
         yval_local = Value(y_);
         zval_local = Value(z_);
         tval_local = Value(t_);
 
+        // Evaluate (Fast-ish)
         return p_local.Eval().GetFloat();
     }
 
-    template <Dim component = 0>
+template <Dim component = 0>
     Real first_derivative(Real x_, Real y_, Real z_, Real t_, Real d) const
     {
         Real xp = x_, yp = y_, zp = z_;
