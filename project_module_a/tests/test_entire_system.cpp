@@ -435,7 +435,7 @@ int main()
     outfile << std::scientific << std::setprecision(8);
 
     // Test multiple grid resolutions
-    std::vector<Dim> grid_sizes = {40, 80, 160};
+    std::vector<Dim> grid_sizes = {20, 40, 80};
     std::vector<Real> l2_errors_velocity;
     std::vector<Real> l2_errors_pressure;
     std::vector<Real> speed_ups;
@@ -452,6 +452,9 @@ int main()
         // This keeps the temporal error smaller than spatial error
         Real base_dx = two_pi / (N - 0.5);
         Real dt_test = 0.001 * base_dx;
+
+        Real base_dx_fixed = two_pi / (80 - 0.5);
+        Real dt_test_fixed = 0.0001 * base_dx_fixed;
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
         printf("\n=================================================\n");
@@ -524,7 +527,7 @@ int main()
         DimensionsHandlerVector y_handler(g.Nx, g.Ny, g.Nz, 1, 0, 2, g.dy);
 
         DimensionsHandlerVector z_handler(g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz);
-        Real T_final = 10 * (g.dt);
+        Real T_final = 10 * dt_test_fixed;
 
         Real l2_error_velocity = 0.0;
         Real l2_error_pressure = 0.0;

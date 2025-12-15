@@ -386,11 +386,12 @@ int main()
     outfile << std::scientific << std::setprecision(8);
 
     // Test multiple grid resolutions
-    std::vector<Dim> grid_sizes = {10, 20};
+    std::vector<Dim> grid_sizes = {10, 20, 40};
     std::vector<Real> errors;
     std::vector<Real> speed_ups;
     std::vector<Real> dx_values;
     std::vector<Real> dt_values;
+    Dim iteration = 0;
     /*
     Real first_base_dx = two_pi / (grid_sizes[0] - 0.5);
     Real first_dt = 0.001 * first_base_dx;
@@ -401,8 +402,9 @@ int main()
         // Scale dt proportionally with dx for second-order spatial discretization
         // This keeps the temporal error smaller than spatial error
         Real base_dx = two_pi / (N - 0.5);
-        // Real dt_test = 0.001 * base_dx;
-        Real dt_test = 0.0025;
+        Real dt_test = 0.001 / std::pow(2.0, iteration);
+        iteration++;
+        //Real dt_test = 0.001;
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
         printf("\n=================================================\n");
@@ -455,7 +457,7 @@ int main()
         DimensionsHandlerVector y_handler(g.Nx, g.Ny, g.Nz, 1, 0, 2, g.dy);
 
         DimensionsHandlerVector z_handler(g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz);
-        Real T_final = Real(1.0);// * (g.dt);
+        Real T_final = Real(0.01);// * (g.dt);
 
         Real l2_error = 0.0;
         Real time_sequential = 0.0;
