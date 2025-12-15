@@ -4,6 +4,7 @@
 #include <vector>
 #include <iomanip>
 #include <fstream>
+#include <chrono>
 #include "navier_stokes_brinkman.hpp"
 
 // ===============================================================
@@ -102,18 +103,21 @@ Real compute_L2_error(const ScalarVariable &expected, const ScalarVariable &comp
 }
 
 // ===============================================================
-// 6. Solve and check solution
+// 6. Solve and check solution with timing
 // ===============================================================
 bool solve_and_check(PressureSolver &solver, ScalarVariable &rhs,
                      ScalarVariable &scalar, const Grid &g,
                      DimensionsHandlerVector &z_handler,
-                     Real &l2_error)
+                     Real &l2_error, double &elapsed_seconds, bool use_omp)
 {
 
     ScalarVariable computed_sol(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     computed_sol.set_all(0.0);
 
-    solver.solve_pressure<2>(rhs, computed_sol, z_handler);
+    auto t0 = std::chrono::high_resolution_clock::now();
+    solver.solve_pressure<2>(rhs, computed_sol, z_handler, use_omp);
+    auto t1 = std::chrono::high_resolution_clock::now();
+    elapsed_seconds = std::chrono::duration<double>(t1 - t0).count();
 
     l2_error = compute_L2_error(scalar, computed_sol, g);
 
@@ -143,13 +147,14 @@ int main()
     std::vector<Real> errors;
     std::vector<Real> dx_values;
     std::vector<Real> dt_values;
+    std::vector<Real> speedups;
 
     printf("=================================================\n");
     printf("Z-DIRECTION PRESSURE SPLITTING CONVERGENCE STUDY\n");
     printf("=================================================\n\n");
 
     std::ofstream outfile("convergence_pressure_z.txt");
-    outfile << "# Nx Ny Nz dx dt L2_error convergence_rate\n";
+    outfile << "# Nx Ny Nz dx dt L2_error convergence_rate t_serial_ms t_parallel_ms speedup\n";
 
     for (Dim N : grid_sizes)
     {
@@ -162,7 +167,8 @@ int main()
         printf("=================================================\n");
 
         ScalarVariable scalar(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        ScalarVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        ScalarVariable rhs_serial(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        ScalarVariable rhs_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
         BoundaryFunctions p_boundary;
         std::vector<std::string> neumann_bc = {
@@ -172,30 +178,45 @@ int main()
 
         p_boundary.set_string_expression(neumann_bc);
 
-        initialize_fields(g, scalar, rhs, p_boundary, g.dt);
-        PressureSolver solver = setup_solver(g, p_boundary, g.dt);
+        initialize_fields(g, scalar, rhs_serial, p_boundary, g.dt);
+        rhs_parallel = rhs_serial;
+        PressureSolver solver_serial = setup_solver(g, p_boundary, g.dt);
+        PressureSolver solver_parallel = setup_solver(g, p_boundary, g.dt);
 
         DimensionsHandlerVector z_handler(g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz);
 
-        Real l2_error = 0.0;
-        bool success = solve_and_check(solver, rhs, scalar, g, z_handler, l2_error);
+        Real l2_error_serial = 0.0;
+        Real l2_error_parallel = 0.0;
+        double t_serial = 0.0;
+        double t_parallel = 0.0;
 
-        printf("L2 Error: %.8e\n", l2_error);
+        bool ok_serial = solve_and_check(solver_serial, rhs_serial, scalar, g, z_handler, l2_error_serial, t_serial, /*use_omp=*/false);
+        bool ok_parallel = solve_and_check(solver_parallel, rhs_parallel, scalar, g, z_handler, l2_error_parallel, t_parallel, /*use_omp=*/true);
+
+        printf("L2 Error (serial):   %.8e\n", l2_error_serial);
+        printf("L2 Error (parallel): %.8e\n", l2_error_parallel);
 
         Real conv_rate = 0.0;
         if (!errors.empty())
         {
-            conv_rate = log(errors.back() / l2_error) / log(dx_values.back() / g.dx);
+            conv_rate = log(errors.back() / l2_error_parallel) / log(dx_values.back() / g.dx);
             printf("Convergence rate: %.4f (expected ~2.0 for 2nd order)\n", conv_rate);
         }
 
-        errors.emplace_back(l2_error);
+        errors.emplace_back(l2_error_parallel);
         dx_values.emplace_back(g.dx);
         dt_values.emplace_back(g.dt);
+        Real speedup = t_serial / t_parallel;
+        speedups.emplace_back(speedup);
 
-        outfile << g.Nx << " " << g.Ny << " " << g.Nz << " " << g.dx << " " << g.dt << " " << l2_error << " " << conv_rate << "\n";
+        printf("Timing: serial = %.3f ms, parallel = %.3f ms, speedup = %.3f\n",
+               t_serial * 1e3, t_parallel * 1e3, speedup);
 
-        if (success)
+        outfile << g.Nx << " " << g.Ny << " " << g.Nz << " "
+                << g.dx << " " << g.dt << " " << l2_error_parallel << " " << conv_rate << " "
+                << t_serial * 1e3 << " " << t_parallel * 1e3 << " " << speedup << "\n";
+
+        if (ok_serial && ok_parallel)
             printf("[PASS] Solver test passed for N=%d\n", N);
         else
         {
@@ -209,13 +230,13 @@ int main()
     printf("\n=================================================\n");
     printf("CONVERGENCE STUDY SUMMARY\n");
     printf("=================================================\n");
-    printf("Grid Size    dx          dt          L2 Error      Conv. Rate\n");
-    printf("---------------------------------------------------------------\n");
+    printf("Grid Size    dx          dt          L2 Error      Conv. Rate   Speedup\n");
+    printf("-----------------------------------------------------------------------\n");
     for (size_t i = 0; i < errors.size(); ++i)
     {
         Real rate = (i > 0) ? log(errors[i - 1] / errors[i]) / log(dx_values[i - 1] / dx_values[i]) : 0.0;
-        printf("%-12d %.6e  %.6e  %.6e  %.4f\n",
-               grid_sizes[i], dx_values[i], dt_values[i], errors[i], rate);
+        printf("%-12d %.6e  %.6e  %.6e  %.4f    %.4f\n",
+               grid_sizes[i], dx_values[i], dt_values[i], errors[i], rate, speedups[i]);
     }
     printf("=================================================\n");
     printf("Results written to: convergence_pressure_z.txt\n");

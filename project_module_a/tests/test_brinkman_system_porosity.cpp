@@ -418,6 +418,26 @@ int main()
         Real time_parallel = 0.0;
         parallel = true;
 
+        solve(solver,
+              eta_1_parallel,
+              eta_2_parallel,
+              zeta_1_parallel,
+              zeta_2_parallel,
+              u_1_parallel,
+              g_function_parallel,
+              xi_function_parallel,
+              g,
+              x_handler,
+              y_handler,
+              z_handler,
+              g.dt + g.dt,
+              T_final,
+              nu,
+              beta,
+              k_val,
+              l2_error,
+              time_parallel, parallel);
+
         Real speed_up = time_sequential / time_parallel;
         speed_ups.push_back(speed_up);
 

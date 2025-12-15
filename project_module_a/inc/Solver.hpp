@@ -122,61 +122,80 @@ public:
     };
 
     template <Dim direction>
-    void block_solver(const ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar &dim_handler)
+    void block_solver(const ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar &dim_handler, bool use_omp = false)
     {
-        std::vector<Real> a(dim_handler.N1, Real(-1.0) / (dim_handler.dN1 * dim_handler.dN1));
-        std::vector<Real> b(dim_handler.N1, Real(1.0) + (Real(2.0) / (dim_handler.dN1 * dim_handler.dN1)));
-        std::vector<Real> c(dim_handler.N1, Real(-1.0) / (dim_handler.dN1 * dim_handler.dN1));
-        std::vector<Real> d(dim_handler.N1);
-        std::vector<Real> x(dim_handler.N1);
+        Dim N = dim_handler.N1;
+        Real h = dim_handler.dN1;
 
-        a[0] = Real(0.0);
-        c[0] = Real(-2.0) / (dim_handler.dN1 * dim_handler.dN1);
-        b[dim_handler.N1 - 1] = Real(1.0) + Real(1.0) / (dim_handler.dN1 * dim_handler.dN1);
-        c[dim_handler.N1 - 1] = Real(0.0);
+        // Base TDMA coefficients (modified at boundaries to match Neumann handling as before)
+        std::vector<Real> base_a(N, Real(-1.0) / (h * h));
+        std::vector<Real> base_b(N, Real(1.0) + (Real(2.0) / (h * h)));
+        std::vector<Real> base_c(N, Real(-1.0) / (h * h));
 
-        if constexpr (direction == 0)
+        base_a[0] = Real(0.0);
+        base_c[0] = Real(-2.0) / (h * h);
+        base_b[N - 1] = Real(1.0) + Real(1.0) / (h * h);
+        base_c[N - 1] = Real(0.0);
+
+        Dim Outer1 = (direction == 0) ? Ny : ((direction == 1) ? Nx : Nx);
+        Dim Outer2 = (direction == 0) ? Nz : ((direction == 1) ? Nz : Ny);
+
+        auto worker = [&](Dim i1, Dim i2)
         {
-            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
+            std::vector<Real> a = base_a;
+            std::vector<Real> b = base_b;
+            std::vector<Real> c = base_c;
+            std::vector<Real> d(N);
+            std::vector<Real> x(N);
+
+            auto get_rhs = [&](Dim i)
             {
-                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
-                {
-                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
-                        d[index_0] = rhs.get(index_0, index_1, index_2);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
-                        solution.set(index_0, index_1, index_2) = x[index_0];
-                }
-            }
-        }
-        else if constexpr (direction == 1)
+                if constexpr (direction == 0)
+                    return rhs.get(i, i1, i2);
+                else if constexpr (direction == 1)
+                    return rhs.get(i1, i, i2);
+                else
+                    return rhs.get(i1, i2, i);
+            };
+
+            auto set_sol = [&](Dim i, Real val)
+            {
+                if constexpr (direction == 0)
+                    solution.set(i, i1, i2) = val;
+                else if constexpr (direction == 1)
+                    solution.set(i1, i, i2) = val;
+                else
+                    solution.set(i1, i2, i) = val;
+            };
+
+            for (Dim i = 0; i < N; ++i)
+                d[i] = get_rhs(i);
+
+            thomas_algorithm(a, b, c, d, x);
+
+            for (Dim i = 0; i < N; ++i)
+                set_sol(i, x[i]);
+        };
+
+#ifdef _OPENMP
+        if (use_omp)
         {
-            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            if (DEBUG_BLOCK)
             {
-                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
-                {
-                    for (Dim index_0 = 0; index_0 < Ny; ++index_0)
-                        d[index_0] = rhs.get(index_1, index_0, index_2);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim index_0 = 0; index_0 < Ny; ++index_0)
-                        solution.set(index_1, index_0, index_2) = x[index_0];
-                }
+                int max_threads = omp_get_max_threads();
+                printf("[OMP] pressure block_solver<%d>: using up to %d threads\n", int(direction), max_threads);
             }
+#pragma omp parallel for collapse(2) default(none) shared(Outer1, Outer2, worker)
+            for (Dim i2 = 0; i2 < Outer2; ++i2)
+                for (Dim i1 = 0; i1 < Outer1; ++i1)
+                    worker(i1, i2);
+            return;
         }
-        else if constexpr (direction == 2)
-        {
-            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
-            {
-                for (Dim index_2 = 0; index_2 < Ny; ++index_2)
-                {
-                    for (Dim index_0 = 0; index_0 < Nz; ++index_0)
-                        d[index_0] = rhs.get(index_1, index_2, index_0);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim index_0 = 0; index_0 < Nz; ++index_0)
-                        solution.set(index_1, index_2, index_0) = x[index_0];
-                }
-            }
-        }
+#endif
+
+        for (Dim i2 = 0; i2 < Outer2; ++i2)
+            for (Dim i1 = 0; i1 < Outer1; ++i1)
+                worker(i1, i2);
     }
 
     BoundaryFunctions &p_boundary;
@@ -185,10 +204,10 @@ public:
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), p_boundary(p_boundary_) {}
 
     template <Dim direction>
-    void solve_pressure(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar &dim_handler)
+    void solve_pressure(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar &dim_handler, bool use_omp = false)
     {
         apply_bc<direction>(rhs);
-        block_solver<direction>(rhs, solution, dim_handler);
+        block_solver<direction>(rhs, solution, dim_handler, use_omp);
         advance_time();
     };
     BoundaryFunctions &set_p_boundary() { return p_boundary; }
@@ -338,7 +357,7 @@ public:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     // on comp2 we have normal components
-                    rhs.set(direction, index_1, 0, index_2) = (u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t - dt)) - ((u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t, dx) - u_boundary.first_derivative<0>(index_1 * dx,0 , index_2 * dz, t - dt, dx)) + (u_boundary.first_derivative<2>(index_1 * dx,0, index_2 * dz, t, dz) - u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t - dt, dz))) * dy * Real(0.5);
+                    rhs.set(direction, index_1, 0, index_2) = (u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t - dt)) - ((u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t, dx) - u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t - dt, dx)) + (u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t, dz) - u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t - dt, dz))) * dy * Real(0.5);
                     rhs.set(direction, index_1, Ny - 1, index_2) = u_boundary.value<direction>(index_1 * dx, Ly, index_2 * dz, t) - u_boundary.value<direction>(index_1 * dx, Ly, index_2 * dz, t - dt);
 
                     // on comp1 we have tangent components
