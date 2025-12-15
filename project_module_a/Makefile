@@ -14,11 +14,17 @@ endif
 
 # Modalità build: release (default) o debug
 BUILD ?= release
-
 ifeq ($(BUILD),debug)
 CXXFLAGS += -g -O0 -DDEBUG
 else
 CXXFLAGS += -O2
+endif
+
+# Profiling con gprof: impostare PROFILE=1 per abilitarlo
+PROFILE ?= 0
+ifeq ($(PROFILE),1)
+CXXFLAGS += -pg
+LDFLAGS  += -pg
 endif
 
 # Directory
@@ -45,13 +51,12 @@ INCLUDES      := -I$(INC_DIR) -I$(MUP_DIR)/parser
 # ==========================================
 # 3. FILE SELEZIONATI AUTOMATICAMENTE
 # ==========================================
-
 # --- SORGENTI PRINCIPALI ---
 ALL_SRC_FILES  := $(wildcard $(SRC_DIR)/*.cpp)
 APP_MAIN_FILE  := $(SRC_DIR)/$(MAIN_FILENAME)
+
 # Core files sono tutti tranne il main.cpp (per evitare conflitti di main multipli nei test)
 CORE_SRC_FILES := $(filter-out $(APP_MAIN_FILE), $(ALL_SRC_FILES))
-
 OBJS_CORE := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(CORE_SRC_FILES))
 OBJ_MAIN  := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(APP_MAIN_FILE))
 
@@ -69,8 +74,7 @@ TEST_EXES := $(patsubst $(TEST_DIR)/%.cpp, $(BIN_DIR)/%, $(TEST_SRCS))
 # ==========================================
 # 4. TARGET PRINCIPALI
 # ==========================================
-
-.PHONY: all main test debug clean clean-all setup run-tests
+.PHONY: all main test debug profile test_profiled clean clean-all clean-profile setup run-tests analyze-profile
 
 all: main
 
@@ -95,10 +99,85 @@ debug:
 	@$(MAKE) clean
 	@$(MAKE) BUILD=debug main
 
+# ============================
+# Modalità PROFILING (main app)
+# ============================
+profile:
+	@$(MAKE) clean
+	@$(MAKE) PROFILE=1 main
+	@echo ""
+	@echo "=========================================="
+	@echo "Profiling build completata!"
+	@echo "=========================================="
+	@echo "Passi successivi:"
+	@echo "1. Esegui il programma:      ./$(MAIN_EXE) [args]"
+	@echo "2. Verrà generato:           gmon.out"
+	@echo "3. Analizza i risultati:     gprof $(MAIN_EXE) gmon.out"
+	@echo "4. Per output leggibile:     gprof $(MAIN_EXE) gmon.out > analysis.txt"
+	@echo "=========================================="
+
+# ============================
+# Modalità PROFILING (test)
+# ============================
+test_profiled:
+	@$(MAKE) clean
+	@$(MAKE) PROFILE=1 test
+	@echo ""
+	@echo "=========================================="
+	@echo "Test con profiling compilati!"
+	@echo "=========================================="
+	@echo "Per profilare un test specifico:"
+	@echo "1. Esegui il test:           ./$(BIN_DIR)/test_name"
+	@echo "2. Verrà generato:           gmon.out"
+	@echo "3. Analizza:                 gprof $(BIN_DIR)/test_name gmon.out"
+	@echo ""
+	@echo "Per eseguire tutti i test e analizzarli:"
+	@echo "  make run-tests-profiled"
+	@echo "=========================================="
+
+# Esegue tutti i test con profiling e genera analisi per ciascuno
+run-tests-profiled: test_profiled
+	@echo ""
+	@echo "=========================================="
+	@echo "Esecuzione test con profiling..."
+	@echo "=========================================="
+	@for test_bin in $(TEST_EXES); do \
+		test_name=$$(basename $$test_bin); \
+		echo ""; \
+		echo "Running $$test_name..."; \
+		./$$test_bin || exit 1; \
+		if [ -f gmon.out ]; then \
+			echo "Generating profile analysis for $$test_name..."; \
+			gprof $$test_bin gmon.out > $$test_name-profile.txt; \
+			echo "Profile saved to: $$test_name-profile.txt"; \
+			mv gmon.out $$test_name-gmon.out 2>/dev/null || true; \
+		fi; \
+		echo "--------------------------------"; \
+	done
+	@echo ""
+	@echo "=========================================="
+	@echo "Profiling completato!"
+	@echo "File generati:"
+	@ls -1 *-profile.txt 2>/dev/null || echo "  (nessun file di profiling generato)"
+	@echo "=========================================="
+
+# Shortcut per analizzare il profiling dopo l'esecuzione
+analyze-profile:
+	@if [ ! -f gmon.out ]; then \
+		echo "Errore: gmon.out non trovato!"; \
+		echo "Devi prima eseguire il programma compilato con PROFILE=1"; \
+		exit 1; \
+	fi
+	@echo "Generazione analisi profiling..."
+	@gprof $(MAIN_EXE) gmon.out > analysis.txt
+	@echo "Analisi salvata in analysis.txt"
+	@echo "Mostrando le prime 50 righe:"
+	@echo "=========================================="
+	@head -n 50 analysis.txt
+
 # ==========================================
 # 5. LINKING
 # ==========================================
-
 # Link dell'applicazione principale
 $(MAIN_EXE): $(OBJ_MAIN) $(OBJS_CORE) $(MUP_LIB)
 	@echo "[LINK APP] $@"
@@ -114,7 +193,6 @@ $(BIN_DIR)/%: $(OBJ_DIR)/test/%.o $(OBJS_CORE) $(MUP_LIB)
 # ==========================================
 # 6. COMPILAZIONE
 # ==========================================
-
 $(OBJ_DIR)/src/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(dir $@)
 	@echo "[CXX SRC] $<"
@@ -139,9 +217,12 @@ setup:
 # ==========================================
 # 7. CLEAN
 # ==========================================
-
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
 
-clean-all: clean
+clean-profile:
+	rm -f gmon.out analysis.txt *-profile.txt *-gmon.out
+	@echo "File di profiling rimossi"
+
+clean-all: clean clean-profile
 	rm -rf $(MUP_BUILD_DIR)
