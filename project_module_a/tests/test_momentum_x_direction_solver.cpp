@@ -190,8 +190,8 @@ int main()
     {
         // Make dt proportional to dx^2 to keep temporal error negligible for spatial convergence study
         Real dx_nominal = two_pi / (N - 0.5);
-        // Real dt_test = 0.001 * dx_nominal; // dt ~ O(dx^2)
-        Real dt_test = 0.0025;
+        Real dt_test = 0.001 * dx_nominal; // dt ~ O(dx^2)
+
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt_test);
 
         printf("\n=================================================\n");

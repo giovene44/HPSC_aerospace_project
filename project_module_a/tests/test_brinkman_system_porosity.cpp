@@ -30,76 +30,6 @@ Grid setup_grid(Real dim_x, Real dim_y, Real dim_z, Dim Nx, Dim Ny, Dim Nz, Real
 }
 
 // ===============================================================
-// 2. Apply known Dirichlet faces on vector [NEVER CALLED]
-// ===============================================================
-void apply_known_faces(VectorVariable &vector,
-                       BoundaryFunctions &u_boundary,
-                       const Grid &g,
-                       ScalarVariable &gamma_field,
-                       Real t = 0.0)
-{
-    Real Lx = g.dx * (g.Nx - 0.5);
-    Real Ly = g.dy * (g.Ny - 0.5);
-    Real Lz = g.dz * (g.Nz - 0.5);
-
-    // X-direction faces
-    for (Dim j = 0; j < g.Ny; ++j)
-        for (Dim k = 0; k < g.Nz; ++k)
-        {
-            vector.set(0, 0, j, k) = u_boundary.value<0>(0.0, j * g.dy, k * g.dz, t);
-            vector.set(0, g.Nx - 1, j, k) = u_boundary.value<0>(Lx, j * g.dy, k * g.dz, t);
-            /*
-            vector.set(1, 0, j, k) = u_boundary.value<1>(0.0, 0.5 * g.dy + j * g.dy, k * g.dz, t);
-            Real val = vector.value(1, g.Nx - 1, j, k);
-            Real gamma_val = gamma_field.get(g.Nx - 1, j, k);
-            Real sd = vector.second_derivative(1, 0, g.Nx - 1, j, k);
-            Real rhs_val = val - gamma_val * sd;
-            auto a = -gamma_val / (g.dx * g.dx);
-            auto b = 1.0 + 2.0 * gamma_val / (g.dx * g.dx);
-            auto c = -gamma_val / (g.dx * g.dx);
-            vector.set(1, g.Nx - 1, j, k) = ((rhs_val - 2 * c * u_boundary.value<1>(Lx, 0.5 * g.dy + j * g.dy, k * g.dz, t)) - a * vector.value(1, g.Nx - 2, j, k)) / (b - c);
-            */
-            vector.set(2, 0, j, k) = u_boundary.value<2>(0.0, j * g.dy, 0.5 * g.dz + k * g.dz, t);
-            Real val2 = vector.value(2, g.Nx - 1, j, k);
-            Real gamma_val2 = gamma_field.get(g.Nx - 1, j, k);
-            Real sd2 = vector.second_derivative(2, 0, g.Nx - 1, j, k);
-            Real rhs_val2 = val2 - gamma_val2 * sd2;
-            auto a2 = -gamma_val2 / (g.dx * g.dx);
-            auto b2 = 1.0 + 2.0 * gamma_val2 / (g.dx * g.dx);
-            auto c2 = -gamma_val2 / (g.dx * g.dx);
-            vector.set(2, g.Nx - 1, j, k) = ((rhs_val2 - 2 * c2 * u_boundary.value<2>(Lx, j * g.dy, 0.5 * g.dz + k * g.dz, t)) - a2 * vector.value(2, g.Nx - 2, j, k)) / (b2 - c2);
-        }
-
-    // Y-direction faces
-    for (Dim i = 0; i < g.Nx; ++i)
-        for (Dim k = 0; k < g.Nz; ++k)
-        {
-            vector.set(1, i, 0, k) = u_boundary.value<1>(i * g.dx, 0.0, k * g.dz, t);
-            vector.set(1, i, g.Ny - 1, k) = u_boundary.value<1>(i * g.dx, Ly, k * g.dz, t);
-
-            vector.set(0, i, 0, k) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, 0.0, k * g.dz, t);
-            vector.set(0, i, g.Ny - 1, k) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, Ly, k * g.dz, t);
-
-            vector.set(2, i, 0, k) = u_boundary.value<2>(i * g.dx, 0.0, 0.5 * g.dz + k * g.dz, t);
-            vector.set(2, i, g.Ny - 1, k) = u_boundary.value<2>(i * g.dx, Ly, 0.5 * g.dz + k * g.dz, t);
-        }
-
-    // Z-direction faces
-    for (Dim i = 0; i < g.Nx; ++i)
-        for (Dim j = 0; j < g.Ny; ++j)
-        {
-            vector.set(2, i, j, 0) = u_boundary.value<2>(i * g.dx, j * g.dy, 0.0, t);
-            vector.set(2, i, j, g.Nz - 1) = u_boundary.value<2>(i * g.dx, j * g.dy, Lz, t);
-
-            vector.set(0, i, j, 0) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, j * g.dy, 0.0, t);
-            vector.set(0, i, j, g.Nz - 1) = u_boundary.value<0>(0.5 * g.dx + i * g.dx, j * g.dy, Lz, t);
-
-            vector.set(1, i, j, 0) = u_boundary.value<1>(i * g.dx, 0.5 * g.dy + j * g.dy, 0.0, t);
-            vector.set(1, i, j, g.Nz - 1) = u_boundary.value<1>(i * g.dx, 0.5 * g.dy + j * g.dy, Lz, t);
-        }
-}
-
-// ===============================================================
 // 3. Initialize Fields (interior + RHS)
 // ===============================================================
 void initialize_vector_field(const Grid &g,
@@ -207,7 +137,7 @@ Real compute_L2_error(VectorVariable &expected, VectorVariable &computed, const 
 }
 
 void construct_g_function(VectorVariable &g_function, const Grid &g, BoundaryFunctions &u_boundary,
-                          Real t, Real nu, VectorVariable &u_n, VectorVariable &eta_n, VectorVariable &zeta_n)
+                          Real t, Real nu, Real k_val, VectorVariable &u_n, VectorVariable &eta_n, VectorVariable &zeta_n)
 {
     (void)u_boundary; // Unused parameter
     // Compute g = f - (nu/2)*(dxx_eta + dyy_zeta + dzz_u)
@@ -243,19 +173,19 @@ void construct_g_function(VectorVariable &g_function, const Grid &g, BoundaryFun
                     {
                         Real u_t = cos(t) * sin(x) * sin(y) * sin(z);
                         Real laplacian_u = -3.0 * sin(t) * sin(x) * sin(y) * sin(z);
-                        f_val = u_t - nu * laplacian_u + (nu / k) * (sin(t) * sin(x) * sin(y) * sin(z));
+                        f_val = u_t - nu * laplacian_u + (nu / (2.0 * k_val)) * (sin(t) * sin(x) * sin(y) * sin(z));
                     }
                     else if (comp == 1)
                     {
                         Real v_t = cos(t) * cos(x) * cos(y) * cos(z);
                         Real laplacian_v = -3.0 * sin(t) * cos(x) * cos(y) * cos(z);
-                        f_val = v_t - nu * laplacian_v + (nu / k) * (sin(t) * cos(x) * cos(y) * cos(z));
+                        f_val = v_t - nu * laplacian_v + (nu / (2.0 * k_val)) * (sin(t) * cos(x) * cos(y) * cos(z));
                     }
                     else
                     {
                         Real w_t = cos(t) * cos(x) * sin(y) * (sin(z) + cos(z));
                         Real laplacian_w = -3.0 * sin(t) * cos(x) * sin(y) * (sin(z) + cos(z));
-                        f_val = w_t - nu * laplacian_w + (nu / k) * (sin(t) * cos(x) * sin(y) * (sin(z) + cos(z)));
+                        f_val = w_t - nu * laplacian_w + (nu / (2.0 * k_val)) * (sin(t) * cos(x) * sin(y) * (sin(z) + cos(z)));
                     }
 
                     // Compute numerical second derivatives from current solution
@@ -263,8 +193,8 @@ void construct_g_function(VectorVariable &g_function, const Grid &g, BoundaryFun
                     Real dyy_zeta = zeta_n.second_derivative(comp, 1, i, j, k);
                     Real dzz_u = u_n.second_derivative(comp, 2, i, j, k);
 
-                    // g = f - (nu/2)*(dxx + dyy + dzz)
-                    Real g_val = f_val - (nu / 2.0) * (dxx_eta + dyy_zeta + dzz_u);
+                    // g = f - (nu/2)*(dxx + dyy + dzz) - (nu/(2k))*u
+                    Real g_val = f_val - (nu / (2.0 * k_val)) * u_n.value(comp, i, j, k) - (nu / 2.0) * (dxx_eta + dyy_zeta + dzz_u);
 
                     g_function.set(comp, i, j, k) = g_val;
                 }
@@ -298,6 +228,7 @@ void solve(VelocitySolver &solver,
            Real T_final,
            Real nu,
            Real beta,
+           Real k_val,
            Real &l2_error,
            Real &time,
            bool parallel = false)
@@ -329,7 +260,7 @@ void solve(VelocitySolver &solver,
         initialize_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_current, nu);
 
         // Construct g_function: g = f - (nu/2)*(dxx_eta + dyy_zeta + dzz_u)
-        construct_g_function(g_function, g, solver.u_boundary, t_current, nu, u_n, eta_n, zeta_n);
+        construct_g_function(g_function, g, solver.u_boundary, t_current, nu, k_val, u_n, eta_n, zeta_n);
         compute_xi_function(xi_function, g_function, g, u_n, beta);
 
         // X-direction splitting: solve for eta_{n+1}
@@ -359,17 +290,16 @@ void solve(VelocitySolver &solver,
         // Advance time
         t_current += g.dt;
 
-        if (step % 10 == 0 || step == num_steps - 1)
+        if (step == num_steps - 1)
         {
             std::cout << "Error at step " << step + 1 << ": " << compute_L2_error(u_true_next, u_n, g) << std::scientific << std::setprecision(8) << std::endl;
+            l2_error = compute_L2_error(u_true_next, u_n, g);
         }
     }
     auto end_time = std::chrono::high_resolution_clock::now();
     time = std::chrono::duration<Real>(end_time - start_time).count();
 
-    // Compute L2 error at final time only
-    initialize_fields(g, solver.gamma_field, u_true_next, rhs_true_next, solver.u_boundary, t_current - g.dt, nu);
-    l2_error = compute_L2_error(u_true_next, u_n, g);
+    return;
 }
 
 // ===============================================================
@@ -412,7 +342,7 @@ int main()
         ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         Real nu = 0.1f;
         Real beta = 1.0f;
-        Real k = 1.0f;
+        Real k_val = 1.0f;
         gamma_field.set_all(((g.dt * nu) / (Real(2.0) * beta)));
         VectorVariable u_1_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
         VectorVariable eta_1_sequential(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
@@ -477,7 +407,9 @@ int main()
               T_final,
               nu,
               beta,
-              l2_error, time_sequential, parallel);
+              k_val,
+              l2_error,
+              time_sequential, parallel);
         errors.push_back(l2_error);
         dx_values.push_back(g.dx);
         dt_values.push_back(g.dt);
@@ -485,24 +417,6 @@ int main()
         l2_error = 0.0;
         Real time_parallel = 0.0;
         parallel = true;
-
-        solve(solver,
-              eta_1_parallel,
-              eta_2_parallel,
-              zeta_1_parallel,
-              zeta_2_parallel,
-              u_1_parallel,
-              g_function_parallel,
-              xi_function_parallel,
-              g,
-              x_handler,
-              y_handler,
-              z_handler,
-              g.dt + g.dt,
-              T_final,
-              nu,
-              beta,
-              l2_error, time_parallel, parallel);
 
         Real speed_up = time_sequential / time_parallel;
         speed_ups.push_back(speed_up);

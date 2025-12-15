@@ -152,13 +152,12 @@ int main()
     std::ofstream outfile("convergence_pressure_x.txt");
     outfile << "# Nx Ny Nz dx dt L2_error convergence_rate\n";
 
-    Real dt = 0.01 * (two_pi / (80 - 0.5));
-
     for (Dim N : grid_sizes)
     {
 
+        Real dx_nominal = two_pi / (N - 0.5);
+        Real dt = 0.001 * dx_nominal;
         Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt);
-
         printf("=================================================\n");
         printf("Grid: Nx=%d, Ny=%d, Nz=%d, dx=%f, dy=%f, dz=%f, dt=%f\n",
                g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt);
