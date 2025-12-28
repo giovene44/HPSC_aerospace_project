@@ -26,8 +26,8 @@ xlabel = 'Grid Size (N)' if 'N' in filename else 'Time Step (dt)'
 # Create the plot
 plt.figure(figsize=(10, 6))
 plt.loglog(x, error_0, 'o-', linewidth=2, markersize=8, label='Error Component 0')
-plt.loglog(x, 1/(error_0 * (x / x[0])), 'k--', label='O(h^-1)', alpha=0.7)
-plt.loglog(x, 1/(error_0 * (x / x[0])**2), 'k-.', label='O(h^-2)', alpha=0.7)
+plt.loglog(x, 1/(x**(1)), 'k--', label='O(h^-1)', alpha=0.7)
+plt.loglog(x, 1/(x**(2)), 'k-.', label='O(h^-2)', alpha=0.7)
 plt.xlabel(xlabel, fontsize=12)
 plt.ylabel('Error', fontsize=12)
 plt.title(f'Convergence Analysis: {filename}', fontsize=14)

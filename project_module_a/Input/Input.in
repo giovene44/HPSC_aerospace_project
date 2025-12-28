@@ -1,20 +1,20 @@
 #Number of Run
-5
+2
 
 #Dim of X
-2*pi
+6.0
 
 #Dim of Y
-2*pi
+6.0
 
 #Dim of Z
-2*pi
+6.0
 
 # Number of mesh points in X, Y, Z directions (Nx, Ny, Nz)
 5 5 5
 
 # Time step size (dt)
-0.00025
+0.003125
 
 # Total simulation time (T)
 1.0

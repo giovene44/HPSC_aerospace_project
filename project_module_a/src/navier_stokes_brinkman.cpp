@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <helper.hpp>
+#include <filesystem>
 
 Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
 {
@@ -158,7 +159,6 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // -----------------------------------------------------------------
             // Physical properties
             // -----------------------------------------------------------------
-            Real nu_val = nu;
             // Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k (unused)
 
             // Evaluate forcing function
@@ -195,7 +195,7 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             Real g_val =
                 forcing // f
                 //- p_grad                                     // -∇p
-                + Real(0.5) * nu_val * laplacian // + (ν/2)(∇²η + ∇²ζ + ∇²u)
+                + Real(0.5) * nu * laplacian // + (ν/2)(∇²η + ∇²ζ + ∇²u)
                 //- (nu_val / (Real(2.0) * k_val)) * velocity // - (ν/(2k))u₀
                 ;
 
@@ -372,5 +372,40 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
         // }
 
         // pressure_time_series.emplace_back(pressure_solution);
+
+        write_velocity_vtk("./Output/velocity_step_N"+std::to_string(Nx) + std::to_string(step) + ".vtk");
     }
+}
+
+void NavierStokesBrinkmann::write_velocity_vtk(const std::string &filename) const
+{
+    // Ensure the output directory exists
+    std::filesystem::path filepath(filename);
+    std::filesystem::create_directories(filepath.parent_path());
+
+    std::ofstream file(filename);
+    if (!file.is_open())
+        throw std::runtime_error("Cannot open file: " + filename);
+
+    // VTK header
+    file << "# vtk DataFile Version 3.0\n";
+    file << "Velocity field\n";
+    file << "ASCII\n";
+    file << "DATASET STRUCTURED_POINTS\n";
+    file << "DIMENSIONS " << Nx << " " << Ny << " " << Nz << "\n";
+    file << "SPACING " << dx << " " << dy << " " << dz << "\n";
+    file << "ORIGIN 0 0 0\n";
+    file << "POINT_DATA " << (Nx * Ny * Nz) << "\n";
+    file << "VECTORS velocity float\n";
+
+    // Write velocity data
+    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+    {
+        Real u = velocity_solution.value(0, idx);
+        Real v = velocity_solution.value(1, idx);
+        Real w = velocity_solution.value(2, idx);
+        file << u << " " << v << " " << w << "\n";
+    }
+
+    file.close();
 }

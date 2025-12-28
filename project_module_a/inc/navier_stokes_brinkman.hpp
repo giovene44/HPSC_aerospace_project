@@ -305,7 +305,10 @@ public:
         // std::cout << "------------------------------------------\n";
 
         return {rel_err_u, rel_err_p};
-    }
+    };
+
+    void write_velocity_vtk(const std::string &filename) const;
+
     // ============================================================================
     // GRID, MATERIAL, AND TIME INFORMATION
     // ============================================================================
