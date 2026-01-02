@@ -30,6 +30,179 @@ Grid setup_grid(Real dim_x, Real dim_y, Real dim_z, Dim Nx, Dim Ny, Dim Nz, Real
     return g;
 }
 
+/**
+ * @brief Converte indici locali in globali per una griglia arbitraria di processi.
+ * * @param i_L Indice di riga locale nel sottodominio.
+ * @param j_L Indice di colonna locale nel sottodominio.
+ * @param px Indice del processo lungo l'asse X (0, 1, 2...).
+ * @param py Indice del processo lungo l'asse Y (0, 1, 2...).
+ * @param paddle Dimensione del salto tra l'inizio di un sottodominio e il successivo.
+ */
+std::vector<int> local_to_global_grid(int i_L, int j_L, int px, int py, int paddle) {
+    std::vector<int> indexes_glob(2, 0);
+
+    // L'indice globale è dato dall'offset del processo + l'indice locale
+    // Nel tuo codice main, l'offset è calcolato come px * paddle_direction
+    int I_G = i_L + (px * paddle);
+    int J_G = j_L + (py * paddle);
+
+    indexes_glob[0] = I_G;
+    indexes_glob[1] = J_G;
+
+    return indexes_glob;
+}
+
+
+//N = numero di punti del blocco 
+//I_G = indice globale 
+
+std::vector<double> global_to_local(int N_R, int N_C, int I_G, int J_G) { 
+    // La matrice globale M ha dimensione 2N x 2N
+    
+    std::vector<double> indexes_loc(2,0); 
+    std::cout << " Indice Globale : " << I_G << " " << J_G << std::endl; 
+
+    int i_L = 0; 
+    int j_L = 0;
+
+    // Calcolo i_L (Indice di Riga Locale) - Usa N_R
+    if (I_G < N_R) {
+        // Blocco A o B (righe da 0 a N_R-1)
+        i_L = I_G;
+    } else {
+        // Blocco C o D (righe da N_R a 2N_R-1)
+        i_L = I_G - N_R; // Applica l'offset di riga
+    }
+
+    // Calcolo j_L (Indice di Colonna Locale) - Usa N_C
+    if (J_G < N_C) {
+        // Blocco A o C (colonne da 0 a N_C-1)
+        j_L = J_G;
+    } else {
+        // Blocco B o D (colonne da N_C a 2N_C-1)
+        j_L = J_G - N_C; // Applica l'offset di colonna
+    }
+
+    std::cout << " Indice Locale : " << i_L << " " << j_L << std::endl; 
+    indexes_loc[0] = i_L; 
+    indexes_loc[1] = j_L; 
+    return  indexes_loc; 
+}
+
+
+void test_global_to_Local_function(){
+    int N = 11;             // Numero di punti lungo asse x 
+    int N_points = N * N;   // Numero totale di punti della componete u_x della velocità in 2D 
+    int Num_processes = 3;  // Numero di processi che uso per la componente u_x 
+    int Num_points_subdomain = int(N / Num_processes) + 1;  //Numero di intrni punti di ogni sotto dominio lungo un asse 
+
+    int Num_pints_shared =  N % 3; 
+    int val = 1; 
+    int idx = 0; 
+    int idy = 0; 
+    int k = 1; 
+
+    std::vector<double> indexes_local; 
+    std::vector<std::vector<double>> M(N,std::vector<double>(N,0));
+
+    std::vector<std::vector<double>> A_loc(Num_points_subdomain, std::vector<double>(Num_points_subdomain,1)); 
+    std::vector<std::vector<double>> B_loc(Num_points_subdomain, std::vector<double>(Num_points_subdomain+1,2)); 
+
+    for(int i = 0; i < Num_points_subdomain; i++){
+        A_loc[i][3] = 0; 
+        A_loc[3][i] = 0; 
+    }
+
+    for(int i = 0; i < Num_points_subdomain; i++){
+        B_loc[i][0] = 0; 
+        B_loc[3][i] = 0; 
+        B_loc[i][4] = 0; 
+    }
+
+    std::cout << "Num processi : "<< Num_processes << std::endl; 
+    std::cout << "Num points totali matrice : "<< N_points << std::endl; 
+    std::cout << "Num points per ogni sottodominio  : "<< Num_points_subdomain << std::endl;  
+
+    for(int j = 0; j < N; j++ ){ 
+        val = k; 
+        idx = 0;  
+        for(int i = 0; i < N; i++){
+            if ( idx  < Num_points_subdomain -1  && idy != Num_points_subdomain - 1){
+                M[j][i] = val; 
+                idx++;   
+            }
+            else{ 
+                idx = 0; 
+                M[j][i] = 0; 
+                val++; 
+            }
+            std::cout << M[j][i] << ' ';
+        }
+        if( idy == Num_points_subdomain - 1){
+            idy = 0;  
+            k = k + Num_points_subdomain- 1 ; 
+        }
+        else{
+            idy++; 
+        }
+        std::cout << std::endl; 
+    }
+
+    indexes_local = global_to_local(Num_points_subdomain,Num_points_subdomain,3,2); 
+
+    std::cout << "Matrice A_loc " << std::endl; 
+
+    for(int j = 0; j < Num_points_subdomain; j++){
+        for(int i = 0; i < Num_points_subdomain; i++){
+            std::cout << A_loc[j][i] << " "; 
+        }
+        std::cout << std::endl; 
+    }
+
+    std::cout <<  " Valore di A_loc " << A_loc[indexes_local[0]][indexes_local[1]] << std::endl; 
+
+
+    indexes_local = global_to_local(Num_points_subdomain,Num_points_subdomain+1,6,7); 
+
+    std::cout << "Matrice B_loc " << std::endl; 
+
+    for(int j = 0; j < Num_points_subdomain; j++){
+        for(int i = 0; i < Num_points_subdomain + 1 ; i++){
+            std::cout << B_loc[j][i] << " "; 
+        }
+        std::cout << std::endl; 
+    }
+
+    std::cout <<  " Valore di B_loc " << B_loc[indexes_local[0]][indexes_local[1]] << std::endl; 
+    std::cout << "Funz" << std::endl; 
+}
+
+void test_conversion_logic() {
+    int paddle = 4; // Come definito nel tuo main
+    
+    // Supponiamo di essere nel Processo (px=1, py=2)
+    // E di avere un indice locale (i_L=1, j_L=1)
+    int px = 1; 
+    int py = 2;
+    int i_L = 1;
+    int j_L = 1;
+
+    std::vector<int> glob = local_to_global_grid(i_L, j_L, px, py, paddle);
+
+    std::cout << "--- Test Griglia Processi ---" << std::endl;
+    std::cout << "Processo: [" << px << "][" << py << "]" << std::endl;
+    std::cout << "Locale: (" << i_L << "," << j_L << ")" << std::endl;
+    std::cout << "Globale Risultante: (" << glob[0] << "," << glob[1] << ")" << std::endl;
+    
+    // Verifica: I_G = 1 + (1 * 4) = 5; J_G = 1 + (2 * 4) = 9
+    if(glob[0] == 5 && glob[1] == 9) {
+        std::cout << "SUCCESS: Conversione corretta." << std::endl;
+    } else {
+        std::cout << "FAILURE: Errore nel calcolo." << std::endl;
+    }
+}
+
+
 // ===============================================================
 // 3. Initialize Fields (interior + RHS)
 // ===============================================================
@@ -218,6 +391,7 @@ auto plot_vector_fields = [](const std::vector<std::vector<std::vector<VectorVar
 // ===============================================================
 // 7. Main function
 // ===============================================================
+/*
 int main()
 {
     const Real two_pi = 2.0 * 3.141592653589793;
@@ -311,4 +485,12 @@ int main()
         vector_1[0][0][0].print_vector();
     }
     return 0;
+}
+*/
+
+
+int main(){
+    test_global_to_Local_function(); 
+    test_conversion_logic(); 
+    return 0; 
 }
