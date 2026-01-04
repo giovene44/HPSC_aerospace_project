@@ -408,14 +408,14 @@ int main()
     std::cout << "MMS NS TEST: refine dx  (fixed dt and Tfinal)\n";
     std::cout << "t0=" << t0 << "  Tfinal=" << Tfinal << "  nu=" << nu << "\n";
     std::cout << "dt_coarse=" << dt_coarse << " at N=" << grid_sizes[0] << "\n";
-    std::cout << "Domain: [0,pi]^3\n";
+    std::cout << "Domain: [0,2pi]^3\n";
     std::cout << "=================================================\n\n";
 
     std::cout << "Grid    dx            dt            nsteps   L2_error(Tfinal)   rate\n";
     std::cout << "-----------------------------------------------------------------------\n";
 
     // First compute dx0 for the coarse grid (so dt scales consistently)
-    Grid g0 = setup_grid(pi, pi, pi, grid_sizes[0], grid_sizes[0], grid_sizes[0], dt_coarse);
+    Grid g0 = setup_grid(2 * pi, 2 * pi, 2 * pi, grid_sizes[0], grid_sizes[0], grid_sizes[0], dt_coarse);
     const Real dx0 = g0.dx;
 
     for (size_t idx = 0; idx < grid_sizes.size(); ++idx)
@@ -423,7 +423,7 @@ int main()
         const Dim N = grid_sizes[idx];
         dt_coarse = dt_coarse * refinement; // refine dt together with dx
         // Setup grid with placeholder dt; we overwrite g.dt right after
-        Grid g = setup_grid(pi, pi, pi, N, N, N, dt_coarse);
+        Grid g = setup_grid(2 * pi, 2 * pi, 2 * pi, N, N, N, dt_coarse);
 
         // Choose nsteps so that we land exactly on Tfinal
         int nsteps = int(std::round((Tfinal - t0) / g.dt));
