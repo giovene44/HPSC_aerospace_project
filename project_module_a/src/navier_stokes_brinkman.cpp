@@ -110,7 +110,7 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
     */
 
     auto forcing_field_previous = forcing_field;
-    forcing_field.set_all(forcing_term_funcion, t);
+    forcing_field.set_all(forcing_term_funcion, t, true);
 
     for (Dim comp = 0; comp < vector_rhs.size(); ++comp)
     {
@@ -141,7 +141,7 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             Real dxx_eta = eta.second_derivative(comp, 0, idx);             // ∂²η/∂x²
             Real dyy_zeta = zeta.second_derivative(comp, 1, idx);           // ∂²ζ/∂y²
             Real dzz_u = velocity_solution.second_derivative(comp, 2, idx); // ∂²u/∂z²
-            Real laplacian = dxx_eta + dyy_zeta + dzz_u;
+            Real fake_laplacian = dxx_eta + dyy_zeta + dzz_u;
 
             // -----------------------------------------------------------------
             // Physical properties
@@ -149,7 +149,7 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k (unused)
 
             // Evaluate forcing function
-            Real forcing = 1/2*(forcing_field.value(comp , i, j, k)-forcing_field_previous.value(comp, i, j, k));
+            Real forcing = Real(0.5)*(forcing_field.value(comp , i, j, k) + forcing_field_previous.value(comp, i, j, k));
             // Real p_grad = gradient_pressure_predictor.value(comp, idx); // unused
             // Real velocity = velocity_solution.value(comp, idx); // unused
 
@@ -165,7 +165,7 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
                 std::cout << "  Dxx_eta: " << dxx_eta << "\n";
                 std::cout << "  Dyy_zeta: " << dyy_zeta << "\n";
                 std::cout << "  Dzz_u: " << dzz_u << "\n";
-                std::cout << "Laplacian sum: " << laplacian << "\n";
+                std::cout << "Laplacian sum: " << fake_laplacian << "\n";
                 std::cout << "p_grad: " << p_grad << "\n";
                 std::cout << "Forcing: " << forcing << "\n";
             }
@@ -181,7 +181,7 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             Real g_val =
                 forcing // f
                 //- p_grad                                     // -∇p
-                + Real(0.5) * nu * laplacian // + (ν/2)(∇²η + ∇²ζ + ∇²u)
+                + Real(0.5) * nu * fake_laplacian // + (ν/2)(∇²η + ∇²ζ + ∇²u)
                 //- (nu_val / (Real(2.0) * k_val)) * velocity // - (ν/(2k))u₀
                 ;
 
@@ -305,7 +305,7 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
     velocity_time_series.emplace_back(velocity_solution);
     pressure_time_series.emplace_back(pressure_solution);
 
-    Dim total_steps = static_cast<int>(T / dt);
+    Dim total_steps = static_cast<Dim>(T / dt);
 
     // --- Time Stepping Loop ---
     for (Dim step = 1; step <= total_steps; ++step)

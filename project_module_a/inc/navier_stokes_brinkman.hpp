@@ -99,11 +99,11 @@ public:
         // Retrieve functions
         forcing_term_funcion = parser.get_forcing_function_expression();
 
-        forcing_field.set_all(forcing_term_funcion, 0.0f);
+        forcing_field.set_all(forcing_term_funcion, Real(0.0), true);
 
 
         auto k_function = parser.get_k_function_expression();
-        k_field.set_all(k_function, 0.0f);
+        k_field.set_all(k_function, Real(0.0));
         
 
         // // Initialize intermediate fields to zero (CRITICAL FIX)
