@@ -337,6 +337,22 @@ public:
         return out;
     }
 
+    VectorVariable A_operator(int derivation_direction, int component, ScalarVariable gamma) const
+    {
+        VectorVariable out(Nx, Ny, Nz, dx, dy, dz);
+        for (Dim i = 0; i < Nx; ++i)
+        {
+            for (Dim j = 0; j < Ny; ++j)
+            {
+                for (Dim k = 0; k < Nz; ++k)
+                {
+                    out.set(component, i, j, k) = gamma.get(i, j, k) * second_derivative(component, derivation_direction, i, j, k);
+                }
+            }
+        }
+        return out;
+    }
+
     inline ScalarVariable &component(int axes)
     {
         if (axes < 0 || axes >= static_cast<int>(size()))

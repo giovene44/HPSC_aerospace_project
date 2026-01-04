@@ -13,6 +13,7 @@
 #include <type_traits>
 #include "mpParser.h"
 #include "Variables.hpp"
+#include "BoundaryFunctions.hpp"
 
 class ParseInput
 {
@@ -60,6 +61,10 @@ public:
 
     // Helper for the K function
     std::function<Real(Real, Real, Real)> get_k_function() const;
+    BoundaryFunctions get_k_function_expression() const;
+
+    // Helper to get forcing function expression
+    BoundaryFunctions get_forcing_function_expression() const;
 
     void parse_input(const std::string &input_file)
     {
@@ -201,6 +206,7 @@ public:
 // =========================================================================
 
 // 1. Forcing Function Helper
+
 inline std::function<std::vector<Real>(Real, Real, Real, Real)> ParseInput::get_forcing_function() const
 {
     std::string s_fx = fx_expression;
@@ -239,6 +245,20 @@ inline std::function<std::vector<Real>(Real, Real, Real, Real)> ParseInput::get_
         }
         return res;
     };
+}
+
+
+inline BoundaryFunctions ParseInput::get_forcing_function_expression() const
+{
+    std::string s_fx = fx_expression;
+    std::string s_fy = fy_expression;
+    std::string s_fz = fz_expression;
+
+    std::vector<std::string> expr = {fx_expression, fy_expression, fz_expression};
+    BoundaryFunctions res;
+    res.set_string_expression(expr);
+
+    return res;
 }
 
 // 2. Exact Velocity Helper
@@ -313,6 +333,15 @@ inline std::function<Real(Real, Real, Real, Real)> ParseInput::get_exact_pressur
             return 0.0;
         }
     };
+}
+
+inline BoundaryFunctions ParseInput::get_k_function_expression() const
+{
+    std::string s_k = k_expression;
+    std::vector<std::string> expr = {k_expression};
+    BoundaryFunctions res;
+    res.set_string_expression(expr);
+    return res;   
 }
 
 // 4. Coefficient (K) Helper

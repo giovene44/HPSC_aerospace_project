@@ -45,8 +45,6 @@ std::pair<Real, Real> single_run(
     NavierStokesBrinkmann nsb_solver(
         Nx_in, Ny_in, Nz_in,
         dt_in, T_final,
-        forcing_func,
-        k_func,
         u_boundary_file,
         p_boundary_file,
         dx_in, dy_in, dz_in,
@@ -161,7 +159,7 @@ int run_multiple()
             Dim Ny_curr = N_initial_y * refinement_factor;
             Dim Nz_curr = N_initial_z * refinement_factor;
 
-            Real dt_curr = dt_initial;
+            Real dt_curr = dt_initial ;// / refinement_factor;
 
             // dx/dy/dz must be scaled inversely to N_curr (halved when N_curr is doubled)
             Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
@@ -211,8 +209,10 @@ int run_multiple()
         }
         file_p.close();
 
-        std::cout << "\nData files created: velocity_error.dat, pressure_error.dat\n";
-        std::cout << "Skipping automated plotting (python script call removed).\n";
+        // std::cout << "\nData files created: velocity_error.dat, pressure_error.dat\n";
+        // std::cout << "Skipping automated plotting (python script call removed).\n";
+
+        system("python ./utils/plot.py ./velocity_error.dat");
 
         return 0;
     }

@@ -5,6 +5,7 @@
 #include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
 #include "Solver.hpp"
+#include "ParseInput.hpp"
 #include "manufactured_solution_technique.hpp"
 
 class NavierStokesBrinkmann
@@ -27,8 +28,6 @@ public:
 public:
     NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz,
                           const Real dt, const Real T,
-                          std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_func,
-                          std::function<Real(Real, Real, Real)> k_func,
                           std::string u_boundary_file,
                           std::string p_boundary_file,
                           const Real dx, const Real dy, const Real dz,
@@ -57,11 +56,10 @@ public:
           // ============================
           u_0(Nx, Ny, Nz, dx, dy, dz),
           p_0(Nx, Ny, Nz, dx, dy, dz),
-          forcing_function(forcing_func),
-          k_function(k_func),
           nu(nu),
           k_field(Nx, Ny, Nz, dx, dy, dz),
           gamma_field(Nx, Ny, Nz, dx, dy, dz),
+          forcing_field(Nx, Ny, Nz, dx, dy, dz),
 
           p_boundary(),
           u_boundary(),
@@ -95,6 +93,19 @@ public:
     {
         // --- Initialize all fields ---
 
+        // 1) PARSER RETRIEVAL
+        auto &parser = ParseInput::getInstance();
+
+        // Retrieve functions
+        forcing_term_funcion = parser.get_forcing_function_expression();
+
+        forcing_field.set_all(forcing_term_funcion, 0.0f);
+
+
+        auto k_function = parser.get_k_function_expression();
+        k_field.set_all(k_function, 0.0f);
+        
+
         // // Initialize intermediate fields to zero (CRITICAL FIX)
         // g.set_all(0.0f);
 
@@ -115,12 +126,10 @@ public:
 
         u_boundary.setParsing(u_boundary_file);
         p_boundary.setParsing(p_boundary_file);
-        initialize_k_field();
         initialize_gamma_field();
     }
     // initialization methods:
     void initialize_gamma_field();
-    void initialize_k_field();
 
     Real compute_beta(Dim i, Dim j, Dim k) const;
     Real compute_beta(Dim index) const;
@@ -161,11 +170,11 @@ public:
         Real norm_u = 0.0, norm_p = 0.0;
 
         // 3. Loop over grid
-        for (Dim k = 0; k < Nz; ++k)
+        for (Dim k = 1; k < Nz-1; ++k)
         {
-            for (Dim j = 0; j < Ny; ++j)
+            for (Dim j = 1; j < Ny-1; ++j)
             {
-                for (Dim i = 0; i < Nx; ++i)
+                for (Dim i = 1; i < Nx-1; ++i)
                 {
                     // Physical Coordinates
                     Real x = i * dx;
@@ -173,7 +182,10 @@ public:
                     Real z = k * dz;
 
                     // --- Exact Solution ---
-                    std::vector<Real> u_ex = mms.velocity(x, y, z, t);
+                    std::vector<Real> u_ex_x = mms.velocity(x+0.5*dx, y, z, t);
+                    std::vector<Real> u_ex_y = mms.velocity(x, y+0.5*dy, z, t);
+                    std::vector<Real> u_ex_z = mms.velocity(x, y, z+0.5*dz, t);
+                    std::vector<Real> u_ex = {u_ex_x[0], u_ex_y[1], u_ex_z[2]};
                     Real p_ex = mms.pressure(x, y, z, t);
 
                     // --- Numerical Solution ---
@@ -337,13 +349,13 @@ public:
     // ============================================================================
     VectorVariable u_0;                                                        // Velocity field
     ScalarVariable p_0;                                                        // Pressure field
-    std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_function; // Forcing term (can vary in space)
-    std::function<Real(Real, Real, Real)> k_function;                          // Forcing term (can vary in space)
+    VectorVariable forcing_field; // Forcing term (can vary in space)
     Real nu;                                                                   // Kinematic viscosity (can vary in space)
     ScalarVariable k_field;                                                    // Brinkman permeability or resistance term
     ScalarVariable gamma_field;                                                // Gamma field for Brinkman term
     BoundaryFunctions p_boundary;                                              // Boundary condition for pressure
     BoundaryFunctions u_boundary;                                              // Boundary condition for velocity
+    BoundaryFunctions forcing_term_funcion;
 
     // ============================================================================
     // VECTOR LINEAR SOLVER VARIABLES (MOMENTUM EQUATION)

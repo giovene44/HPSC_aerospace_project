@@ -13,7 +13,7 @@ Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
 
-    return 1.0f; // + (dt * nu) / (2.0f * k_val);
+    return 1.0f + (dt * nu) / (2.0f * k_val);
 }
 
 Real NavierStokesBrinkmann::compute_beta(Dim index) const
@@ -86,22 +86,6 @@ void NavierStokesBrinkmann::initialize_gamma_field()
     }
 }
 
-void NavierStokesBrinkmann::initialize_k_field()
-{
-    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
-    {
-        Dim i = idx % Nx;
-        Dim j = (idx / Nx) % Ny;
-        Dim k = idx / (Nx * Ny);
-
-        // Convert grid indices to physical coordinates
-        Real x = i * dx;
-        Real y = j * dy;
-        Real z = k * dz;
-
-        k_field.set(idx) = k_function(x, y, z);
-    }
-}
 void NavierStokesBrinkmann::compute_vector_g(Real t)
 {
     // -------------------------------------------------------------------------
@@ -124,6 +108,9 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
     constexpr Dim DEBUG_COMP = 0; // Check the x-component
 
     */
+
+    auto forcing_field_previous = forcing_field;
+    forcing_field.set_all(forcing_term_funcion, t);
 
     for (Dim comp = 0; comp < vector_rhs.size(); ++comp)
     {
@@ -162,8 +149,7 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k (unused)
 
             // Evaluate forcing function
-            std::vector<Real> forcing_vec = forcing_function(x, y, z, t);
-            Real forcing = forcing_vec[comp];
+            Real forcing = 1/2*(forcing_field.value(comp , i, j, k)-forcing_field_previous.value(comp, i, j, k));
             // Real p_grad = gradient_pressure_predictor.value(comp, idx); // unused
             // Real velocity = velocity_solution.value(comp, idx); // unused
 
@@ -308,6 +294,8 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
     velocity_solution.set_all(u_boundary, Real(0.0));
     pressure_solution.set_all(p_boundary, Real(0.0));
 
+    write_velocity_vtk("./Output/velocity_N"+std::to_string(Nx) +"_step0.vtk");
+
     // Init intermediate vars to avoid junk values
     xi = eta = zeta = velocity_solution;
     psi = phi = other_phi = pressure_solution;
@@ -331,21 +319,21 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
         compute_vector_xi();
 
         // X-Sweep
-        vector_rhs = xi - eta;
-        velocity_solver.solve<0>(vector_rhs, vector_intermediate_solution, x_vector_handler, true);
-        eta += vector_intermediate_solution;
+        vector_rhs = xi - eta.A_operator(0, 0, gamma_field);
+        velocity_solver.solve<0>(vector_rhs, eta, x_vector_handler, true);
+        // eta += vector_intermediate_solution;
 
         // Y-Sweep
-        vector_rhs = eta - zeta;
-        velocity_solver.solve<1>(vector_rhs, vector_intermediate_solution, y_vector_handler, true);
-        zeta += vector_intermediate_solution;
+        vector_rhs = eta - zeta.A_operator(1, 1, gamma_field);
+        velocity_solver.solve<1>(vector_rhs, zeta, y_vector_handler, true);
+        // zeta += vector_intermediate_solution;
 
         // Z-Sweep
-        vector_rhs = zeta - velocity_solution;
-        velocity_solver.solve<2>(vector_rhs, vector_intermediate_solution, z_vector_handler, true);
+        vector_rhs = zeta - velocity_solution.A_operator(2, 2, gamma_field);
+        velocity_solver.solve<2>(vector_rhs, velocity_solution, z_vector_handler, true);
 
         // Update to Intermediate Velocity u*
-        velocity_solution += vector_intermediate_solution;
+        // velocity_solution += vector_intermediate_solution;
 
         // 2. Pressure Projection Step (Calculate phi)
         // -------------------------------------------
@@ -373,7 +361,7 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         // pressure_time_series.emplace_back(pressure_solution);
 
-        write_velocity_vtk("./Output/velocity_step_N"+std::to_string(Nx) + std::to_string(step) + ".vtk");
+        write_velocity_vtk("./Output/velocity_N"+std::to_string(Nx) +"_step"+ std::to_string(step) + ".vtk");
     }
 }
 

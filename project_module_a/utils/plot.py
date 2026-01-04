@@ -8,6 +8,9 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
+def compute_dx(N):
+    return 2 * np.pi / (N - 0.5)
+
 if len(sys.argv) < 2:
     print("Usage: python3 plot.py <data_file>")
     print("Example: python3 plot.py error_vs_N.dat")
@@ -50,8 +53,8 @@ errors = data[:, 2].astype(float)
 # Compute convergence rates (log ratio). Use dx_values if positive, else grid_sizes.
 rates = np.zeros_like(errors)
 for i in range(errors.size):
-    dx_curr = 1.0 / grid_sizes[i]
-    dx_prev = 1.0 / grid_sizes[i - 1]
+    dx_curr = compute_dx(grid_sizes[i])
+    dx_prev = compute_dx(grid_sizes[i - 1])
     if dx_curr > 0 and dx_prev > 0:
         rates[i] = np.log(errors[i - 1] / errors[i]) / np.log(dx_prev / dx_curr)
     else:
@@ -65,7 +68,7 @@ print("=" * 49)
 print(f"{'Grid Size':<12} {'dx':>12} {'dt':>12} {'L2 Error':>14} {'Conv. Rate':>12}")
 print("-" * 63)
 for i in range(errors.size):
-    dx_curr = 1.0 / grid_sizes[i]
+    dx_curr = compute_dx(grid_sizes[i])
     dt_curr = dt_values[i]
     error_curr = errors[i]
     rate_curr = rates[i] if i > 0 else 0.0
