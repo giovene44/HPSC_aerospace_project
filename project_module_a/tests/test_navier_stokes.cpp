@@ -1,3 +1,26 @@
+// ===============================================================
+// Minimal exact unit test for solve_x_only with Nx=5, comp=0 only
+// Manufactured RHS from a chosen u_true on ONE interior line (j,k)=(1,1)
+// ===============================================================
+//
+// What this test does:
+// 1) builds a tiny grid Nx=5, Ny=3, Nz=3 (so j=1,k=1 is NOT a known-face for comp=0)
+// 2) sets boundary functions to ZERO for u,v,w (so your left u_{1/2} computation gives 0)
+// 3) sets gamma_field = 1 everywhere (so coeff = gamma/dx^2 is clean)
+// 4) defines a discrete u_true only along the x-line at (j,k)=(1,1):
+//      u_true = [0, 4/7, 5/7, 4/7, 0]
+// 5) manufactures rhs = A*u_true using EXACTLY the same tridiagonal operator your solver builds
+//    (boundary rows are identity, interior rows use -coeff, 1+2coeff, -coeff)
+// 6) calls solver.solve_x_only(rhs, u_num, parallel=false)
+// 7) prints rhs and the recovered solution along that line and the max error
+//
+// Drop this into your file (replace your current main with this main), or create a new test file.
+//
+// NOTE: This uses your existing classes from "navier_stokes_brinkman.hpp":
+//   - ScalarVariable, VectorVariable, BoundaryFunctions, VelocitySolver
+//
+// ===============================================================
+
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -5,7 +28,7 @@
 #include <iomanip>
 #include <fstream>
 #include "navier_stokes_brinkman.hpp"
-#include <chrono>
+
 // ===============================================================
 // 1. Setup Grid Parameters
 // ===============================================================
@@ -30,66 +53,46 @@ Grid setup_grid(Real dim_x, Real dim_y, Real dim_z, Dim Nx, Dim Ny, Dim Nz, Real
 }
 
 // ===============================================================
-// 3. Initialize Fields (interior + RHS)
+// Manufactured RHS builder for ONE x-line at (j,k) for comp=0,
+// using the SAME discrete operator as solve_x_only builds.
 // ===============================================================
-void initialize_vector_field(const Grid &g,
-                             VectorVariable &vector,
-                             BoundaryFunctions &u_boundary,
-                             Real t)
+static void manufacture_rhs_from_u_true_line_comp0(
+    VectorVariable &rhs,
+    const VectorVariable &u_true,
+    const ScalarVariable &gamma_field,
+    const Grid &g,
+    Dim j, Dim k)
 {
-    (void)u_boundary;
+    const Dim N = g.Nx;
+    const Real h2 = g.dx * g.dx;
 
-    for (int comp = 0; comp < 3; ++comp)
-        for (Dim k = 0; k < g.Nz; ++k)
-            for (Dim j = 0; j < g.Ny; ++j)
-                for (Dim i = 0; i < g.Nx; ++i)
-                {
-                    Real x, y, z;
+    // Boundary rows in your solve_x_only for comp=0 are Dirichlet-like rows:
+    // b=1, d = boundary_value => system enforces u_i = d
+    // To manufacture RHS consistent with that: rhs(0)=u_true(0), rhs(N-1)=u_true(N-1).
+    rhs.set(0, 0, j, k) = u_true.value(0, 0, j, k);
+    rhs.set(0, N - 1, j, k) = u_true.value(0, N - 1, j, k);
 
-                    // staggered locations
-                    if (comp == 0)
-                    {
-                        x = (Real(i) + 0.5) * g.dx;
-                        y = Real(j) * g.dy;
-                        z = Real(k) * g.dz;
-                    }
-                    if (comp == 1)
-                    {
-                        x = Real(i) * g.dx;
-                        y = (Real(j) + 0.5) * g.dy;
-                        z = Real(k) * g.dz;
-                    }
-                    if (comp == 2)
-                    {
-                        x = Real(i) * g.dx;
-                        y = Real(j) * g.dy;
-                        z = (Real(k) + 0.5) * g.dz;
-                    }
+    // Interior rows: rhs_i = a*u_{i-1} + b*u_i + c*u_{i+1}
+    // with a=-coeff, b=1+2coeff, c=-coeff and coeff = gamma/h^2
+    for (Dim i = 1; i < N - 1; ++i)
+    {
+        const Real gamma_val = gamma_field.get(i, j, k);
+        const Real coeff = gamma_val / h2;
 
-                    const Real st = std::sin(t);
+        const Real a = -coeff;
+        const Real b = Real(1.0) + Real(2.0) * coeff;
+        const Real c = -coeff;
 
-                    if (comp == 0)
-                        vector.set(0, i, j, k) = st * std::sin(x) * std::cos(y) * std::sin(z);
-                    else if (comp == 1)
-                        vector.set(1, i, j, k) = -st * std::cos(x) * std::sin(y) * std::sin(z);
-                    else
-                        vector.set(2, i, j, k) = 0.0;
-                }
-}
+        const Real uim1 = u_true.value(0, i - 1, j, k);
+        const Real ui = u_true.value(0, i, j, k);
+        const Real uip1 = u_true.value(0, i + 1, j, k);
 
-void initialize_fields(const Grid &g,
-                       ScalarVariable &gamma_field,
-                       VectorVariable &vector,
-                       VectorVariable &rhs,
-                       BoundaryFunctions &u_boundary,
-                       Real t,
-                       Real nu)
-{
-    initialize_vector_field(g, vector, u_boundary, t);
+        rhs.set(0, i, j, k) = a * uim1 + b * ui + c * uip1;
+    }
 }
 
 // ===============================================================
-// 4. Setup Solver & Strides
+// Setup solver
 // ===============================================================
 VelocitySolver setup_solver(const Grid &g, ScalarVariable &gamma_field, BoundaryFunctions &u_boundary, Real dt, Real t)
 {
@@ -98,559 +101,435 @@ VelocitySolver setup_solver(const Grid &g, ScalarVariable &gamma_field, Boundary
     solver.u_boundary = u_boundary;
     solver.set_t(t);
     return solver;
-}
-
-// ===============================================================
-// 6. Solve and check solution
-// ===============================================================
-
-inline bool is_error_dof_x(Dim i, Dim j, Dim k, int comp,
-                           Dim Nx, Dim Ny, Dim Nz)
-{
-    (void)j;
-    (void)k;
-    (void)Ny;
-    (void)Nz;
-
-    // x = 0  (i=0): u reconstructed, v/w Dirichlet
-    if (i == 0)
-        return (comp != 0);
-
-    // x = Lx (i=Nx-1): u Dirichlet, v/w ghost-eliminated
-    if (i == Nx - 1)
-        return (comp == 0);
-
-    // interior (and any “known faces” you set exactly) are fine
-    return true;
-}
-
-inline bool is_error_dof_y(Dim i, Dim j, Dim k, int comp,
-                           Dim Nx, Dim Ny, Dim Nz)
-{
-    (void)i;
-    (void)k;
-    (void)Nx;
-    (void)Nz;
-
-    // y = 0  (j=0): v reconstructed, u/w Dirichlet
-    if (j == 0)
-        return (comp != 1);
-
-    // y = Ly (j=Ny-1): v Dirichlet, u/w ghost-eliminated
-    if (j == Ny - 1)
-        return (comp == 1);
-
-    return true;
-}
-
-inline bool is_error_dof_z(Dim i, Dim j, Dim k, int comp,
-                           Dim Nx, Dim Ny, Dim Nz)
-{
-    (void)i;
-    (void)j;
-    (void)Nx;
-    (void)Ny;
-
-    // z = 0  (k=0): w reconstructed, u/v Dirichlet
-    if (k == 0)
-        return (comp != 2);
-
-    // z = Lz (k=Nz-1): w Dirichlet, u/v ghost-eliminated
-    if (k == Nz - 1)
-        return (comp == 2);
-
-    return true;
-}
-
-template <typename MaskFn>
-Real compute_L2_error_masked(const VectorVariable &exact,
-                             const VectorVariable &num,
-                             const Grid &g,
-                             MaskFn keep_dof)
-{
-    Real err2 = 0.0;
-
-    for (int comp = 0; comp < 3; ++comp)
-        for (Dim k = 0; k < g.Nz; ++k)
-            for (Dim j = 0; j < g.Ny; ++j)
-                for (Dim i = 0; i < g.Nx; ++i)
-                {
-                    if (!keep_dof(i, j, k, comp, g.Nx, g.Ny, g.Nz))
-                        continue;
-
-                    const Real d = exact.value(comp, i, j, k) - num.value(comp, i, j, k);
-                    err2 += d * d;
-                }
-
-    return std::sqrt(err2 * g.dx * g.dy * g.dz);
-}
-
-Real compute_L2_error_x(const VectorVariable &exact,
-                        const VectorVariable &num,
-                        const Grid &g)
-{
-    return compute_L2_error_masked(exact, num, g, is_error_dof_x);
-}
-
-Real compute_L2_error_y(const VectorVariable &exact,
-                        const VectorVariable &num,
-                        const Grid &g)
-{
-    return compute_L2_error_masked(exact, num, g, is_error_dof_y);
-}
-
-Real compute_L2_error_z(const VectorVariable &exact,
-                        const VectorVariable &num,
-                        const Grid &g)
-{
-    return compute_L2_error_masked(exact, num, g, is_error_dof_z);
-}
-
-Real compute_L2_error(VectorVariable &expected, VectorVariable &computed, const Grid &g)
-{
-    Real error = 0.0;
-    for (int comp = 0; comp < 3; ++comp)
-        for (Dim k = 0; k < g.Nz; ++k)
-            for (Dim j = 0; j < g.Ny; ++j)
-                for (Dim i = 0; i < g.Nx; ++i)
-                {
-                    Real diff = expected.value(comp, i, j, k) - computed.value(comp, i, j, k);
-                    error += diff * diff;
-                }
-    return sqrt(error * g.dx * g.dy * g.dz);
-}
-
-// Helper: physical location of component comp at (i,j,k)
-static inline void phys_coord(int comp, Dim i, Dim j, Dim k,
-                              const Grid &g, Real &x, Real &y, Real &z)
-{
-    if (comp == 0)
-    {
-        x = (Real(i) + 0.5) * g.dx;
-        y = Real(j) * g.dy;
-        z = Real(k) * g.dz;
-    }
-    if (comp == 1)
-    {
-        x = Real(i) * g.dx;
-        y = (Real(j) + 0.5) * g.dy;
-        z = Real(k) * g.dz;
-    }
-    if (comp == 2)
-    {
-        x = Real(i) * g.dx;
-        y = Real(j) * g.dy;
-        z = (Real(k) + 0.5) * g.dz;
-    }
-}
-
-// Helper: get u(c,i,j,k) but if out of range use BC evaluated at that location
-static inline Real get_u_or_bc(const VectorVariable &u,
-                               const BoundaryFunctions &ub,
-                               const Grid &g,
-                               int comp, Dim i, Dim j, Dim k,
-                               Real t)
-{
-    // inside: use stored value
-    if (i >= 0 && i < g.Nx && j >= 0 && j < g.Ny && k >= 0 && k < g.Nz)
-        return u.value(comp, i, j, k);
-
-    // outside: evaluate the analytic BC at the GHOST LOCATION (no clamping!)
-    // Note: i,j,k may be -1 or Nx, etc. That’s OK: your analytic BC is defined for any real x,y,z.
-    Real x, y, z;
-
-    if (comp == 0)
-    {
-        x = (Real(i) + 0.5) * g.dx;
-        y = Real(j) * g.dy;
-        z = Real(k) * g.dz;
-        return ub.value<0>(x, y, z, t);
-    }
-    if (comp == 1)
-    {
-        x = Real(i) * g.dx;
-        y = (Real(j) + 0.5) * g.dy;
-        z = Real(k) * g.dz;
-        return ub.value<1>(x, y, z, t);
-    }
-    // comp == 2
-    x = Real(i) * g.dx;
-    y = Real(j) * g.dy;
-    z = (Real(k) + 0.5) * g.dz;
-    return ub.value<2>(x, y, z, t);
-}
-
-void add_explicit_laplacian_all_nodes(
+} // Add this helper: FULL explicit Laplacian (x+y+z) on interior
+static void add_explicit_laplacian_full(
     const VectorVariable &u,
     VectorVariable &rhs,
     const Grid &g,
-    Real nu,
-    const BoundaryFunctions &u_boundary,
-    Real t_for_bc)
+    Real nu)
 {
-    const Real idx2 = 1.0 / (g.dx * g.dx);
-    const Real idy2 = 1.0 / (g.dy * g.dy);
-    const Real idz2 = 1.0 / (g.dz * g.dz);
-
     for (int c = 0; c < 3; ++c)
-        for (Dim k = 0; k < g.Nz; ++k)
-            for (Dim j = 0; j < g.Ny; ++j)
-                for (Dim i = 0; i < g.Nx; ++i)
+        for (Dim k = 1; k < g.Nz - 1; ++k)
+            for (Dim j = 1; j < g.Ny - 1; ++j)
+                for (Dim i = 1; i < g.Nx - 1; ++i)
                 {
-                    const Real uC = get_u_or_bc(u, u_boundary, g, c, i, j, k, t_for_bc);
-                    const Real uIp = get_u_or_bc(u, u_boundary, g, c, i + 1, j, k, t_for_bc);
-                    const Real uIm = get_u_or_bc(u, u_boundary, g, c, i - 1, j, k, t_for_bc);
-                    const Real uJp = get_u_or_bc(u, u_boundary, g, c, i, j + 1, k, t_for_bc);
-                    const Real uJm = get_u_or_bc(u, u_boundary, g, c, i, j - 1, k, t_for_bc);
-                    const Real uKp = get_u_or_bc(u, u_boundary, g, c, i, j, k + 1, t_for_bc);
-                    const Real uKm = get_u_or_bc(u, u_boundary, g, c, i, j, k - 1, t_for_bc);
+                    const Real u0 = u.value(c, i, j, k);
 
-                    const Real lap = (uIp - 2 * uC + uIm) * idx2 + (uJp - 2 * uC + uJm) * idy2 + (uKp - 2 * uC + uKm) * idz2;
+                    const Real uxx =
+                        (u.value(c, i + 1, j, k) - Real(2.0) * u0 + u.value(c, i - 1, j, k)) / (g.dx * g.dx);
 
-                    rhs.set(c, i, j, k) += (nu * g.dt * 0.5) * lap;
+                    const Real uyy =
+                        (u.value(c, i, j + 1, k) - Real(2.0) * u0 + u.value(c, i, j - 1, k)) / (g.dy * g.dy);
+
+                    const Real uzz =
+                        (u.value(c, i, j, k + 1) - Real(2.0) * u0 + u.value(c, i, j, k - 1)) / (g.dz * g.dz);
+
+                    const Real lap = uxx + uyy + uzz;
+
+                    // Crank–Nicolson explicit half: + (nu*dt/2) * Lap(u^n)
+                    rhs.set(c, i, j, k) += (nu * g.dt / Real(2.0)) * lap;
                 }
 }
 
-void construct_f_function(VectorVariable &f,
-                          ScalarVariable &gamma_field,
-                          const Grid &g,
-                          Real t,
-                          Real nu)
-{
-    (void)gamma_field;
+// ================= Manufactured NS (div-free, no-slip) =================
+// Streamfunction: psi = sin(t) * sin^2(x) * sin^2(y) * sin^2(z)
+// Velocity: u = dpsi/dy, v = -dpsi/dx, w = 0  (exactly divergence-free)
+//
+// This file provides:
+//   - uvw_true_at(...)      : manufactured velocity at a physical point
+//   - uvw_t_true_at(...)    : time derivative at a physical point
+//   - fill_u_true(...)      : fill VectorVariable on your staggered grid
+//   - fill_p_true(...)      : p=0 everywhere (ScalarVariable)
+//   - compute_forcing_NS(...) : f = u_t + (u·∇)u + ∇p - nu Δu
+//
+// IMPORTANT:
+// - This forcing uses simple centered differences on each component’s own index lattice.
+//   That is OK for MMS verification, but it is not the same as a fully consistent
+//   staggered-grid convection discretization (MAC) unless you implement the same
+//   interpolation/flux form your solver uses.
 
-    for (int comp = 0; comp < 3; ++comp)
-        for (Dim k = 0; k < g.Nz; ++k)
-            for (Dim j = 0; j < g.Ny; ++j)
-                for (Dim i = 0; i < g.Nx; ++i)
+#include <cmath>
+
+// A(t) and A'(t)
+static inline Real A_of_t(Real t) { return std::sin(t); }
+static inline Real dA_dt(Real t) { return std::cos(t); }
+
+// Manufactured velocity at a physical point (x,y,z,t)
+static inline void uvw_true_at(Real x, Real y, Real z, Real t,
+                               Real &u, Real &v, Real &w)
+{
+    const Real A = A_of_t(t);
+
+    const Real sx = std::sin(x), cx = std::cos(x);
+    const Real sy = std::sin(y), cy = std::cos(y);
+    const Real sz = std::sin(z);
+
+    // sin^2(...)
+    const Real sx2 = sx * sx;
+    const Real sy2 = sy * sy;
+    const Real sz2 = sz * sz;
+
+    // u = d/dy [ A * sin^2(x)*sin^2(y)*sin^2(z) ]
+    //   = A * sin^2(x) * (2 sin(y)cos(y)) * sin^2(z)
+    u = A * sx2 * (Real(2.0) * sy * cy) * sz2;
+
+    // v = -d/dx [ A * sin^2(x)*sin^2(y)*sin^2(z) ]
+    //   = -A * (2 sin(x)cos(x)) * sin^2(y) * sin^2(z)
+    v = -A * (Real(2.0) * sx * cx) * sy2 * sz2;
+
+    // w = 0
+    w = Real(0.0);
+}
+
+// Time derivative u_t, v_t, w_t at a physical point (x,y,z,t)
+static inline void uvw_t_true_at(Real x, Real y, Real z, Real t,
+                                 Real &ut, Real &vt, Real &wt)
+{
+    const Real Ap = dA_dt(t);
+
+    const Real sx = std::sin(x), cx = std::cos(x);
+    const Real sy = std::sin(y), cy = std::cos(y);
+    const Real sz = std::sin(z);
+
+    const Real sx2 = sx * sx;
+    const Real sy2 = sy * sy;
+    const Real sz2 = sz * sz;
+
+    ut = Ap * sx2 * (Real(2.0) * sy * cy) * sz2;
+    vt = -Ap * (Real(2.0) * sx * cx) * sy2 * sz2;
+    wt = Real(0.0);
+}
+
+// Fill u_true on your staggered grid
+static void fill_u_true(VectorVariable &u_true, const Grid &g, Real t)
+{
+    for (Dim k = 0; k < g.Nz; ++k)
+        for (Dim j = 0; j < g.Ny; ++j)
+            for (Dim i = 0; i < g.Nx; ++i)
+            {
+                // comp 0: u at (x+dx/2, y, z)
                 {
-                    Real x, y, z;
+                    const Real x = (Real(i) + Real(0.5)) * g.dx;
+                    const Real y = Real(j) * g.dy;
+                    const Real z = Real(k) * g.dz;
 
-                    if (comp == 0)
-                    {
-                        x = (Real(i) + 0.5) * g.dx;
-                        y = Real(j) * g.dy;
-                        z = Real(k) * g.dz;
-                    }
-                    if (comp == 1)
-                    {
-                        x = Real(i) * g.dx;
-                        y = (Real(j) + 0.5) * g.dy;
-                        z = Real(k) * g.dz;
-                    }
-                    if (comp == 2)
-                    {
-                        x = Real(i) * g.dx;
-                        y = Real(j) * g.dy;
-                        z = (Real(k) + 0.5) * g.dz;
-                    }
-
-                    const Real st = std::sin(t);
-                    const Real ct = std::cos(t);
-
-                    if (comp == 0)
-                    {
-                        const Real u = st * std::sin(x) * std::cos(y) * std::sin(z);
-                        const Real ut = ct * std::sin(x) * std::cos(y) * std::sin(z);
-                        f.set(0, i, j, k) = ut + 3.0 * nu * u;
-                    }
-                    else if (comp == 1)
-                    {
-                        const Real v = -st * std::cos(x) * std::sin(y) * std::sin(z);
-                        const Real vt = -ct * std::cos(x) * std::sin(y) * std::sin(z);
-                        f.set(1, i, j, k) = vt + 3.0 * nu * v;
-                    }
-                    else
-                    {
-                        f.set(2, i, j, k) = 0.0; // w=0 => f=0
-                    }
+                    Real u, v, w;
+                    uvw_true_at(x, y, z, t, u, v, w);
+                    u_true.set(0, i, j, k) = u;
                 }
+
+                // comp 1: v at (x, y+dy/2, z)
+                {
+                    const Real x = Real(i) * g.dx;
+                    const Real y = (Real(j) + Real(0.5)) * g.dy;
+                    const Real z = Real(k) * g.dz;
+
+                    Real u, v, w;
+                    uvw_true_at(x, y, z, t, u, v, w);
+                    u_true.set(1, i, j, k) = v;
+                }
+
+                // comp 2: w at (x, y, z+dz/2)
+                {
+                    const Real x = Real(i) * g.dx;
+                    const Real y = Real(j) * g.dy;
+                    const Real z = (Real(k) + Real(0.5)) * g.dz;
+
+                    Real u, v, w;
+                    uvw_true_at(x, y, z, t, u, v, w);
+                    u_true.set(2, i, j, k) = w;
+                }
+            }
 }
 
-void solve_direct_test(
-    VelocitySolver &solver,
-    VectorVariable &u_n,
-    VectorVariable &u_np1,
-    VectorVariable &f_half,
-    const Grid &g,
-    const DimensionsHandlerVector &x_handler,
-    const DimensionsHandlerVector &y_handler,
-    const DimensionsHandlerVector &z_handler,
-    BoundaryFunctions &u_boundary,
-    Real t_start,
-    Real T_final,
-    Real nu,
-    Real &l2_error,
-    bool parallel)
+// Manufactured pressure: simplest p = 0
+static void fill_p_true(ScalarVariable &p_true, const Grid & /*g*/, Real /*t*/)
 {
-    (void)x_handler;
-    (void)y_handler;
-    (void)z_handler;
-
-    VectorVariable xi(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);        // ξ^{n+1}
-    VectorVariable rhs_delta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz); // changing per stage
-    VectorVariable du(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);        // δ (solution of each stage)
-
-    VectorVariable eta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);  // η state
-    VectorVariable zeta(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz); // ζ state
-
-    VectorVariable u_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    VectorVariable dummy(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-
-    Real t = t_start;
-    int nsteps = int((T_final - t_start) / g.dt);
-
-    for (int n = 0; n < nsteps; ++n)
-    {
-        const Real t_np1 = t + g.dt;
-        const Real t_half = t + g.dt / 2.0;
-
-        // -------------------------------------------------
-        // g^{n+1/2}  (your manufactured f_half)
-        // -------------------------------------------------
-        construct_f_function(f_half, solver.gamma_field, g, t_half, nu);
-
-        // -------------------------------------------------
-        // ξ^{n+1} = u^n + dt*g^{n+1/2} + (nu dt/2)*Δ u^n
-        // (this is what you were calling "rhs")
-        // -------------------------------------------------
-        xi = u_n;
-
-        for (int comp = 0; comp < 3; ++comp)
-            for (Dim k = 0; k < g.Nz; ++k)
-                for (Dim j = 0; j < g.Ny; ++j)
-                    for (Dim i = 0; i < g.Nx; ++i)
-                        xi.set(comp, i, j, k) =
-                            xi.value(comp, i, j, k) + g.dt * f_half.value(comp, i, j, k);
-
-        add_explicit_laplacian_all_nodes(u_n, xi, g, nu, u_boundary, t_half);
-
-        // Stage time for BCs/forcing (matches your manufactured forcing)
-        solver.set_t(t_np1);
-
-        // Initialize intermediate states at time n
-        eta = u_n;
-        zeta = u_n;
-
-        // =========================================================
-        // X delta stage:
-        // (I - γ Dxx) (η^{n+1} - η^n) = ξ^{n+1} - η^n
-        // with η^n initialized to u^n
-        // =========================================================
-        for (int comp = 0; comp < 3; ++comp)
-            for (Dim k = 0; k < g.Nz; ++k)
-                for (Dim j = 0; j < g.Ny; ++j)
-                    for (Dim i = 0; i < g.Nx; ++i)
-                        rhs_delta.set(comp, i, j, k) =
-                            xi.value(comp, i, j, k) - eta.value(comp, i, j, k);
-
-        solver.solve_x_only_delta(rhs_delta, du, t, t_np1, parallel);
-
-        for (int comp = 0; comp < 3; ++comp)
-            for (Dim k = 0; k < g.Nz; ++k)
-                for (Dim j = 0; j < g.Ny; ++j)
-                    for (Dim i = 0; i < g.Nx; ++i)
-                        eta.set(comp, i, j, k) =
-                            eta.value(comp, i, j, k) + du.value(comp, i, j, k);
-
-        // =========================================================
-        // Y delta stage:
-        // (I - γ Dyy) (ζ^{n+1} - ζ^n) = η^{n+1} - ζ^n
-        // with ζ^n initialized to u^n
-        // =========================================================
-        for (int comp = 0; comp < 3; ++comp)
-            for (Dim k = 0; k < g.Nz; ++k)
-                for (Dim j = 0; j < g.Ny; ++j)
-                    for (Dim i = 0; i < g.Nx; ++i)
-                        rhs_delta.set(comp, i, j, k) =
-                            eta.value(comp, i, j, k) - zeta.value(comp, i, j, k);
-
-        solver.solve_y_only_delta(rhs_delta, du, t, t_np1, parallel);
-
-        for (int comp = 0; comp < 3; ++comp)
-            for (Dim k = 0; k < g.Nz; ++k)
-                for (Dim j = 0; j < g.Ny; ++j)
-                    for (Dim i = 0; i < g.Nx; ++i)
-                        zeta.set(comp, i, j, k) =
-                            zeta.value(comp, i, j, k) + du.value(comp, i, j, k);
-
-        // =========================================================
-        // Z delta stage:
-        // (I - γ Dzz) (u^{n+1} - u^n) = ζ^{n+1} - u^n
-        // =========================================================
-        for (int comp = 0; comp < 3; ++comp)
-            for (Dim k = 0; k < g.Nz; ++k)
-                for (Dim j = 0; j < g.Ny; ++j)
-                    for (Dim i = 0; i < g.Nx; ++i)
-                        rhs_delta.set(comp, i, j, k) =
-                            zeta.value(comp, i, j, k) - u_n.value(comp, i, j, k);
-
-        solver.solve_z_only_delta(rhs_delta, du, t, t_np1, parallel);
-
-        for (int comp = 0; comp < 3; ++comp)
-            for (Dim k = 0; k < g.Nz; ++k)
-                for (Dim j = 0; j < g.Ny; ++j)
-                    for (Dim i = 0; i < g.Nx; ++i)
-                        u_np1.set(comp, i, j, k) =
-                            u_n.value(comp, i, j, k) + du.value(comp, i, j, k);
-
-        u_n = u_np1;
-        t = t_np1;
-    }
-
-    // Error at final time
-    initialize_fields(g, solver.gamma_field, u_true, dummy, solver.u_boundary, t, nu);
-    l2_error = compute_L2_error(u_true, u_n, g);
+    p_true.set_all(Real(0.0));
 }
 
+// --------- Centered differences for ScalarVariable p ---------
+static inline Real ddx_c(const ScalarVariable &q, Dim i, Dim j, Dim k, Real dx)
+{
+    return (q.get(i + 1, j, k) - q.get(i - 1, j, k)) / (Real(2.0) * dx);
+}
+static inline Real ddy_c(const ScalarVariable &q, Dim i, Dim j, Dim k, Real dy)
+{
+    return (q.get(i, j + 1, k) - q.get(i, j - 1, k)) / (Real(2.0) * dy);
+}
+static inline Real ddz_c(const ScalarVariable &q, Dim i, Dim j, Dim k, Real dz)
+{
+    return (q.get(i, j, k + 1) - q.get(i, j, k - 1)) / (Real(2.0) * dz);
+}
+
+// --------- Centered differences for VectorVariable components ---------
+static inline Real ddx_c_comp(const VectorVariable &u, int c, Dim i, Dim j, Dim k, Real dx)
+{
+    return (u.value(c, i + 1, j, k) - u.value(c, i - 1, j, k)) / (Real(2.0) * dx);
+}
+static inline Real ddy_c_comp(const VectorVariable &u, int c, Dim i, Dim j, Dim k, Real dy)
+{
+    return (u.value(c, i, j + 1, k) - u.value(c, i, j - 1, k)) / (Real(2.0) * dy);
+}
+static inline Real ddz_c_comp(const VectorVariable &u, int c, Dim i, Dim j, Dim k, Real dz)
+{
+    return (u.value(c, i, j, k + 1) - u.value(c, i, j, k - 1)) / (Real(2.0) * dz);
+}
+
+static inline Real lap_comp(const VectorVariable &u, int c, Dim i, Dim j, Dim k,
+                            Real dx, Real dy, Real dz)
+{
+    const Real u0 = u.value(c, i, j, k);
+
+    const Real uxx = (u.value(c, i + 1, j, k) - Real(2.0) * u0 + u.value(c, i - 1, j, k)) / (dx * dx);
+    const Real uyy = (u.value(c, i, j + 1, k) - Real(2.0) * u0 + u.value(c, i, j - 1, k)) / (dy * dy);
+    const Real uzz = (u.value(c, i, j, k + 1) - Real(2.0) * u0 + u.value(c, i, j, k - 1)) / (dz * dz);
+
+    return uxx + uyy + uzz;
+}
+
+// Compute f = u_t + (u·∇)u + ∇p - nu Δu on interior points
+static void compute_forcing_NS(VectorVariable &f,
+                               const VectorVariable &u_true,
+                               const ScalarVariable &p_true,
+                               const Grid &g,
+                               Real t,
+                               Real nu)
+{
+    f.set_all(Real(0.0));
+
+    // Only where centered stencils are valid
+    for (Dim k = 1; k < g.Nz - 1; ++k)
+        for (Dim j = 1; j < g.Ny - 1; ++j)
+            for (Dim i = 1; i < g.Nx - 1; ++i)
+            {
+                // ---------------- comp 0 ----------------
+                {
+                    const Real x = (Real(i) + Real(0.5)) * g.dx;
+                    const Real y = Real(j) * g.dy;
+                    const Real z = Real(k) * g.dz;
+
+                    Real ut, vt, wt;
+                    uvw_t_true_at(x, y, z, t, ut, vt, wt);
+
+                    const Real u = u_true.value(0, i, j, k);
+                    const Real v = u_true.value(1, i, j, k);
+                    const Real w = u_true.value(2, i, j, k);
+
+                    const Real du_dx = ddx_c_comp(u_true, 0, i, j, k, g.dx);
+                    const Real du_dy = ddy_c_comp(u_true, 0, i, j, k, g.dy);
+                    const Real du_dz = ddz_c_comp(u_true, 0, i, j, k, g.dz);
+
+                    const Real conv = u * du_dx + v * du_dy + w * du_dz;
+
+                    const Real dp_dx = ddx_c(p_true, i, j, k, g.dx);
+
+                    const Real lap = lap_comp(u_true, 0, i, j, k, g.dx, g.dy, g.dz);
+
+                    f.set(0, i, j, k) = ut + conv + dp_dx - nu * lap;
+                }
+
+                // ---------------- comp 1 ----------------
+                {
+                    const Real x = Real(i) * g.dx;
+                    const Real y = (Real(j) + Real(0.5)) * g.dy;
+                    const Real z = Real(k) * g.dz;
+
+                    Real ut, vt, wt;
+                    uvw_t_true_at(x, y, z, t, ut, vt, wt);
+
+                    const Real u = u_true.value(0, i, j, k);
+                    const Real v = u_true.value(1, i, j, k);
+                    const Real w = u_true.value(2, i, j, k);
+
+                    const Real dv_dx = ddx_c_comp(u_true, 1, i, j, k, g.dx);
+                    const Real dv_dy = ddy_c_comp(u_true, 1, i, j, k, g.dy);
+                    const Real dv_dz = ddz_c_comp(u_true, 1, i, j, k, g.dz);
+
+                    const Real conv = u * dv_dx + v * dv_dy + w * dv_dz;
+
+                    const Real dp_dy = ddy_c(p_true, i, j, k, g.dy);
+
+                    const Real lap = lap_comp(u_true, 1, i, j, k, g.dx, g.dy, g.dz);
+
+                    f.set(1, i, j, k) = vt + conv + dp_dy - nu * lap;
+                }
+
+                // ---------------- comp 2 ----------------
+                {
+                    const Real x = Real(i) * g.dx;
+                    const Real y = Real(j) * g.dy;
+                    const Real z = (Real(k) + Real(0.5)) * g.dz;
+
+                    Real ut, vt, wt;
+                    uvw_t_true_at(x, y, z, t, ut, vt, wt);
+
+                    const Real u = u_true.value(0, i, j, k);
+                    const Real v = u_true.value(1, i, j, k);
+                    const Real w = u_true.value(2, i, j, k);
+
+                    const Real dw_dx = ddx_c_comp(u_true, 2, i, j, k, g.dx);
+                    const Real dw_dy = ddy_c_comp(u_true, 2, i, j, k, g.dy);
+                    const Real dw_dz = ddz_c_comp(u_true, 2, i, j, k, g.dz);
+
+                    const Real conv = u * dw_dx + v * dw_dy + w * dw_dz;
+
+                    const Real dp_dz = ddz_c(p_true, i, j, k, g.dz);
+
+                    const Real lap = lap_comp(u_true, 2, i, j, k, g.dx, g.dy, g.dz);
+
+                    f.set(2, i, j, k) = wt + conv + dp_dz - nu * lap;
+                }
+            }
+}
 int main()
 {
-    const Real two_pi = 6.283185307179586;
+    std::cout << std::scientific << std::setprecision(12);
 
-    std::ofstream outfile("test_navier_stokes_z_direction.txt");
-    outfile << "# Convergence study for x-direction heat solver (DIRECT)\n";
-    outfile << "# Nx Ny Nz dx dt L2_error convergence_rate\n";
-    outfile << std::scientific << std::setprecision(8);
+    const Real pi = Real(3.14159265358979323846);
+    const Real nu = Real(0.1);
 
-    std::vector<Dim> grid_sizes = {20, 40};
+    // Grid sizes (doubling gives clean refinement)
+    std::vector<Dim> grid_sizes = {5, 10, 20, 40, 80};
+
+    // Fixed time interval
+    const Real t0 = Real(0.15);
+    const Real Tfinal = Real(0.155);
+
+    // Choose a baseline dt for the coarsest grid
+    // and scale dt with dx so time error shrinks together with space.
+    Real dt_coarse = Real(2e-4); // dt used when N = grid_sizes[0]
+    Real refinement = 1;
+
     std::vector<Real> errors;
-    std::vector<Real> dx_values;
-    std::vector<Real> dt_values;
+    std::vector<Real> dxs;
 
-    for (Dim N : grid_sizes)
+    std::cout << "=================================================\n";
+    std::cout << "MMS NS TEST: refine dx  (fixed dt and Tfinal)\n";
+    std::cout << "t0=" << t0 << "  Tfinal=" << Tfinal << "  nu=" << nu << "\n";
+    std::cout << "dt_coarse=" << dt_coarse << " at N=" << grid_sizes[0] << "\n";
+    std::cout << "Domain: [0,pi]^3\n";
+    std::cout << "=================================================\n\n";
+
+    std::cout << "Grid    dx            dt            nsteps   L2_error(Tfinal)   rate\n";
+    std::cout << "-----------------------------------------------------------------------\n";
+
+    // First compute dx0 for the coarse grid (so dt scales consistently)
+    Grid g0 = setup_grid(pi, pi, pi, grid_sizes[0], grid_sizes[0], grid_sizes[0], dt_coarse);
+    const Real dx0 = g0.dx;
+
+    for (size_t idx = 0; idx < grid_sizes.size(); ++idx)
     {
-        // -------------------------------------------------
-        // Grid and timestep (parabolic scaling)
-        // -------------------------------------------------
-        Real dx = two_pi / (N - 0.5);
-        Real dt = 0.01 * dx; // safe implicit timestep
+        const Dim N = grid_sizes[idx];
+        dt_coarse = dt_coarse * refinement; // refine dt together with dx
+        // Setup grid with placeholder dt; we overwrite g.dt right after
+        Grid g = setup_grid(pi, pi, pi, N, N, N, dt_coarse);
 
-        Grid g = setup_grid(two_pi, two_pi, two_pi, N, N, N, dt);
+        // Choose nsteps so that we land exactly on Tfinal
+        int nsteps = int(std::round((Tfinal - t0) / g.dt));
+        if (nsteps < 1)
+            nsteps = 1;
+        g.dt = (Tfinal - t0) / Real(nsteps); // exact final time
 
-        printf("\n=================================================\n");
-        printf("Grid: N=%d  dx=%e  dt=%e\n", N, g.dx, g.dt);
-        printf("=================================================\n");
-
-        // -------------------------------------------------
-        // Physical parameters
-        // -------------------------------------------------
-        Real nu = 0.1;
-
-        // -------------------------------------------------
-        // Gamma field: gamma = nu * dt
-        // (VelocitySolver internally divides by h^2)
-        // -------------------------------------------------
-        ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        gamma_field.set_all(nu * dt / 2.0);
-
-        // -------------------------------------------------
-        // Solution variables
-        // -------------------------------------------------
-        VectorVariable u_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable u_np1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable f_fun(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-
-        // -------------------------------------------------
-        // Boundary conditions (manufactured solution)
-        // -------------------------------------------------
+        // BC consistent with manufactured field
         BoundaryFunctions u_boundary;
         std::vector<std::string> bc = {
-            "sin(t)*sin(x)*cos(y)*sin(z)",
-            "-sin(t)*cos(x)*sin(y)*sin(z)",
-            "0"};
+            "sin(t)*sin(x)*sin(x)*sin(2*y)*sin(z)*sin(z)",  // u
+            "-sin(t)*sin(2*x)*sin(y)*sin(y)*sin(z)*sin(z)", // v
+            "0"                                             // w
+        };
         u_boundary.set_string_expression(bc);
 
-        // -------------------------------------------------
-        // Initial condition at t = 0
-        // -------------------------------------------------
-        VectorVariable rhs_dummy(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        initialize_fields(g, gamma_field, u_n, rhs_dummy, u_boundary, 0.0, nu);
+        // gamma = nu*dt/2
+        ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        gamma_field.set_all(nu * g.dt / Real(2.0));
 
-        // -------------------------------------------------
-        // Solver setup
-        // -------------------------------------------------
-        VelocitySolver solver =
-            setup_solver(g, gamma_field, u_boundary, g.dt, 0.0);
+        // Solver
+        VelocitySolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt, gamma_field, u_boundary);
+        solver.gamma_field = gamma_field;
+        solver.u_boundary = u_boundary;
 
-        DimensionsHandlerVector x_handler(
-            g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx);
+        // Fields
+        VectorVariable u_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable u_np1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable u_tmp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
-        DimensionsHandlerVector y_handler(
-            g.Nx, g.Ny, g.Nz, 1, 0, 2, g.dy);
+        // Manufactured forcing ingredients
+        VectorVariable u_true_half(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable f_half(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        ScalarVariable p_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        fill_p_true(p_true, g, t0);
 
-        DimensionsHandlerVector z_handler(
-            g.Nx, g.Ny, g.Nz, 2, 0, 1, g.dz);
+        // Initial condition
+        fill_u_true(u_n, g, t0);
 
-        // -------------------------------------------------
-        // Time integration
-        // -------------------------------------------------
-        Real T_final = 0.1;
-        Real l2_error = 0.0;
-
-        solve_direct_test(
-            solver,
-            u_n,
-            u_np1,
-            f_fun,
-            g,
-            x_handler,
-            y_handler,
-            z_handler,
-            u_boundary,
-            0.0,
-            T_final,
-            nu,
-            l2_error,
-            true);
-
-        // -------------------------------------------------
-        // Store results
-        // -------------------------------------------------
-        errors.push_back(l2_error);
-        dx_values.push_back(g.dx);
-        dt_values.push_back(g.dt);
-
-        Real conv_rate = 0.0;
-        if (errors.size() > 1)
+        // Time loop
+        Real t = t0;
+        for (int n = 0; n < nsteps; ++n)
         {
-            size_t k = errors.size() - 1;
-            conv_rate =
-                std::log(errors[k - 1] / errors[k]) /
-                std::log(dx_values[k - 1] / dx_values[k]);
+            const Real t_np1 = t + g.dt;
+            const Real t_half = t + g.dt / Real(2.0);
+
+            solver.set_t(t_np1);
+
+            fill_u_true(u_true_half, g, t_half);
+            compute_forcing_NS(f_half, u_true_half, p_true, g, t_half, nu);
+
+            // RHS = u^n + dt f^{n+1/2} + (nu dt/2) Lap(u^n)
+            rhs = u_n;
+            for (int comp = 0; comp < 3; ++comp)
+                for (Dim k = 0; k < g.Nz; ++k)
+                    for (Dim j = 0; j < g.Ny; ++j)
+                        for (Dim i = 0; i < g.Nx; ++i)
+                            rhs.set(comp, i, j, k) =
+                                rhs.value(comp, i, j, k) + g.dt * f_half.value(comp, i, j, k);
+
+            add_explicit_laplacian_full(u_n, rhs, g, nu);
+
+            // ADI: X -> Y -> Z
+            solver.solve_x_only(rhs, u_tmp, false);
+            solver.solve_y_only(u_tmp, u_np1, false);
+            solver.solve_z_only(u_np1, u_tmp, false);
+
+            u_n = u_tmp;
+            t = t_np1;
         }
 
-        outfile << g.Nx << " " << g.Ny << " " << g.Nz << " "
-                << g.dx << " " << g.dt << " "
-                << l2_error << " " << conv_rate << "\n";
+        // Error vs truth at Tfinal
+        VectorVariable u_true_T(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        fill_u_true(u_true_T, g, Tfinal);
 
-        printf("L2 Error = %.8e\n", l2_error);
+        Real err2 = 0.0;
+        for (int comp = 0; comp < 3; ++comp)
+            for (Dim k = 0; k < g.Nz; ++k)
+                for (Dim j = 0; j < g.Ny; ++j)
+                    for (Dim i = 0; i < g.Nx; ++i)
+                    {
+                        const Real diff = u_n.value(comp, i, j, k) - u_true_T.value(comp, i, j, k);
+                        err2 += diff * diff;
+                    }
+
+        const Real L2 = std::sqrt(err2 * g.dx * g.dy * g.dz);
+
+        errors.push_back(L2);
+        dxs.push_back(g.dx);
+
+        Real rate = 0.0;
+        if (idx > 0)
+        {
+            rate = std::log(errors[idx - 1] / errors[idx]) /
+                   std::log(dxs[idx - 1] / dxs[idx]);
+        }
+
+        std::cout << std::setw(5) << N << "  "
+                  << std::setw(12) << g.dx << "  "
+                  << std::setw(12) << g.dt << "  "
+                  << std::setw(6) << nsteps << "  "
+                  << std::setw(16) << L2 << "  "
+                  << std::setw(7) << rate << "\n";
     }
 
-    outfile.close();
-
-    printf("\n=================================================\n");
-    printf("CONVERGENCE STUDY SUMMARY (DIRECT SOLVE)\n");
-    printf("=================================================\n");
-    printf("Grid    dx          dt          L2 Error      Rate\n");
-    printf("-------------------------------------------------\n");
-
-    for (size_t i = 0; i < errors.size(); ++i)
-    {
-        Real rate = (i > 0)
-                        ? std::log(errors[i - 1] / errors[i]) /
-                              std::log(dx_values[i - 1] / dx_values[i])
-                        : 0.0;
-
-        printf("%-6d %.6e  %.6e  %.6e  %.3f\n",
-               grid_sizes[i],
-               dx_values[i],
-               dt_values[i],
-               errors[i],
-               rate);
-    }
-
-    printf("=================================================\n");
-    printf("Results written to test_navier_stokes_z_direction.txt\n");
-
+    std::cout << "-----------------------------------------------------------------------\n";
     return 0;
 }
