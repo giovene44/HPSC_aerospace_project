@@ -48,15 +48,24 @@ dt_values = data[:, 1].astype(float)
 errors = data[:, 2].astype(float)
 
 # Compute convergence rates (log ratio). Use dx_values if positive, else grid_sizes.
+# rates = np.zeros_like(errors)
+# for i in range(errors.size):
+#     dx_curr = 1.0 / grid_sizes[i]
+#     dx_prev = 1.0 / grid_sizes[i - 1]
+#     if dx_curr > 0 and dx_prev > 0:
+#         rates[i] = np.log(errors[i - 1] / errors[i]) / np.log(dx_prev / dx_curr)
+#     else:
+#         rates[i] = float('0.0')
+
+# Compute convergence rates (log ratio). Use dt_values since dt is halved each iteration.
 rates = np.zeros_like(errors)
 for i in range(errors.size):
-    dx_curr = 1.0 / grid_sizes[i]
-    dx_prev = 1.0 / grid_sizes[i - 1]
-    if dx_curr > 0 and dx_prev > 0:
-        rates[i] = np.log(errors[i - 1] / errors[i]) / np.log(dx_prev / dx_curr)
+    dt_curr = dt_values[i]
+    dt_prev = dt_values[i - 1]
+    if dt_curr > 0 and dt_prev > 0:
+        rates[i] = np.log(errors[i - 1] / errors[i]) / np.log(dt_prev / dt_curr)
     else:
-        rates[i] = float('0.0')
-
+        rates[i] = 0.0
 # Print formatted summary
 print()
 print("=" * 49)

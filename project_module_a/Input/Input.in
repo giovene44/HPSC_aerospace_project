@@ -1,5 +1,5 @@
 #Number of Run
-2
+4
 
 #Dim of X
 6.0
@@ -11,13 +11,13 @@
 6.0
 
 # Number of mesh points in X, Y, Z directions (Nx, Ny, Nz)
-5 5 5
+60 60 60
 
 # Time step size (dt)
-0.003125
+0.0001
 
 # Total simulation time (T)
-1.0
+0.001
 
 # boundary velocity
 ./Input/boundary_u0.dat
