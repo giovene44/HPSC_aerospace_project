@@ -157,9 +157,9 @@ int run_multiple()
             // =================================================================
             // GRID AND TIME CALCULATION: Starting point is correctly i=0 (factor 1)
             // =================================================================
-            Dim Nx_curr = N_initial_x;
-            Dim Ny_curr = N_initial_y;
-            Dim Nz_curr = N_initial_z;
+            Dim Nx_curr = N_initial_x;// / refinement_factor;
+            Dim Ny_curr = N_initial_y;// / refinement_factor;
+            Dim Nz_curr = N_initial_z;// / refinement_factor;
 
             Real dt_curr = dt_initial * refinement_factor;
 
@@ -211,8 +211,7 @@ int run_multiple()
         }
         file_p.close();
 
-        std::cout << "\nData files created: velocity_error.dat, pressure_error.dat\n";
-        std::cout << "Skipping automated plotting (python script call removed).\n";
+        std::system("python ./utils/plot.py ./velocity_error.dat");
 
         return 0;
     }
