@@ -9,16 +9,10 @@ project_module_a/report/slides/presentation.fdb_latexmk
 project_module_a/report/slides/presentation.aux
 .idea/editor.xml
 .idea/vcs.xml
-.gitignore
 .idea/workspace.xml
 .vscode/settings.json
 .vscode/settings.json
 .vscode/
-project_module_a/error_vs_N.png
-.gitignore
-.gitignore
-project_module_a/error_vs_dt.png
-.gitignore
 project_module_a/error_vs_N.dat
 project_module_a/error_vs_dt.dat
-.DS_Store
+project_module_a/Output/
