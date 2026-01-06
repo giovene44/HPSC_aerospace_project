@@ -134,8 +134,7 @@ public:
 
     void center_pressure(ScalarVariable &pressure_field);
 
-    void compute_rhs_pressure();
-
+    void compute_rhs_pressure(Real t);
     void update_pressure_and_velocity_fields();
     void solve(const ManufacturedSolution &mms);
 

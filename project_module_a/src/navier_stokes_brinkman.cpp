@@ -162,8 +162,9 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k (unused)
 
             // Evaluate forcing function
-            std::vector<Real> forcing_vec = forcing_function(x, y, z, t);
-            Real forcing = forcing_vec[comp];
+            std::vector<Real> forcing_current = forcing_function(x, y, z, t);
+            std::vector<Real> forcing_previous = forcing_function(x, y, z, t - dt);
+            Real forcing = Real(0.5) * (forcing_current[comp] + forcing_previous[comp]);
             // Real p_grad = gradient_pressure_predictor.value(comp, idx); // unused
             // Real velocity = velocity_solution.value(comp, idx); // unused
 
@@ -232,7 +233,7 @@ void NavierStokesBrinkmann::compute_vector_xi()
     }
 }
 
-void NavierStokesBrinkmann::compute_rhs_pressure()
+void NavierStokesBrinkmann::compute_rhs_pressure(Real t)
 {
     for (Dim x = 1; x < Nx; ++x)
     {
@@ -242,7 +243,7 @@ void NavierStokesBrinkmann::compute_rhs_pressure()
             {
                 rhs.set(x, y, z) =
                     -(Real(1.0) / dt) *
-                    velocity_solution.divergence(x, y, z);
+                    velocity_solution.divergence(x, y, z, u_boundary, t);
             }
         }
     }
@@ -331,21 +332,21 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
         compute_vector_xi();
 
         // X-Sweep
-        vector_rhs = xi - eta;
-        velocity_solver.solve<0>(vector_rhs, vector_intermediate_solution, x_vector_handler, true);
-        eta += vector_intermediate_solution;
+        vector_rhs = xi - eta.A_operator(0, 0, gamma_field);
+        velocity_solver.solve<0>(vector_rhs, eta, x_vector_handler, true);
+        // eta += vector_intermediate_solution;
 
         // Y-Sweep
-        vector_rhs = eta - zeta;
-        velocity_solver.solve<1>(vector_rhs, vector_intermediate_solution, y_vector_handler, true);
-        zeta += vector_intermediate_solution;
+        vector_rhs = eta - zeta.A_operator(1, 1, gamma_field);
+        velocity_solver.solve<1>(vector_rhs, zeta, y_vector_handler, true);
+        // zeta += vector_intermediate_solution;
 
         // Z-Sweep
-        vector_rhs = zeta - velocity_solution;
-        velocity_solver.solve<2>(vector_rhs, vector_intermediate_solution, z_vector_handler, true);
+        vector_rhs = zeta - velocity_solution.A_operator(2, 2, gamma_field);
+        velocity_solver.solve<2>(vector_rhs, velocity_solution, z_vector_handler, true);
 
         // Update to Intermediate Velocity u*
-        velocity_solution += vector_intermediate_solution;
+        // velocity_solution += vector_intermediate_solution;
 
         // 2. Pressure Projection Step (Calculate phi)
         // -------------------------------------------
@@ -373,7 +374,7 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         // pressure_time_series.emplace_back(pressure_solution);
 
-        write_velocity_vtk("./Output/velocity_step_N"+std::to_string(Nx) + std::to_string(step) + ".vtk");
+        write_velocity_vtk("./Output/velocity_N"+std::to_string(Nx) +"_step"+ std::to_string(step) + ".vtk");
     }
 }
 

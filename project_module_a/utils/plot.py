@@ -8,9 +8,9 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
-def compute_dx(N):
+def compute_dx(L, N):
     """Compute grid spacing dx given grid size N."""
-    return (7.5e-5) / (N - 0.5)
+    return (L) / (N - 0.5)
 
 if len(sys.argv) < 2:
     print("Usage: python3 plot.py <data_file>")
@@ -50,13 +50,14 @@ plt.show()
 grid_sizes = data[:, 0].astype(int)
 dt_values = data[:, 1].astype(float)
 errors = data[:, 2].astype(float)
+L=data[0,3].astype(float) if data.shape[1]>3 else 1.0
 
 # Compute convergence rates (log ratio). Use dx_values if positive, else grid_sizes.
 if grid_sizes[0]!=grid_sizes[1]:
     spacial_rates = np.zeros_like(errors)
     for i in range(errors.size):
-        dx_curr = compute_dx(grid_sizes[i])
-        dx_prev = compute_dx(grid_sizes[i - 1])
+        dx_curr = compute_dx(L, grid_sizes[i])
+        dx_prev = compute_dx(L, grid_sizes[i - 1])
         if dx_curr > 0 and dx_prev > 0:
             spacial_rates[i] = np.log(errors[i - 1] / errors[i]) / np.log(dx_prev / dx_curr)
         else:
@@ -81,14 +82,14 @@ print()
 print("=" * 80)
 print("CONVERGENCE STUDY SUMMARY")
 print("=" * 80)
-print(f"{'Grid Size':<12} {'dx':>12} {'dt':>12} {'L2 Error':>14} {'Spacial Rate':>12} {'Temporal Rate':>12}")
+print(f"{'Grid Size':<12} {'dx':>12} {'dt':>12} {'L2 Error':>14} {'Spacial Rate':>14} {'Temporal Rate':>14}")
 print("-" * 80)
 for i in range(errors.size):
-    dx_curr = compute_dx(grid_sizes[i])
+    dx_curr = compute_dx(L, grid_sizes[i])
     dt_curr = dt_values[i]
     error_curr = errors[i]
     temporal_rate_curr = temporal_rates[i] if i > 0 else 0.0
     spacial_rate_curr = spacial_rates[i] if i > 0 else 0.0
-    print(f"{grid_sizes[i]:<12} {dx_curr:>12.4e} {dt_curr:>12.4e} {error_curr:>14.6e} {spacial_rate_curr:>12.4f} {temporal_rate_curr:>12.4f}")
+    print(f"{grid_sizes[i]:<12} {dx_curr:>12.4e} {dt_curr:>12.4e} {error_curr:>14.6e} {spacial_rate_curr:>14.4f} {temporal_rate_curr:>14.4f}")
 print("=" * 49)
 print(f"Results read from: {filename}")
