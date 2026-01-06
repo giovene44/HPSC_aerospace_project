@@ -48,8 +48,8 @@ std::vector<int> local_to_global_grid(int i_L, int j_L, int px, int py, int padd
 
     indexes_glob[0] = I_G;
     indexes_glob[1] = J_G;
-
-    return indexes_glob;
+    return indexes_glob; 
+    
 }
 
 
