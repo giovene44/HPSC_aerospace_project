@@ -32,38 +32,43 @@ Grid setup_grid(Real dim_x, Real dim_y, Real dim_z, Dim Nx, Dim Ny, Dim Nz, Real
 
 /**
  * @brief Converte indici locali in globali per una griglia arbitraria di processi.
- * * @param i_L Indice di riga locale nel sottodominio.
+ * @param i_L Indice di riga locale nel sottodominio.
  * @param j_L Indice di colonna locale nel sottodominio.
+ * @param k_L Indice di profondità locale nel sottodominio.
  * @param px Indice del processo lungo l'asse X (0, 1, 2...).
  * @param py Indice del processo lungo l'asse Y (0, 1, 2...).
+ * @param pz Indice del processo lungo l'asse Z (0, 1, 2...).
  * @param paddle Dimensione del salto tra l'inizio di un sottodominio e il successivo.
  */
-std::vector<int> local_to_global_grid(int i_L, int j_L, int px, int py, int paddle) {
-    std::vector<int> indexes_glob(2, 0);
+std::vector<int> local_to_global_grid(int i_L, int j_L, int k_L, int px, int py, int pz, int paddle) {
+    std::vector<int> indexes_glob(3, 0);
 
     // L'indice globale è dato dall'offset del processo + l'indice locale
     // Nel tuo codice main, l'offset è calcolato come px * paddle_direction
     int I_G = i_L + (px * paddle);
     int J_G = j_L + (py * paddle);
+    int K_G = k_L + (pz * paddle);
 
     indexes_glob[0] = I_G;
     indexes_glob[1] = J_G;
-    return indexes_glob; 
-    
+    indexes_glob[2] = K_G;
+    return indexes_glob;
+
 }
 
 
-//N = numero di punti del blocco 
-//I_G = indice globale 
+//N = numero di punti del blocco
+//I_G = indice globale
 
-std::vector<double> global_to_local(int N_R, int N_C, int I_G, int J_G) { 
-    // La matrice globale M ha dimensione 2N x 2N
-    
-    std::vector<double> indexes_loc(2,0); 
-    std::cout << " Indice Globale : " << I_G << " " << J_G << std::endl; 
+std::vector<double> global_to_local(int N_R, int N_C, int N_D, int I_G, int J_G, int K_G) {
+    // La matrice globale M ha dimensione 2N x 2N x 2N
 
-    int i_L = 0; 
+    std::vector<double> indexes_loc(3,0);
+    std::cout << " Indice Globale : " << I_G << " " << J_G << " " << K_G << std::endl;
+
+    int i_L = 0;
     int j_L = 0;
+    int k_L = 0;
 
     // Calcolo i_L (Indice di Riga Locale) - Usa N_R
     if (I_G < N_R) {
@@ -83,10 +88,20 @@ std::vector<double> global_to_local(int N_R, int N_C, int I_G, int J_G) {
         j_L = J_G - N_C; // Applica l'offset di colonna
     }
 
-    std::cout << " Indice Locale : " << i_L << " " << j_L << std::endl; 
-    indexes_loc[0] = i_L; 
-    indexes_loc[1] = j_L; 
-    return  indexes_loc; 
+    // Calcolo k_L (Indice di Profondità Locale) - Usa N_D
+    if (K_G < N_D) {
+        // Blocchi anteriori (profondità da 0 a N_D-1)
+        k_L = K_G;
+    } else {
+        // Blocchi posteriori (profondità da N_D a 2N_D-1)
+        k_L = K_G - N_D; // Applica l'offset di profondità
+    }
+
+    std::cout << " Indice Locale : " << i_L << " " << j_L << " " << k_L << std::endl;
+    indexes_loc[0] = i_L;
+    indexes_loc[1] = j_L;
+    indexes_loc[2] = k_L;
+    return  indexes_loc;
 }
 
 
@@ -148,7 +163,7 @@ void test_global_to_Local_function(){
         std::cout << std::endl; 
     }
 
-    indexes_local = global_to_local(Num_points_subdomain,Num_points_subdomain,3,2); 
+    indexes_local = global_to_local(Num_points_subdomain,Num_points_subdomain,Num_points_subdomain,3,2,0); 
 
     std::cout << "Matrice A_loc " << std::endl; 
 
@@ -162,7 +177,7 @@ void test_global_to_Local_function(){
     std::cout <<  " Valore di A_loc " << A_loc[indexes_local[0]][indexes_local[1]] << std::endl; 
 
 
-    indexes_local = global_to_local(Num_points_subdomain,Num_points_subdomain+1,6,7); 
+    indexes_local = global_to_local(Num_points_subdomain,Num_points_subdomain+1,Num_points_subdomain,6,7,0); 
 
     std::cout << "Matrice B_loc " << std::endl; 
 
@@ -179,26 +194,28 @@ void test_global_to_Local_function(){
 
 void test_conversion_logic() {
     int paddle = 4; // Come definito nel tuo main
-    
-    // Supponiamo di essere nel Processo (px=1, py=2)
-    // E di avere un indice locale (i_L=1, j_L=1)
-    int px = 1; 
+
+    // Supponiamo di essere nel Processo (px=1, py=2, pz=1)
+    // E di avere un indice locale (i_L=1, j_L=1, k_L=2)
+    int px = 1;
     int py = 2;
+    int pz = 1;
     int i_L = 1;
     int j_L = 1;
+    int k_L = 2;
 
-    std::vector<int> glob = local_to_global_grid(i_L, j_L, px, py, paddle);
+    std::vector<int> glob = local_to_global_grid(i_L, j_L, k_L, px, py, pz, paddle);
 
-    std::cout << "--- Test Griglia Processi ---" << std::endl;
-    std::cout << "Processo: [" << px << "][" << py << "]" << std::endl;
-    std::cout << "Locale: (" << i_L << "," << j_L << ")" << std::endl;
-    std::cout << "Globale Risultante: (" << glob[0] << "," << glob[1] << ")" << std::endl;
-    
-    // Verifica: I_G = 1 + (1 * 4) = 5; J_G = 1 + (2 * 4) = 9
-    if(glob[0] == 5 && glob[1] == 9) {
-        std::cout << "SUCCESS: Conversione corretta." << std::endl;
+    std::cout << "--- Test Griglia Processi 3D ---" << std::endl;
+    std::cout << "Processo: [" << px << "][" << py << "][" << pz << "]" << std::endl;
+    std::cout << "Locale: (" << i_L << "," << j_L << "," << k_L << ")" << std::endl;
+    std::cout << "Globale Risultante: (" << glob[0] << "," << glob[1] << "," << glob[2] << ")" << std::endl;
+
+    // Verifica: I_G = 1 + (1 * 4) = 5; J_G = 1 + (2 * 4) = 9; K_G = 2 + (1 * 4) = 6
+    if(glob[0] == 5 && glob[1] == 9 && glob[2] == 6) {
+        std::cout << "SUCCESS: Conversione 3D corretta." << std::endl;
     } else {
-        std::cout << "FAILURE: Errore nel calcolo." << std::endl;
+        std::cout << "FAILURE: Errore nel calcolo 3D." << std::endl;
     }
 }
 
@@ -321,7 +338,7 @@ bool solve_and_check(VelocitySolver &solver, VectorVariable &rhs_1,
                      VectorVariable &vector_1, VectorVariable &rhs_2,
                      VectorVariable &vector_2, const Grid &g,
                      DimensionsHandlerVector &x_handler,
-                     Real &l2_error, auto &time_speedup)
+                     Real &l2_error, double &time_speedup)
 {
     // PARALLEL SOLVE
     VectorVariable rhs_delta_parallel(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
