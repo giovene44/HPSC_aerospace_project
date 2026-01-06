@@ -276,34 +276,77 @@ static inline Real ddz_c_comp(const VectorVariable &u, int c, Dim i, Dim j, Dim 
     return (u.value(c, i, j, k + 1) - u.value(c, i, j, k - 1)) / (Real(2.0) * dz);
 }
 
-static inline Real lap_comp(const VectorVariable &u, int c, Dim i, Dim j, Dim k,
-                            Real dx, Real dy, Real dz)
+// ===============================================================
+// Analytic Laplacian for the manufactured field used in uvw_true_at
+// psi = sin(t) * sin^2(x) * sin^2(y) * sin^2(z)
+// u = dpsi/dy = sin(t) * sin^2(x) * sin(2y) * sin^2(z)
+// v =-dpsi/dx =-sin(t) * sin(2x) * sin^2(y) * sin^2(z)
+// w = 0
+//
+// Returns Δu, Δv, Δw at a physical point (x,y,z,t).
+// ===============================================================
+static inline void laplacian_uvw_true_at(Real x, Real y, Real z, Real t,
+                                         Real &lap_u, Real &lap_v, Real &lap_w)
 {
-    const Real u0 = u.value(c, i, j, k);
+    const Real A = std::sin(t);
 
-    const Real uxx = (u.value(c, i + 1, j, k) - Real(2.0) * u0 + u.value(c, i - 1, j, k)) / (dx * dx);
-    const Real uyy = (u.value(c, i, j + 1, k) - Real(2.0) * u0 + u.value(c, i, j - 1, k)) / (dy * dy);
-    const Real uzz = (u.value(c, i, j, k + 1) - Real(2.0) * u0 + u.value(c, i, j, k - 1)) / (dz * dz);
+    // Common trig
+    const Real sx = std::sin(x), cx = std::cos(x);
+    const Real sy = std::sin(y), cy = std::cos(y);
+    const Real sz = std::sin(z), cz = std::cos(z);
 
-    return uxx + uyy + uzz;
+    const Real sx2 = sx * sx;
+    const Real sy2 = sy * sy;
+    const Real sz2 = sz * sz;
+
+    const Real sin2x = Real(2.0) * sx * cx; // sin(2x)
+    const Real sin2y = Real(2.0) * sy * cy; // sin(2y)
+    const Real cos2x = cx * cx - sx * sx;   // cos(2x)
+    const Real cos2y = cy * cy - sy * sy;   // cos(2y)
+    const Real cos2z = cz * cz - sz * sz;   // cos(2z)
+
+    // --------------------------
+    // u(x,y,z,t) = A * sin^2(x) * sin(2y) * sin^2(z)
+    // Δu = u_xx + u_yy + u_zz
+    //
+    // u_xx = 2*A*cos(2x)*sin(2y)*sin^2(z)
+    // u_yy = -4*A*sin^2(x)*sin(2y)*sin^2(z)
+    // u_zz = 2*A*sin^2(x)*sin(2y)*cos(2z)
+    // --------------------------
+    lap_u =
+        A * sin2y *
+        (Real(2.0) * cos2x * sz2 - Real(4.0) * sx2 * sz2 + Real(2.0) * sx2 * cos2z);
+
+    // --------------------------
+    // v(x,y,z,t) = -A * sin(2x) * sin^2(y) * sin^2(z)
+    //
+    // v_xx = 4*A*sin(2x)*sin^2(y)*sin^2(z)
+    // v_yy = -2*A*sin(2x)*cos(2y)*sin^2(z)
+    // v_zz = -2*A*sin(2x)*sin^2(y)*cos(2z)
+    // --------------------------
+    lap_v =
+        A * sin2x *
+        (Real(4.0) * sy2 * sz2 - Real(2.0) * cos2y * sz2 - Real(2.0) * sy2 * cos2z);
+
+    // --------------------------
+    // w = 0
+    // --------------------------
+    lap_w = Real(0.0);
 }
 
-// Compute f = u_t + (u·∇)u + ∇p - nu Δu on interior points
-static void compute_forcing_NS(VectorVariable &f,
-                               const VectorVariable &u_true,
-                               const ScalarVariable &p_true,
-                               const Grid &g,
-                               Real t,
-                               Real nu)
+// Compute f = u_t - nu * Δu (analytic Laplacian), p = 0
+static void compute_forcing_analytic(VectorVariable &f,
+                                     const Grid &g,
+                                     Real t,
+                                     Real nu)
 {
     f.set_all(Real(0.0));
 
-    // Only where centered stencils are valid
     for (Dim k = 1; k < g.Nz - 1; ++k)
         for (Dim j = 1; j < g.Ny - 1; ++j)
             for (Dim i = 1; i < g.Nx - 1; ++i)
             {
-                // ---------------- comp 0 ----------------
+                // comp 0: u at (x+dx/2, y, z)
                 {
                     const Real x = (Real(i) + Real(0.5)) * g.dx;
                     const Real y = Real(j) * g.dy;
@@ -312,24 +355,13 @@ static void compute_forcing_NS(VectorVariable &f,
                     Real ut, vt, wt;
                     uvw_t_true_at(x, y, z, t, ut, vt, wt);
 
-                    const Real u = u_true.value(0, i, j, k);
-                    const Real v = u_true.value(1, i, j, k);
-                    const Real w = u_true.value(2, i, j, k);
+                    Real lap_u, lap_v, lap_w;
+                    laplacian_uvw_true_at(x, y, z, t, lap_u, lap_v, lap_w);
 
-                    const Real du_dx = ddx_c_comp(u_true, 0, i, j, k, g.dx);
-                    const Real du_dy = ddy_c_comp(u_true, 0, i, j, k, g.dy);
-                    const Real du_dz = ddz_c_comp(u_true, 0, i, j, k, g.dz);
-
-                    const Real conv = u * du_dx + v * du_dy + w * du_dz;
-
-                    const Real dp_dx = ddx_c(p_true, i, j, k, g.dx);
-
-                    const Real lap = lap_comp(u_true, 0, i, j, k, g.dx, g.dy, g.dz);
-
-                    f.set(0, i, j, k) = ut + conv + dp_dx - nu * lap;
+                    f.set(0, i, j, k) = ut - nu * lap_u;
                 }
 
-                // ---------------- comp 1 ----------------
+                // comp 1: v at (x, y+dy/2, z)
                 {
                     const Real x = Real(i) * g.dx;
                     const Real y = (Real(j) + Real(0.5)) * g.dy;
@@ -338,24 +370,13 @@ static void compute_forcing_NS(VectorVariable &f,
                     Real ut, vt, wt;
                     uvw_t_true_at(x, y, z, t, ut, vt, wt);
 
-                    const Real u = u_true.value(0, i, j, k);
-                    const Real v = u_true.value(1, i, j, k);
-                    const Real w = u_true.value(2, i, j, k);
+                    Real lap_u, lap_v, lap_w;
+                    laplacian_uvw_true_at(x, y, z, t, lap_u, lap_v, lap_w);
 
-                    const Real dv_dx = ddx_c_comp(u_true, 1, i, j, k, g.dx);
-                    const Real dv_dy = ddy_c_comp(u_true, 1, i, j, k, g.dy);
-                    const Real dv_dz = ddz_c_comp(u_true, 1, i, j, k, g.dz);
-
-                    const Real conv = u * dv_dx + v * dv_dy + w * dv_dz;
-
-                    const Real dp_dy = ddy_c(p_true, i, j, k, g.dy);
-
-                    const Real lap = lap_comp(u_true, 1, i, j, k, g.dx, g.dy, g.dz);
-
-                    f.set(1, i, j, k) = vt + conv + dp_dy - nu * lap;
+                    f.set(1, i, j, k) = vt - nu * lap_v;
                 }
 
-                // ---------------- comp 2 ----------------
+                // comp 2: w at (x, y, z+dz/2)
                 {
                     const Real x = Real(i) * g.dx;
                     const Real y = Real(j) * g.dy;
@@ -364,25 +385,15 @@ static void compute_forcing_NS(VectorVariable &f,
                     Real ut, vt, wt;
                     uvw_t_true_at(x, y, z, t, ut, vt, wt);
 
-                    const Real u = u_true.value(0, i, j, k);
-                    const Real v = u_true.value(1, i, j, k);
-                    const Real w = u_true.value(2, i, j, k);
+                    Real lap_u, lap_v, lap_w;
+                    laplacian_uvw_true_at(x, y, z, t, lap_u, lap_v, lap_w);
 
-                    const Real dw_dx = ddx_c_comp(u_true, 2, i, j, k, g.dx);
-                    const Real dw_dy = ddy_c_comp(u_true, 2, i, j, k, g.dy);
-                    const Real dw_dz = ddz_c_comp(u_true, 2, i, j, k, g.dz);
-
-                    const Real conv = u * dw_dx + v * dw_dy + w * dw_dz;
-
-                    const Real dp_dz = ddz_c(p_true, i, j, k, g.dz);
-
-                    const Real lap = lap_comp(u_true, 2, i, j, k, g.dx, g.dy, g.dz);
-
-                    f.set(2, i, j, k) = wt + conv + dp_dz - nu * lap;
+                    f.set(2, i, j, k) = wt - nu * lap_w; // = 0
                 }
             }
 }
-int main()
+
+void test_dt_fixed_refine_dx()
 {
     std::cout << std::scientific << std::setprecision(12);
 
@@ -390,7 +401,7 @@ int main()
     const Real nu = Real(0.1);
 
     // Grid sizes (doubling gives clean refinement)
-    std::vector<Dim> grid_sizes = {5, 10, 20, 40, 80};
+    std::vector<Dim> grid_sizes = {5, 10, 20, 40, 80, 160};
 
     // Fixed time interval
     const Real t0 = Real(0.15);
@@ -474,7 +485,7 @@ int main()
             solver.set_t(t_np1);
 
             fill_u_true(u_true_half, g, t_half);
-            compute_forcing_NS(f_half, u_true_half, p_true, g, t_half, nu);
+            compute_forcing_analytic(f_half, g, t_half, nu);
 
             // RHS = u^n + dt f^{n+1/2} + (nu dt/2) Lap(u^n)
             rhs = u_n;
@@ -531,5 +542,165 @@ int main()
     }
 
     std::cout << "-----------------------------------------------------------------------\n";
+    return;
+}
+
+void test_dx_fixed_refine_dt()
+{
+    std::cout << std::scientific << std::setprecision(12);
+
+    const Real pi = Real(3.14159265358979323846);
+    const Real nu = Real(0.1);
+
+    // Grid sizes (doubling gives clean refinement)
+    std::vector<Dim> grid_sizes = {80};
+
+    // Fixed time interval
+    const Real t0 = Real(0.015);
+    const Real Tfinal = Real(5);
+
+    // Choose a baseline dt for the coarsest grid
+    // and scale dt with dx so time error shrinks together with space.
+    Real dt_coarse = Real(2); // dt used when N = grid_sizes[0]
+    Real refinement = 0.5;
+
+    std::vector<Real> errors;
+    std::vector<Real> dts;
+
+    std::cout << "=================================================\n";
+    std::cout << "MMS NS TEST: refine dt  (fixed dx and Tfinal)\n";
+    std::cout << "t0=" << t0 << "  Tfinal=" << Tfinal << "  nu=" << nu << "\n";
+    std::cout << "dt_coarse=" << dt_coarse << " at N=" << grid_sizes[0] << "\n";
+    std::cout << "Domain: [0,2pi]^3\n";
+    std::cout << "=================================================\n\n";
+
+    std::cout << "Grid    dx            dt            nsteps   L2_error(Tfinal)   rate\n";
+    std::cout << "-----------------------------------------------------------------------\n";
+
+    // First compute dx0 for the coarse grid (so dt scales consistently)
+    Grid g0 = setup_grid(2 * pi, 2 * pi, 2 * pi, grid_sizes[0], grid_sizes[0], grid_sizes[0], dt_coarse);
+    const Real dx0 = g0.dx;
+
+    int step = 10;
+    for (size_t idx = 0; idx < step; ++idx)
+    {
+        const Dim N = grid_sizes[0];
+        dt_coarse = dt_coarse * refinement; // refine dt together with dx
+        // Setup grid with placeholder dt; we overwrite g.dt right after
+        Grid g = setup_grid(2 * pi, 2 * pi, 2 * pi, N, N, N, dt_coarse);
+
+        // Choose nsteps so that we land exactly on Tfinal
+        int nsteps = int(std::round((Tfinal - t0) / g.dt));
+        if (nsteps < 1)
+            nsteps = 1;
+        g.dt = (Tfinal - t0) / Real(nsteps); // exact final time
+
+        // BC consistent with manufactured field
+        BoundaryFunctions u_boundary;
+        std::vector<std::string> bc = {
+            "sin(t)*sin(x)*sin(x)*sin(2*y)*sin(z)*sin(z)",  // u
+            "-sin(t)*sin(2*x)*sin(y)*sin(y)*sin(z)*sin(z)", // v
+            "0"                                             // w
+        };
+        u_boundary.set_string_expression(bc);
+
+        // gamma = nu*dt/2
+        ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        gamma_field.set_all(nu * g.dt / Real(2.0));
+
+        // Solver
+        VelocitySolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt, gamma_field, u_boundary);
+        solver.gamma_field = gamma_field;
+        solver.u_boundary = u_boundary;
+
+        // Fields
+        VectorVariable u_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable u_np1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable u_tmp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+
+        // Manufactured forcing ingredients
+        VectorVariable u_true_half(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        VectorVariable f_half(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        ScalarVariable p_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        fill_p_true(p_true, g, t0);
+
+        // Initial condition
+        fill_u_true(u_n, g, t0);
+
+        // Time loop
+        Real t = t0;
+        for (int n = 0; n < nsteps; ++n)
+        {
+            const Real t_np1 = t + g.dt;
+            const Real t_half = t + g.dt / Real(2.0);
+
+            solver.set_t(t_np1);
+
+            fill_u_true(u_true_half, g, t_half);
+            compute_forcing_analytic(f_half, g, t_half, nu);
+
+            // RHS = u^n + dt f^{n+1/2} + (nu dt/2) Lap(u^n)
+            rhs = u_n;
+            for (int comp = 0; comp < 3; ++comp)
+                for (Dim k = 0; k < g.Nz; ++k)
+                    for (Dim j = 0; j < g.Ny; ++j)
+                        for (Dim i = 0; i < g.Nx; ++i)
+                            rhs.set(comp, i, j, k) =
+                                rhs.value(comp, i, j, k) + g.dt * f_half.value(comp, i, j, k);
+
+            add_explicit_laplacian_full(u_n, rhs, g, nu);
+
+            // ADI: X -> Y -> Z
+            solver.solve_x_only(rhs, u_tmp, false);
+            solver.solve_y_only(u_tmp, u_np1, false);
+            solver.solve_z_only(u_np1, u_tmp, false);
+
+            u_n = u_tmp;
+            t = t_np1;
+        }
+
+        // Error vs truth at Tfinal
+        VectorVariable u_true_T(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+        fill_u_true(u_true_T, g, Tfinal);
+
+        Real err2 = 0.0;
+        for (int comp = 0; comp < 3; ++comp)
+            for (Dim k = 1; k < g.Nz - 1; ++k)
+                for (Dim j = 1; j < g.Ny - 1; ++j)
+                    for (Dim i = 1; i < g.Nx - 1; ++i)
+                    {
+                        const Real diff = u_n.value(comp, i, j, k) - u_true_T.value(comp, i, j, k);
+                        err2 += diff * diff;
+                    }
+
+        const Real L2 = std::sqrt(err2 * g.dx * g.dy * g.dz);
+
+        errors.push_back(L2);
+        dts.push_back(g.dt);
+
+        Real rate = 0.0;
+        if (idx > 0)
+        {
+            rate = std::log(errors[idx - 1] / errors[idx]) /
+                   std::log(dts[idx - 1] / dts[idx]);
+        }
+
+        std::cout << std::setw(5) << N << "  "
+                  << std::setw(12) << g.dx << "  "
+                  << std::setw(12) << g.dt << "  "
+                  << std::setw(6) << nsteps << "  "
+                  << std::setw(16) << L2 << "  "
+                  << std::setw(7) << rate << "\n";
+    }
+
+    std::cout << "-----------------------------------------------------------------------\n";
+    return;
+}
+
+int main()
+{
+    // test_dt_fixed_refine_dx();
+    test_dx_fixed_refine_dt();
     return 0;
 }
