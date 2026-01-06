@@ -12,6 +12,14 @@ CXXFLAGS += -fopenmp
 LDFLAGS  += -fopenmp
 endif
 
+# Enable MPI by passing MPI=1 to make (default: off)
+# When MPI is enabled, use mpicxx as compiler and define USE_MPI
+MPI ?= 0
+ifeq ($(MPI),1)
+CXX      := mpicxx
+CXXFLAGS += -DUSE_MPI
+endif
+
 # Modalità build: release (default) o debug
 BUILD ?= release
 
@@ -87,6 +95,20 @@ run-tests: test
 		./$$test_bin || exit 1; \
 		echo "--------------------------------"; \
 	done
+
+# Comparison executables
+compare: bin/run_serial_solver bin/run_parallel_solver
+	@echo "Built comparison tools: bin/run_serial_solver and bin/run_parallel_solver"
+
+bin/run_serial_solver: tests/run_serial_solver.cpp
+	@mkdir -p bin
+	@echo "[CXX] $<"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $< -o $@
+
+bin/run_parallel_solver: tests/run_parallel_solver.cpp $(OBJS_CORE) $(MUP_LIB)
+	@mkdir -p bin
+	@echo "[CXX] $<"
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $< $(OBJS_CORE) $(MUP_LIB) $(LDFLAGS) -o $@
 
 # ============================
 # Modalità DEBUG

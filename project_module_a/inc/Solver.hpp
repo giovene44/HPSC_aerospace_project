@@ -11,6 +11,8 @@
 #include "VectorVariable.hpp"
 #include "DimensionHandler.hpp"
 #include "BoundaryFunctions.hpp"
+#include "SchurComplementSolver.hpp"
+#include "MPICommunicator.hpp"
 
 constexpr bool DEBUG_BLOCK = false; // set to true to enable debug prints
 
@@ -500,6 +502,179 @@ public:
                 worker(i1, i2);
     }
 
+    /**
+     * @brief Parallel block solver using Schur complement method.
+     *
+     * This method parallelizes the 1D tridiagonal solves across MPI processes
+     * using the Schur complement domain decomposition technique.
+     *
+     * @tparam direction Sweep direction (0=X, 1=Y, 2=Z)
+     * @param rhs Right-hand side vector field
+     * @param solution Output solution vector field
+     * @param dim_handler Dimension handler with component mapping
+     * @param comm MPI communicator
+     * @param schur_solver Preinitialized Schur complement solver for this direction
+     * @param use_omp Whether to use OpenMP for parallel independent lines
+     */
+    template <Dim direction>
+    void block_solver_parallel(const VectorVariable &rhs, VectorVariable &solution,
+                               const DimensionsHandlerVector &dim_handler,
+                               MPICommunicator &comm,
+                               SchurComplementSolver &schur_solver,
+                               bool use_omp = false)
+    {
+        Dim N = (direction == 0) ? Nx : ((direction == 1) ? Ny : Nz);
+        Real h = (direction == 0) ? dx : ((direction == 1) ? dy : dz);
+
+        Dim Comp1 = dim_handler.Comp1;
+        Dim Comp2 = dim_handler.Comp2;
+        Dim Comp3 = dim_handler.Comp3;
+
+        Dim Outer1 = dim_handler.N2;
+        Dim Outer2 = dim_handler.N3;
+
+        // Get local size from Schur solver
+        Dim local_N = schur_solver.get_local_N();
+
+        auto worker = [&](Dim i1, Dim i2)
+        {
+            std::vector<Real> a_loc(local_N), b_loc(local_N), c_loc(local_N);
+            std::vector<Real> d_loc(local_N), x_loc(local_N);
+
+            auto get_gamma = [&](Dim i)
+            {
+                if constexpr (direction == 0)
+                    return gamma_field.get(i, i1, i2);
+                else if constexpr (direction == 1)
+                    return gamma_field.get(i1, i, i2);
+                else
+                    return gamma_field.get(i1, i2, i);
+            };
+
+            auto get_rhs_comp = [&](Dim comp, Dim i)
+            {
+                if constexpr (direction == 0)
+                    return rhs.value(comp, i, i1, i2);
+                else if constexpr (direction == 1)
+                    return rhs.value(comp, i1, i, i2);
+                else
+                    return rhs.value(comp, i1, i2, i);
+            };
+
+            auto set_sol_comp = [&](Dim comp, Dim i, Real val)
+            {
+                if constexpr (direction == 0)
+                    solution.set(comp, i, i1, i2) = val;
+                else if constexpr (direction == 1)
+                    solution.set(comp, i1, i, i2) = val;
+                else
+                    solution.set(comp, i1, i2, i) = val;
+            };
+
+            // Helper to setup coefficients and solve using Schur complement
+            auto solve_component = [&](Dim comp, bool is_normal)
+            {
+                // Setup coefficients for local portion
+                Real h2 = h * h;
+                for (Dim i = 0; i < local_N; ++i)
+                {
+                    Real gamma_val = get_gamma(schur_solver.get_global_start() + i);
+                    Real coeff = gamma_val / h2;
+                    a_loc[i] = -coeff;
+                    b_loc[i] = 1.0 + 2.0 * coeff;
+                    c_loc[i] = -coeff;
+                    d_loc[i] = get_rhs_comp(comp, schur_solver.get_global_start() + i);
+                }
+
+                // Apply boundary conditions at domain boundaries
+                // (handled by Schur solver for interface boundaries)
+                if (schur_solver.get_global_start() == 0)
+                {
+                    // Left domain boundary
+                    if (is_normal)
+                    {
+                        a_loc[0] = 0.0;
+                        b_loc[0] = 1.0;
+                        c_loc[0] = 0.0;
+                    }
+                    else
+                    {
+                        a_loc[0] = 0.0;
+                        b_loc[0] = 1.0;
+                        c_loc[0] = 0.0;
+                    }
+                }
+
+                if (schur_solver.get_global_start() + local_N >= N)
+                {
+                    // Right domain boundary
+                    Dim last = local_N - 1;
+                    if (is_normal)
+                    {
+                        a_loc[last] = 0.0;
+                        b_loc[last] = 1.0;
+                        c_loc[last] = 0.0;
+                    }
+                    else
+                    {
+                        Real gamma_N = get_gamma(N - 1);
+                        Real coeff = gamma_N / h2;
+                        a_loc[last] = -coeff;
+                        b_loc[last] = (1.0 + 2.0 * coeff) - (-coeff);
+                        c_loc[last] = 0.0;
+                    }
+                }
+
+                // Preprocess and solve using Schur complement
+                schur_solver.preprocess(a_loc, b_loc, c_loc);
+                schur_solver.solve(d_loc, x_loc);
+
+                // Copy solution
+                for (Dim i = 0; i < local_N; ++i)
+                {
+                    set_sol_comp(comp, schur_solver.get_global_start() + i, x_loc[i]);
+                }
+            };
+
+            // Solve for each component
+            if (!handle_known_face<direction>(solution, i1, i2, Comp1))
+            {
+                solve_component(Comp1, true);  // Normal component
+            }
+
+            if (!handle_known_face<direction>(solution, i1, i2, Comp2))
+            {
+                solve_component(Comp2, false);  // Tangent component
+            }
+
+            if (!handle_known_face<direction>(solution, i1, i2, Comp3))
+            {
+                solve_component(Comp3, false);  // Tangent component
+            }
+        };
+
+#ifdef _OPENMP
+        if (use_omp)
+        {
+            if (DEBUG_BLOCK)
+            {
+                int max_threads = omp_get_max_threads();
+                printf("[OMP+MPI] block_solver_parallel<%d>: using up to %d threads\n",
+                       int(direction), max_threads);
+            }
+#pragma omp parallel for collapse(2) default(none) shared(Outer1, Outer2, worker)
+            for (Dim i2 = 0; i2 < Outer2; ++i2)
+                for (Dim i1 = 0; i1 < Outer1; ++i1)
+                    worker(i1, i2);
+            return;
+        }
+#endif
+
+        for (Dim i2 = 0; i2 < Outer2; ++i2)
+            for (Dim i1 = 0; i1 < Outer1; ++i1)
+                worker(i1, i2);
+    }
+
     VelocitySolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, Real dt_, ScalarVariable &gam, BoundaryFunctions &u_bnd)
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), gamma_field(gam), u_boundary(u_bnd) {}
 
@@ -509,6 +684,29 @@ public:
         apply_bc<direction>(rhs);
         block_solver<direction>(rhs, solution, dim_handler, use_omp);
     };
+
+    /**
+     * @brief Solve using parallel Schur complement method.
+     *
+     * @tparam direction Sweep direction (0=X, 1=Y, 2=Z)
+     * @param rhs Right-hand side vector field
+     * @param solution Output solution vector field
+     * @param dim_handler Dimension handler
+     * @param comm MPI communicator
+     * @param schur_solver Schur complement solver for this direction
+     * @param use_omp Whether to use OpenMP for independent lines
+     */
+    template <Dim direction>
+    void solve_parallel(VectorVariable &rhs, VectorVariable &solution,
+                        const DimensionsHandlerVector &dim_handler,
+                        MPICommunicator &comm,
+                        SchurComplementSolver &schur_solver,
+                        bool use_omp = false)
+    {
+        apply_bc<direction>(rhs);
+        block_solver_parallel<direction>(rhs, solution, dim_handler, comm, schur_solver, use_omp);
+    };
+
     void set_gamma(ScalarVariable &g) { gamma_field = g; }
     BoundaryFunctions &set_u_boundary() { return u_boundary; }
 };
