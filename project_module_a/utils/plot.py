@@ -53,39 +53,42 @@ errors = data[:, 2].astype(float)
 
 # Compute convergence rates (log ratio). Use dx_values if positive, else grid_sizes.
 if grid_sizes[0]!=grid_sizes[1]:
-    rates = np.zeros_like(errors)
+    spacial_rates = np.zeros_like(errors)
     for i in range(errors.size):
         dx_curr = compute_dx(grid_sizes[i])
         dx_prev = compute_dx(grid_sizes[i - 1])
         if dx_curr > 0 and dx_prev > 0:
-            rates[i] = np.log(errors[i - 1] / errors[i]) / np.log(dx_prev / dx_curr)
+            spacial_rates[i] = np.log(errors[i - 1] / errors[i]) / np.log(dx_prev / dx_curr)
         else:
-            rates[i] = float('0.0')
-
+            spacial_rates[i] = float('0.0')
+else:
+    spacial_rates = np.zeros_like(errors)
 # Compute convergence rates (log ratio). Use dt_values since dt is halved each iteration.
-elif dt_values[0]!=dt_values[1]:
-    rates = np.zeros_like(errors)
+if dt_values[0]!=dt_values[1]:
+    temporal_rates = np.zeros_like(errors)
     for i in range(errors.size):
         dt_curr = dt_values[i]
         dt_prev = dt_values[i - 1]
         if dt_curr > 0 and dt_prev > 0:
-            rates[i] = np.log(errors[i - 1] / errors[i]) / np.log(dt_prev / dt_curr)
+            temporal_rates[i] = np.log(errors[i - 1] / errors[i]) / np.log(dt_prev / dt_curr)
         else:
-            rates[i] = 0.0
-
+            temporal_rates[i] = 0.0
+else:
+    temporal_rates = np.zeros_like(errors)
 
 # Print formatted summary
 print()
-print("=" * 49)
+print("=" * 80)
 print("CONVERGENCE STUDY SUMMARY")
-print("=" * 49)
-print(f"{'Grid Size':<12} {'dx':>12} {'dt':>12} {'L2 Error':>14} {'Conv. Rate':>12}")
-print("-" * 63)
+print("=" * 80)
+print(f"{'Grid Size':<12} {'dx':>12} {'dt':>12} {'L2 Error':>14} {'Spacial Rate':>12} {'Temporal Rate':>12}")
+print("-" * 80)
 for i in range(errors.size):
     dx_curr = compute_dx(grid_sizes[i])
     dt_curr = dt_values[i]
     error_curr = errors[i]
-    rate_curr = rates[i] if i > 0 else 0.0
-    print(f"{grid_sizes[i]:<12} {dx_curr:>12.4e} {dt_curr:>12.4e} {error_curr:>14.6e} {rate_curr:>12.4f}")
+    temporal_rate_curr = temporal_rates[i] if i > 0 else 0.0
+    spacial_rate_curr = spacial_rates[i] if i > 0 else 0.0
+    print(f"{grid_sizes[i]:<12} {dx_curr:>12.4e} {dt_curr:>12.4e} {error_curr:>14.6e} {spacial_rate_curr:>12.4f} {temporal_rate_curr:>12.4f}")
 print("=" * 49)
 print(f"Results read from: {filename}")
