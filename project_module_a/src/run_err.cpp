@@ -152,16 +152,16 @@ int run_multiple()
         for (int i = 0; i < num_runs; i++)
         {
             // Calculate refinement factor (2^i)
-            Real refinement_factor = std::pow(2, -i);
+            Real refinement_factor = std::pow(2, i);
 
             // =================================================================
             // GRID AND TIME CALCULATION: Starting point is correctly i=0 (factor 1)
             // =================================================================
-            Dim Nx_curr = N_initial_x; // / refinement_factor;
-            Dim Ny_curr = N_initial_y; // / refinement_factor;
-            Dim Nz_curr = N_initial_z; // / refinement_factor;
+            Dim Nx_curr = N_initial_x *  refinement_factor;
+            Dim Ny_curr = N_initial_y *  refinement_factor;
+            Dim Nz_curr = N_initial_z *  refinement_factor;
 
-            Real dt_curr = dt_initial * refinement_factor;
+            Real dt_curr = dt_initial; //* refinement_factor;
 
 
             // dx/dy/dz must be scaled inversely to N_curr (halved when N_curr is doubled)

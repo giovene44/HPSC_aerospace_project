@@ -13,7 +13,7 @@ Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
 
-    return 1.0f; // + (dt * nu) / (2.0f * k_val);
+    return Real(1.0)+ (dt * nu) / (Real(2.0) * k_val);
 }
 
 Real NavierStokesBrinkmann::compute_beta(Dim index) const
@@ -374,7 +374,7 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         // pressure_time_series.emplace_back(pressure_solution);
 
-        write_velocity_vtk("./Output/velocity_N"+std::to_string(Nx) +"_step"+ std::to_string(step) + ".vtk");
+        // write_velocity_vtk("./Output/velocity_N"+std::to_string(Nx) +"_step"+ std::to_string(step) + ".vtk");
     }
 }
 
