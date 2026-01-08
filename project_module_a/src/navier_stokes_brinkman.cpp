@@ -195,9 +195,9 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // -----------------------------------------------------------------
             Real g_val =
                 forcing // f
-                //- p_grad                                     // -∇p
+                - gradient_pressure_predictor.value(comp, idx)                                     // -∇p
                 + Real(0.5) * nu * laplacian // + (ν/2)(∇²η + ∇²ζ + ∇²u)
-                //- (nu_val / (Real(2.0) * k_val)) * velocity // - (ν/(2k))u₀
+                - (nu / (Real(2.0) * k)) * velocity_solution.value(comp, idx) // - (ν/(2k))u₀
                 ;
 
             // =================================================================
@@ -350,20 +350,20 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         // 2. Pressure Projection Step (Calculate phi)
         // -------------------------------------------
-        /*
-        compute_rhs_pressure(); // RHS = -div(u*) / dt
+        
+        compute_rhs_pressure(t); // RHS = -div(u*) / dt
 
         // Solve Poisson Equation: Laplacian(phi) = RHS
-        pressure_solver.solve_pressure<decltype(stride_x), 0>(rhs, psi, x_scalar_handler);
-        pressure_solver.solve_pressure<decltype(stride_y), 1>(psi, phi, y_scalar_handler);
-        pressure_solver.solve_pressure<decltype(stride_z), 2>(phi, other_phi, z_scalar_handler);
+        pressure_solver.solve_pressure<0>(rhs, psi, x_scalar_handler);
+        pressure_solver.solve_pressure<1>(psi, phi, y_scalar_handler);
+        pressure_solver.solve_pressure<2>(phi, other_phi, z_scalar_handler);
 
         // 3. Update Fields
         // -------------------------------------------
 
         // Update Pressure: p^{n+1} = phi (assuming phi is total pressure from BCs)
         pressure_solution += other_phi;
-        */
+        
         velocity_solver.advance_time();
         velocity_time_series.emplace_back(velocity_solution);
 

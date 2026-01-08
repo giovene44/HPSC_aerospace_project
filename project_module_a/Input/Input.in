@@ -17,7 +17,7 @@
 2e-4
 
 # Total simulation time (T)
-0.05
+0.001
 
 # boundary velocity
 ./Input/boundary_u0.dat
@@ -26,13 +26,13 @@
 ./Input/boundary_p0.dat
 
 # fx forcing term
-cos(t)*sin(x)*sin(y)*sin(z)+(3*1e-1)*sin(t)*sin(x)*sin(y)*sin(z)+(1e-1)*sin(x)*sin(y)*sin(z)*sin(x)*sin(y)*sin(z)*sin(t)
+cos(t)*sin(x)*sin(y)*sin(z)+(3*1e-1)*sin(t)*sin(x)*sin(y)*sin(z)+(1e-1)*sin(x)*sin(y)*sin(z)*sin(x)*sin(y)*sin(z)*sin(t)-(sin(t)*2*1e+1*sin(x)*sin(y)*(sin(z)-cos(z)))
 
 # fy forcing term
-cos(t)*cos(x)*cos(y)*cos(z)+(3*1e-1)*sin(t)*cos(x)*cos(y)*cos(z)+(1e-1)*sin(x)*sin(y)*sin(z)*cos(x)*cos(y)*cos(z)*sin(t)
+cos(t)*cos(x)*cos(y)*cos(z)+(3*1e-1)*sin(t)*cos(x)*cos(y)*cos(z)+(1e-1)*sin(x)*sin(y)*sin(z)*cos(x)*cos(y)*cos(z)*sin(t)-(sin(t)*2*1e-1*cos(x)*cos(y)*(sin(z)-cos(z)))
 
 # fz forcing term
-cos(t)*cos(x)*sin(y)*(cos(z)+sin(z))+(3*1e-1)*(sin(t)*cos(x)*sin(y)*(cos(z)+sin(z)))+(1e-1)*sin(x)*sin(y)*sin(z)*cos(x)*sin(y)*(cos(z)+sin(z))*sin(t)
+cos(t)*cos(x)*sin(y)*(cos(z)+sin(z))+(3*1e-1)*(sin(t)*cos(x)*sin(y)*(cos(z)+sin(z)))+(1e-1)*sin(x)*sin(y)*sin(z)*cos(x)*sin(y)*(cos(z)+sin(z))*sin(t)-(sin(t)*2*1e-1*cos(x)*sin(y)*(cos(z)+sin(z)))
 
 # u_initial condition term
 sin(t)*sin(x)*sin(y)*sin(z)
