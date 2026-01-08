@@ -1,2 +1,0 @@
-# Convergence study for momentum x-direction solver
-# Nx Ny Nz dx dt L2_error convergence_rate

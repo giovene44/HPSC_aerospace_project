@@ -308,16 +308,25 @@ inline void SchurComplementSolver::compute_local_schur_contributions() {
     // We'll have the "left" process (the one with right_interface) contribute the full S,
     // and the "right" process (with left_interface) only contribute the fill-in correction.
 
+    // Initialize to zero
+    block.schur_diag_left = 0.0;
+    block.schur_diag_right = 0.0;
+    block.schur_offdiag_to_left = 0.0;
+    block.schur_offdiag_to_right = 0.0;
+
     if (schur_data_.has_left_interface) {
         if (block.n_internal > 0) {
             // This process has a LEFT interface - only contribute the fill-in correction
             // The b[interface] will be added by the other process (which has right_interface to this point)
             block.schur_diag_left = -block.c_left_interface * block.inv_Aii_col_left[0];
-        } else {
-            block.schur_diag_left = 0.0;
+
+            // Off-diagonal: coupling from left interface to right interface (S_local[0,1])
+            // This is used for S[i, i+1] where i is the left interface's global index
+            if (schur_data_.has_right_interface) {
+                // Only compute if we have both interfaces (i.e., internal unknowns between them)
+                block.schur_offdiag_to_right = -block.c_left_interface * block.inv_Aii_col_right[0];
+            }
         }
-        // Off-diagonal to left neighbor (a[0] couples this left interface to neighbor's right)
-        block.schur_offdiag_to_left = block.a_left_interface;
     }
 
     if (schur_data_.has_right_interface) {
@@ -325,11 +334,16 @@ inline void SchurComplementSolver::compute_local_schur_contributions() {
             // This process has a RIGHT interface - contribute b[interface] plus fill-in correction
             block.schur_diag_right = block.b_right_interface -
                                      block.a_right_interface * block.inv_Aii_col_right[block.n_internal - 1];
+
+            // Off-diagonal: coupling from right interface to left interface (S_local[1,0])
+            // This is used for S[i, i-1] where i is the right interface's global index
+            if (schur_data_.has_left_interface) {
+                // Only compute if we have both interfaces (i.e., internal unknowns between them)
+                block.schur_offdiag_to_left = -block.a_right_interface * block.inv_Aii_col_left[block.n_internal - 1];
+            }
         } else {
             block.schur_diag_right = block.b_right_interface;
         }
-        // Off-diagonal to right neighbor (c[N-1] couples this right interface to neighbor's left)
-        block.schur_offdiag_to_right = block.c_right_interface;
     }
 }
 
@@ -370,18 +384,22 @@ inline void SchurComplementSolver::assemble_global_schur_system() {
 
     for (int i = 0; i < num_interfaces; ++i) {
         // Diagonal: sum of contributions from processes i (right) and i+1 (left)
-        Real diag_from_left_proc = all_contrib[4 * i + 1];       // Process i's right interface
-        Real diag_from_right_proc = all_contrib[4 * (i + 1) + 0]; // Process i+1's left interface
+        Real diag_from_left_proc = all_contrib[4 * i + 1];       // Process i's right interface (schur_diag_right)
+        Real diag_from_right_proc = all_contrib[4 * (i + 1) + 0]; // Process i+1's left interface (schur_diag_left)
         schur_data_.schur_b[i] = diag_from_left_proc + diag_from_right_proc;
 
         // Lower diagonal: coupling from interface i to interface i-1
+        // This comes from process i which has both interface i-1 (left) and interface i (right)
+        // Process i's S_local[1,0] = offdiag_to_left
         if (i > 0) {
-            schur_data_.schur_a[i] = all_contrib[4 * (i + 1) + 2];  // Process i+1's offdiag to left
+            schur_data_.schur_a[i] = all_contrib[4 * i + 2];  // Process i's offdiag_to_left
         }
 
         // Upper diagonal: coupling from interface i to interface i+1
+        // This comes from process i+1 which has both interface i (left) and interface i+1 (right)
+        // Process i+1's S_local[0,1] = offdiag_to_right
         if (i < num_interfaces - 1) {
-            schur_data_.schur_c[i] = all_contrib[4 * i + 3];  // Process i's offdiag to right
+            schur_data_.schur_c[i] = all_contrib[4 * (i + 1) + 3];  // Process i+1's offdiag_to_right
         }
     }
 
