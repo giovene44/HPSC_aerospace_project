@@ -16,3 +16,4 @@ project_module_a/report/slides/presentation.aux
 project_module_a/error_vs_N.dat
 project_module_a/error_vs_dt.dat
 project_module_a/Output/
+project_module_a/callgrind.out.*
