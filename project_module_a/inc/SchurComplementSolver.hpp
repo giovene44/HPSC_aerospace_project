@@ -478,17 +478,15 @@ inline void SchurComplementSolver::solve(const std::vector<Real>& rhs, std::vect
     }
 
     // ========== Phase 3: Gather interface RHS and solve reduced system ==========
+    // Use Allreduce instead of Reduce+Bcast: all processes get the sum and solve locally.
+    // The interface system is tiny (size = num_procs - 1), so redundant solve is cheaper
+    // than the extra collective communication.
     std::vector<Real> global_interface_rhs(num_interfaces, 0.0);
     if (num_interfaces > 0) {
-        comm_.reduce_interface_rhs(local_interface_rhs_, global_interface_rhs, 0);
+        comm_.allreduce_interface_rhs(local_interface_rhs_, global_interface_rhs);
 
-        // Root process solves the reduced system
-        if (schur_data_.my_rank == 0) {
-            solve_interface_system(global_interface_rhs, schur_data_.interface_solution);
-        }
-
-        // Broadcast solution to all processes
-        comm_.broadcast_interface_solution(schur_data_.interface_solution, 0);
+        // All processes solve the (tiny) reduced system locally
+        solve_interface_system(global_interface_rhs, schur_data_.interface_solution);
     }
 
     // ========== Phase 4: Back-substitute for internal solution ==========

@@ -192,6 +192,18 @@ public:
                               int root = 0);
 
     /**
+     * @brief Allreduce interface RHS contributions (sum to all processes).
+     *
+     * More efficient than reduce + broadcast when all processes need the result.
+     * Each process contributes to the interface RHS and receives the sum.
+     *
+     * @param local_rhs Local RHS contribution (size = num_interfaces)
+     * @param global_rhs Output: summed RHS on all processes (size = num_interfaces)
+     */
+    void allreduce_interface_rhs(const std::vector<Real>& local_rhs,
+                                 std::vector<Real>& global_rhs);
+
+    /**
      * @brief Broadcast interface solution from root to all processes.
      * @param interface_values Interface solution (size = num_interfaces)
      * @param root Root process (default 0)
@@ -490,6 +502,17 @@ inline void MPICommunicator::reduce_interface_rhs(const std::vector<Real>& local
                MPI_FLOAT, MPI_SUM, root, cart_comm_ != MPI_COMM_NULL ? cart_comm_ : world_comm_);
 #else
     (void)root;
+    global_rhs = local_rhs;
+#endif
+}
+
+inline void MPICommunicator::allreduce_interface_rhs(const std::vector<Real>& local_rhs,
+                                                      std::vector<Real>& global_rhs) {
+#ifdef USE_MPI
+    global_rhs.resize(local_rhs.size());
+    MPI_Allreduce(local_rhs.data(), global_rhs.data(), static_cast<int>(local_rhs.size()),
+                  MPI_FLOAT, MPI_SUM, cart_comm_ != MPI_COMM_NULL ? cart_comm_ : world_comm_);
+#else
     global_rhs = local_rhs;
 #endif
 }
