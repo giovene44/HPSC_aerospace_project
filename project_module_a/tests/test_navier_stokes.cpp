@@ -39,6 +39,23 @@ struct Grid
     Real dt;
 };
 
+// ---------------------------------------------------------------
+// Helpers to control what we sweep and how we measure error
+// ---------------------------------------------------------------
+enum class ErrorRegion
+{
+    FullDomain,
+    InteriorOnly
+};
+
+struct RunResult
+{
+    Real dx;
+    Real dt;
+    int nsteps;
+    Real L2;
+};
+
 Grid setup_grid(Real dim_x, Real dim_y, Real dim_z, Dim Nx, Dim Ny, Dim Nz, Real dt)
 {
     Grid g;
@@ -130,25 +147,6 @@ static void add_explicit_laplacian_full(
                     rhs.set(c, i, j, k) += (nu * g.dt / Real(2.0)) * lap;
                 }
 }
-
-// ================= Manufactured NS (div-free, no-slip) =================
-// Streamfunction: psi = sin(t) * sin^2(x) * sin^2(y) * sin^2(z)
-// Velocity: u = dpsi/dy, v = -dpsi/dx, w = 0  (exactly divergence-free)
-//
-// This file provides:
-//   - uvw_true_at(...)      : manufactured velocity at a physical point
-//   - uvw_t_true_at(...)    : time derivative at a physical point
-//   - fill_u_true(...)      : fill VectorVariable on your staggered grid
-//   - fill_p_true(...)      : p=0 everywhere (ScalarVariable)
-//   - compute_forcing_NS(...) : f = u_t + (u·∇)u + ∇p - nu Δu
-//
-// IMPORTANT:
-// - This forcing uses simple centered differences on each component’s own index lattice.
-//   That is OK for MMS verification, but it is not the same as a fully consistent
-//   staggered-grid convection discretization (MAC) unless you implement the same
-//   interpolation/flux form your solver uses.
-
-#include <cmath>
 
 // A(t) and A'(t)
 static inline Real A_of_t(Real t) { return std::sin(t); }
@@ -393,314 +391,268 @@ static void compute_forcing_analytic(VectorVariable &f,
             }
 }
 
-void test_dt_fixed_refine_dx()
+static void build_momentum_rhs_cn(VectorVariable &rhs,
+                                  const VectorVariable &u_n,
+                                  const VectorVariable &f_half,
+                                  const Grid &g,
+                                  Real nu)
+{
+    // RHS = u^n + dt f^{n+1/2} + (nu dt/2) * Lap(u^n)   (Laplacian added below)
+    for (int comp = 0; comp < 3; ++comp)
+        for (Dim k = 0; k < g.Nz; ++k)
+            for (Dim j = 0; j < g.Ny; ++j)
+                for (Dim i = 0; i < g.Nx; ++i)
+                {
+                    rhs.set(comp, i, j, k) =
+                        u_n.value(comp, i, j, k) + g.dt * f_half.value(comp, i, j, k);
+                }
+
+    // Adds (nu dt/2) Lap(u_n) into rhs (assuming your function does that)
+    add_explicit_laplacian_full(u_n, rhs, g, nu);
+}
+
+static Real compute_L2_error_velocity(const VectorVariable &u_num,
+                                      const Grid &g,
+                                      Real t,
+                                      ErrorRegion region)
+{
+    // Exact solution at time t
+    VectorVariable u_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    fill_u_true(u_true, g, t);
+
+    // Index range
+    Dim i0 = 0, i1 = g.Nx;
+    Dim j0 = 0, j1 = g.Ny;
+    Dim k0 = 0, k1 = g.Nz;
+
+    if (region == ErrorRegion::InteriorOnly)
+    {
+        i0 = 1;
+        i1 = g.Nx - 1;
+        j0 = 1;
+        j1 = g.Ny - 1;
+        k0 = 1;
+        k1 = g.Nz - 1;
+    }
+
+    Real err2 = Real(0);
+
+    for (int comp = 0; comp < 3; ++comp)
+        for (Dim k = k0; k < k1; ++k)
+            for (Dim j = j0; j < j1; ++j)
+                for (Dim i = i0; i < i1; ++i)
+                {
+                    const Real diff =
+                        u_num.value(comp, i, j, k) -
+                        u_true.value(comp, i, j, k);
+                    err2 += diff * diff;
+                }
+
+    return std::sqrt(err2 * g.dx * g.dy * g.dz);
+}
+
+// ---------------------------------------------------------------
+// One single function that does the actual run and returns the L2 error
+// ---------------------------------------------------------------
+static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
+                                       Real dt_try,
+                                       Real t0, Real Tfinal,
+                                       Real nu,
+                                       ErrorRegion region)
+{
+    const Real pi = Real(3.14159265358979323846);
+
+    // Grid with placeholder dt; then we adjust dt to hit Tfinal exactly
+    Grid g = setup_grid(2 * pi, 2 * pi, 2 * pi, Nx, Ny, Nz, dt_try);
+
+    int nsteps = int(std::round((Tfinal - t0) / g.dt));
+    if (nsteps < 1)
+        nsteps = 1;
+    g.dt = (Tfinal - t0) / Real(nsteps);
+
+    // BC consistent with manufactured field
+    BoundaryFunctions u_boundary;
+    std::vector<std::string> bc = {
+        "sin(t)*sin(x)*sin(x)*sin(2*y)*sin(z)*sin(z)",  // u
+        "-sin(t)*sin(2*x)*sin(y)*sin(y)*sin(z)*sin(z)", // v
+        "0"                                             // w
+    };
+    u_boundary.set_string_expression(bc);
+
+    // gamma = nu*dt/2
+    ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    gamma_field.set_all(nu * g.dt / Real(2.0));
+
+    // Solver
+    VelocitySolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt, gamma_field, u_boundary);
+    solver.gamma_field = gamma_field;
+    solver.u_boundary = u_boundary;
+
+    // Fields
+    VectorVariable u_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable u_tmp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable u_np1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    VectorVariable f_half(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+
+    // If you really need pressure for something else, keep it;
+    // here p_true is not used in the shown snippet (so you can remove it)
+    // ScalarVariable p_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    // fill_p_true(p_true, g, t0);
+
+    // Initial condition
+    fill_u_true(u_n, g, t0);
+
+    // Time loop
+    Real t = t0;
+    for (int n = 0; n < nsteps; ++n)
+    {
+        const Real t_np1 = t + g.dt;
+        const Real t_half = t + g.dt / Real(2.0);
+
+        solver.set_t(t_np1);
+
+        compute_forcing_analytic(f_half, g, t_half, nu);
+
+        // RHS = u^n + dt f^{n+1/2} + (nu dt/2) Lap(u^n)
+        build_momentum_rhs_cn(rhs, u_n, f_half, g, nu);
+
+        // ADI: X -> Y -> Z
+        solver.solve_x_only(rhs, u_tmp, false);
+        solver.solve_y_only(u_tmp, u_np1, false);
+        solver.solve_z_only(u_np1, u_tmp, false);
+
+        u_n = u_tmp;
+        t = t_np1;
+    }
+
+    const Real L2 = compute_L2_error_velocity(u_n, g, Tfinal, region);
+
+    RunResult out;
+    out.dx = g.dx;
+    out.dt = g.dt;
+    out.nsteps = nsteps;
+    out.L2 = L2;
+    return out;
+}
+
+// ---------------------------------------------------------------
+// Generic sweep runner (prints table + rates)
+// x-values can be dx or dt depending on what you pass as "abscissa"
+// ---------------------------------------------------------------
+template <class GetAbscissa>
+static void run_sweep_and_print(const std::string &title,
+                                const std::string &abscissa_name,
+                                const std::vector<std::pair<Dim, Real>> &cases, // (N, dt_try)
+                                Real t0, Real Tfinal, Real nu,
+                                ErrorRegion region,
+                                GetAbscissa getX)
+{
+    std::cout << "=================================================\n";
+    std::cout << title << "\n";
+    std::cout << "t0=" << t0 << "  Tfinal=" << Tfinal << "  nu=" << nu << "\n";
+    std::cout << "Domain: [0,2pi]^3\n";
+    std::cout << "=================================================\n\n";
+
+    std::cout << "Grid    dx            dt            nsteps   L2_error(Tfinal)   rate\n";
+    std::cout << "-----------------------------------------------------------------------\n";
+
+    std::vector<Real> X;
+    std::vector<Real> E;
+
+    for (size_t idx = 0; idx < cases.size(); ++idx)
+    {
+        const Dim N = cases[idx].first;
+        const Real dt_try = cases[idx].second;
+
+        RunResult r = run_mms_velocity_case(N, N, N, dt_try, t0, Tfinal, nu, region);
+
+        const Real x = getX(r); // either r.dx or r.dt
+        X.push_back(x);
+        E.push_back(r.L2);
+
+        Real rate = 0.0;
+        if (idx > 0)
+            rate = std::log(E[idx - 1] / E[idx]) / std::log(X[idx - 1] / X[idx]);
+
+        std::cout << std::setw(5) << N << "  "
+                  << std::setw(12) << r.dx << "  "
+                  << std::setw(12) << r.dt << "  "
+                  << std::setw(6) << r.nsteps << "  "
+                  << std::setw(16) << r.L2 << "  "
+                  << std::setw(7) << rate << "\n";
+    }
+
+    std::cout << "-----------------------------------------------------------------------\n";
+}
+
+void test_refine_dx()
 {
     std::cout << std::scientific << std::setprecision(12);
 
-    const Real pi = Real(3.14159265358979323846);
     const Real nu = Real(0.1);
-
-    // Grid sizes (doubling gives clean refinement)
-    std::vector<Dim> grid_sizes = {5, 10, 20, 40, 80, 160};
-
-    // Fixed time interval
     const Real t0 = Real(0.15);
     const Real Tfinal = Real(0.155);
 
-    // Choose a baseline dt for the coarsest grid
-    // and scale dt with dx so time error shrinks together with space.
-    Real dt_coarse = Real(2e-4); // dt used when N = grid_sizes[0]
-    Real refinement = 1;
+    // N doubles => dx halves
+    std::vector<Dim> Ns = {5, 10, 20, 40, 80, 160};
 
-    std::vector<Real> errors;
-    std::vector<Real> dxs;
+    // dt is fixed (only later adjusted slightly inside run_mms_velocity_case to hit Tfinal exactly)
+    const Real dt0 = Real(2e-4);
 
-    std::cout << "=================================================\n";
-    std::cout << "MMS NS TEST: refine dx  (fixed dt and Tfinal)\n";
-    std::cout << "t0=" << t0 << "  Tfinal=" << Tfinal << "  nu=" << nu << "\n";
-    std::cout << "dt_coarse=" << dt_coarse << " at N=" << grid_sizes[0] << "\n";
-    std::cout << "Domain: [0,2pi]^3\n";
-    std::cout << "=================================================\n\n";
+    std::vector<std::pair<Dim, Real>> cases;
+    cases.reserve(Ns.size());
+    for (Dim N : Ns)
+        cases.push_back({N, dt0});
 
-    std::cout << "Grid    dx            dt            nsteps   L2_error(Tfinal)   rate\n";
-    std::cout << "-----------------------------------------------------------------------\n";
-
-    // First compute dx0 for the coarse grid (so dt scales consistently)
-    Grid g0 = setup_grid(2 * pi, 2 * pi, 2 * pi, grid_sizes[0], grid_sizes[0], grid_sizes[0], dt_coarse);
-    const Real dx0 = g0.dx;
-
-    for (size_t idx = 0; idx < grid_sizes.size(); ++idx)
-    {
-        const Dim N = grid_sizes[idx];
-        dt_coarse = dt_coarse * refinement; // refine dt together with dx
-        // Setup grid with placeholder dt; we overwrite g.dt right after
-        Grid g = setup_grid(2 * pi, 2 * pi, 2 * pi, N, N, N, dt_coarse);
-
-        // Choose nsteps so that we land exactly on Tfinal
-        int nsteps = int(std::round((Tfinal - t0) / g.dt));
-        if (nsteps < 1)
-            nsteps = 1;
-        g.dt = (Tfinal - t0) / Real(nsteps); // exact final time
-
-        // BC consistent with manufactured field
-        BoundaryFunctions u_boundary;
-        std::vector<std::string> bc = {
-            "sin(t)*sin(x)*sin(x)*sin(2*y)*sin(z)*sin(z)",  // u
-            "-sin(t)*sin(2*x)*sin(y)*sin(y)*sin(z)*sin(z)", // v
-            "0"                                             // w
-        };
-        u_boundary.set_string_expression(bc);
-
-        // gamma = nu*dt/2
-        ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        gamma_field.set_all(nu * g.dt / Real(2.0));
-
-        // Solver
-        VelocitySolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt, gamma_field, u_boundary);
-        solver.gamma_field = gamma_field;
-        solver.u_boundary = u_boundary;
-
-        // Fields
-        VectorVariable u_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable u_np1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable u_tmp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-
-        // Manufactured forcing ingredients
-        VectorVariable u_true_half(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable f_half(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        ScalarVariable p_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        fill_p_true(p_true, g, t0);
-
-        // Initial condition
-        fill_u_true(u_n, g, t0);
-
-        // Time loop
-        Real t = t0;
-        for (int n = 0; n < nsteps; ++n)
-        {
-            const Real t_np1 = t + g.dt;
-            const Real t_half = t + g.dt / Real(2.0);
-
-            solver.set_t(t_np1);
-
-            fill_u_true(u_true_half, g, t_half);
-            compute_forcing_analytic(f_half, g, t_half, nu);
-
-            // RHS = u^n + dt f^{n+1/2} + (nu dt/2) Lap(u^n)
-            rhs = u_n;
-            for (int comp = 0; comp < 3; ++comp)
-                for (Dim k = 0; k < g.Nz; ++k)
-                    for (Dim j = 0; j < g.Ny; ++j)
-                        for (Dim i = 0; i < g.Nx; ++i)
-                            rhs.set(comp, i, j, k) =
-                                rhs.value(comp, i, j, k) + g.dt * f_half.value(comp, i, j, k);
-
-            add_explicit_laplacian_full(u_n, rhs, g, nu);
-
-            // ADI: X -> Y -> Z
-            solver.solve_x_only(rhs, u_tmp, false);
-            solver.solve_y_only(u_tmp, u_np1, false);
-            solver.solve_z_only(u_np1, u_tmp, false);
-
-            u_n = u_tmp;
-            t = t_np1;
-        }
-
-        // Error vs truth at Tfinal
-        VectorVariable u_true_T(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        fill_u_true(u_true_T, g, Tfinal);
-
-        Real err2 = 0.0;
-        for (int comp = 0; comp < 3; ++comp)
-            for (Dim k = 0; k < g.Nz; ++k)
-                for (Dim j = 0; j < g.Ny; ++j)
-                    for (Dim i = 0; i < g.Nx; ++i)
-                    {
-                        const Real diff = u_n.value(comp, i, j, k) - u_true_T.value(comp, i, j, k);
-                        err2 += diff * diff;
-                    }
-
-        const Real L2 = std::sqrt(err2 * g.dx * g.dy * g.dz);
-
-        errors.push_back(L2);
-        dxs.push_back(g.dx);
-
-        Real rate = 0.0;
-        if (idx > 0)
-        {
-            rate = std::log(errors[idx - 1] / errors[idx]) /
-                   std::log(dxs[idx - 1] / dxs[idx]);
-        }
-
-        std::cout << std::setw(5) << N << "  "
-                  << std::setw(12) << g.dx << "  "
-                  << std::setw(12) << g.dt << "  "
-                  << std::setw(6) << nsteps << "  "
-                  << std::setw(16) << L2 << "  "
-                  << std::setw(7) << rate << "\n";
-    }
-
-    std::cout << "-----------------------------------------------------------------------\n";
-    return;
+    run_sweep_and_print(
+        "MMS NS TEST: refine dx (dt fixed; fixed Tfinal)",
+        "dx",
+        cases,
+        t0, Tfinal, nu,
+        ErrorRegion::FullDomain,
+        [](const RunResult &r)
+        { return r.dx; });
 }
 
-void test_dx_fixed_refine_dt()
+void test_refine_dt()
 {
     std::cout << std::scientific << std::setprecision(12);
 
-    const Real pi = Real(3.14159265358979323846);
     const Real nu = Real(0.1);
-
-    // Grid sizes (doubling gives clean refinement)
-    std::vector<Dim> grid_sizes = {80};
-
-    // Fixed time interval
     const Real t0 = Real(0.015);
     const Real Tfinal = Real(5);
 
-    // Choose a baseline dt for the coarsest grid
-    // and scale dt with dx so time error shrinks together with space.
-    Real dt_coarse = Real(2); // dt used when N = grid_sizes[0]
-    Real refinement = 0.5;
+    // N fixed => dx fixed
+    const Dim N = 80;
 
-    std::vector<Real> errors;
-    std::vector<Real> dts;
+    const Real dt0 = Real(2.0);
+    const Real refinement = Real(0.5);
+    const int steps = 10;
 
-    std::cout << "=================================================\n";
-    std::cout << "MMS NS TEST: refine dt  (fixed dx and Tfinal)\n";
-    std::cout << "t0=" << t0 << "  Tfinal=" << Tfinal << "  nu=" << nu << "\n";
-    std::cout << "dt_coarse=" << dt_coarse << " at N=" << grid_sizes[0] << "\n";
-    std::cout << "Domain: [0,2pi]^3\n";
-    std::cout << "=================================================\n\n";
+    std::vector<std::pair<Dim, Real>> cases;
+    cases.reserve(steps);
 
-    std::cout << "Grid    dx            dt            nsteps   L2_error(Tfinal)   rate\n";
-    std::cout << "-----------------------------------------------------------------------\n";
-
-    // First compute dx0 for the coarse grid (so dt scales consistently)
-    Grid g0 = setup_grid(2 * pi, 2 * pi, 2 * pi, grid_sizes[0], grid_sizes[0], grid_sizes[0], dt_coarse);
-    const Real dx0 = g0.dx;
-
-    int step = 10;
-    for (size_t idx = 0; idx < step; ++idx)
+    Real dt_try = dt0;
+    for (int i = 0; i < steps; ++i)
     {
-        const Dim N = grid_sizes[0];
-        dt_coarse = dt_coarse * refinement; // refine dt together with dx
-        // Setup grid with placeholder dt; we overwrite g.dt right after
-        Grid g = setup_grid(2 * pi, 2 * pi, 2 * pi, N, N, N, dt_coarse);
-
-        // Choose nsteps so that we land exactly on Tfinal
-        int nsteps = int(std::round((Tfinal - t0) / g.dt));
-        if (nsteps < 1)
-            nsteps = 1;
-        g.dt = (Tfinal - t0) / Real(nsteps); // exact final time
-
-        // BC consistent with manufactured field
-        BoundaryFunctions u_boundary;
-        std::vector<std::string> bc = {
-            "sin(t)*sin(x)*sin(x)*sin(2*y)*sin(z)*sin(z)",  // u
-            "-sin(t)*sin(2*x)*sin(y)*sin(y)*sin(z)*sin(z)", // v
-            "0"                                             // w
-        };
-        u_boundary.set_string_expression(bc);
-
-        // gamma = nu*dt/2
-        ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        gamma_field.set_all(nu * g.dt / Real(2.0));
-
-        // Solver
-        VelocitySolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt, gamma_field, u_boundary);
-        solver.gamma_field = gamma_field;
-        solver.u_boundary = u_boundary;
-
-        // Fields
-        VectorVariable u_n(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable u_np1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable u_tmp(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-
-        // Manufactured forcing ingredients
-        VectorVariable u_true_half(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        VectorVariable f_half(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        ScalarVariable p_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        fill_p_true(p_true, g, t0);
-
-        // Initial condition
-        fill_u_true(u_n, g, t0);
-
-        // Time loop
-        Real t = t0;
-        for (int n = 0; n < nsteps; ++n)
-        {
-            const Real t_np1 = t + g.dt;
-            const Real t_half = t + g.dt / Real(2.0);
-
-            solver.set_t(t_np1);
-
-            fill_u_true(u_true_half, g, t_half);
-            compute_forcing_analytic(f_half, g, t_half, nu);
-
-            // RHS = u^n + dt f^{n+1/2} + (nu dt/2) Lap(u^n)
-            rhs = u_n;
-            for (int comp = 0; comp < 3; ++comp)
-                for (Dim k = 0; k < g.Nz; ++k)
-                    for (Dim j = 0; j < g.Ny; ++j)
-                        for (Dim i = 0; i < g.Nx; ++i)
-                            rhs.set(comp, i, j, k) =
-                                rhs.value(comp, i, j, k) + g.dt * f_half.value(comp, i, j, k);
-
-            add_explicit_laplacian_full(u_n, rhs, g, nu);
-
-            // ADI: X -> Y -> Z
-            solver.solve_x_only(rhs, u_tmp, false);
-            solver.solve_y_only(u_tmp, u_np1, false);
-            solver.solve_z_only(u_np1, u_tmp, false);
-
-            u_n = u_tmp;
-            t = t_np1;
-        }
-
-        // Error vs truth at Tfinal
-        VectorVariable u_true_T(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-        fill_u_true(u_true_T, g, Tfinal);
-
-        Real err2 = 0.0;
-        for (int comp = 0; comp < 3; ++comp)
-            for (Dim k = 1; k < g.Nz - 1; ++k)
-                for (Dim j = 1; j < g.Ny - 1; ++j)
-                    for (Dim i = 1; i < g.Nx - 1; ++i)
-                    {
-                        const Real diff = u_n.value(comp, i, j, k) - u_true_T.value(comp, i, j, k);
-                        err2 += diff * diff;
-                    }
-
-        const Real L2 = std::sqrt(err2 * g.dx * g.dy * g.dz);
-
-        errors.push_back(L2);
-        dts.push_back(g.dt);
-
-        Real rate = 0.0;
-        if (idx > 0)
-        {
-            rate = std::log(errors[idx - 1] / errors[idx]) /
-                   std::log(dts[idx - 1] / dts[idx]);
-        }
-
-        std::cout << std::setw(5) << N << "  "
-                  << std::setw(12) << g.dx << "  "
-                  << std::setw(12) << g.dt << "  "
-                  << std::setw(6) << nsteps << "  "
-                  << std::setw(16) << L2 << "  "
-                  << std::setw(7) << rate << "\n";
+        dt_try *= refinement; // first one is dt0*0.5 (like your current behavior)
+        cases.push_back({N, dt_try});
     }
 
-    std::cout << "-----------------------------------------------------------------------\n";
-    return;
+    run_sweep_and_print(
+        "MMS NS TEST: refine dt (dx fixed; fixed Tfinal)",
+        "dt",
+        cases,
+        t0, Tfinal, nu,
+        ErrorRegion::InteriorOnly,
+        [](const RunResult &r)
+        { return r.dt; });
 }
 
 int main()
 {
-    // test_dt_fixed_refine_dx();
-    test_dx_fixed_refine_dt();
+    // test_refine_dx();
+    test_refine_dt();
     return 0;
 }
