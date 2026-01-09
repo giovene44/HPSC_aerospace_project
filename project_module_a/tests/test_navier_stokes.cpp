@@ -1,33 +1,12 @@
-// ===============================================================
-// Minimal exact unit test for solve_x_only with Nx=5, comp=0 only
-// Manufactured RHS from a chosen u_true on ONE interior line (j,k)=(1,1)
-// ===============================================================
-//
-// What this test does:
-// 1) builds a tiny grid Nx=5, Ny=3, Nz=3 (so j=1,k=1 is NOT a known-face for comp=0)
-// 2) sets boundary functions to ZERO for u,v,w (so your left u_{1/2} computation gives 0)
-// 3) sets gamma_field = 1 everywhere (so coeff = gamma/dx^2 is clean)
-// 4) defines a discrete u_true only along the x-line at (j,k)=(1,1):
-//      u_true = [0, 4/7, 5/7, 4/7, 0]
-// 5) manufactures rhs = A*u_true using EXACTLY the same tridiagonal operator your solver builds
-//    (boundary rows are identity, interior rows use -coeff, 1+2coeff, -coeff)
-// 6) calls solver.solve_x_only(rhs, u_num, parallel=false)
-// 7) prints rhs and the recovered solution along that line and the max error
-//
-// Drop this into your file (replace your current main with this main), or create a new test file.
-//
-// NOTE: This uses your existing classes from "navier_stokes_brinkman.hpp":
-//   - ScalarVariable, VectorVariable, BoundaryFunctions, VelocitySolver
-//
-// ===============================================================
-
 #include <cassert>
 #include <cmath>
 #include <iostream>
 #include <vector>
 #include <iomanip>
 #include <fstream>
-#include "navier_stokes_brinkman.hpp"
+#include "ScalarVariable.hpp"
+#include "VectorVariable.hpp"
+#include "Solver.hpp"
 
 // ===============================================================
 // 1. Setup Grid Parameters
@@ -70,45 +49,6 @@ Grid setup_grid(Real dim_x, Real dim_y, Real dim_z, Dim Nx, Dim Ny, Dim Nz, Real
 }
 
 // ===============================================================
-// Manufactured RHS builder for ONE x-line at (j,k) for comp=0,
-// using the SAME discrete operator as solve_x_only builds.
-// ===============================================================
-static void manufacture_rhs_from_u_true_line_comp0(
-    VectorVariable &rhs,
-    const VectorVariable &u_true,
-    const ScalarVariable &gamma_field,
-    const Grid &g,
-    Dim j, Dim k)
-{
-    const Dim N = g.Nx;
-    const Real h2 = g.dx * g.dx;
-
-    // Boundary rows in your solve_x_only for comp=0 are Dirichlet-like rows:
-    // b=1, d = boundary_value => system enforces u_i = d
-    // To manufacture RHS consistent with that: rhs(0)=u_true(0), rhs(N-1)=u_true(N-1).
-    rhs.set(0, 0, j, k) = u_true.value(0, 0, j, k);
-    rhs.set(0, N - 1, j, k) = u_true.value(0, N - 1, j, k);
-
-    // Interior rows: rhs_i = a*u_{i-1} + b*u_i + c*u_{i+1}
-    // with a=-coeff, b=1+2coeff, c=-coeff and coeff = gamma/h^2
-    for (Dim i = 1; i < N - 1; ++i)
-    {
-        const Real gamma_val = gamma_field.get(i, j, k);
-        const Real coeff = gamma_val / h2;
-
-        const Real a = -coeff;
-        const Real b = Real(1.0) + Real(2.0) * coeff;
-        const Real c = -coeff;
-
-        const Real uim1 = u_true.value(0, i - 1, j, k);
-        const Real ui = u_true.value(0, i, j, k);
-        const Real uip1 = u_true.value(0, i + 1, j, k);
-
-        rhs.set(0, i, j, k) = a * uim1 + b * ui + c * uip1;
-    }
-}
-
-// ===============================================================
 // Setup solver
 // ===============================================================
 VelocitySolver setup_solver(const Grid &g, ScalarVariable &gamma_field, BoundaryFunctions &u_boundary, Real dt, Real t)
@@ -118,34 +58,6 @@ VelocitySolver setup_solver(const Grid &g, ScalarVariable &gamma_field, Boundary
     solver.u_boundary = u_boundary;
     solver.set_t(t);
     return solver;
-} // Add this helper: FULL explicit Laplacian (x+y+z) on interior
-static void add_explicit_laplacian_full(
-    const VectorVariable &u,
-    VectorVariable &rhs,
-    const Grid &g,
-    Real nu)
-{
-    for (int c = 0; c < 3; ++c)
-        for (Dim k = 1; k < g.Nz - 1; ++k)
-            for (Dim j = 1; j < g.Ny - 1; ++j)
-                for (Dim i = 1; i < g.Nx - 1; ++i)
-                {
-                    const Real u0 = u.value(c, i, j, k);
-
-                    const Real uxx =
-                        (u.value(c, i + 1, j, k) - Real(2.0) * u0 + u.value(c, i - 1, j, k)) / (g.dx * g.dx);
-
-                    const Real uyy =
-                        (u.value(c, i, j + 1, k) - Real(2.0) * u0 + u.value(c, i, j - 1, k)) / (g.dy * g.dy);
-
-                    const Real uzz =
-                        (u.value(c, i, j, k + 1) - Real(2.0) * u0 + u.value(c, i, j, k - 1)) / (g.dz * g.dz);
-
-                    const Real lap = uxx + uyy + uzz;
-
-                    // Crank–Nicolson explicit half: + (nu*dt/2) * Lap(u^n)
-                    rhs.set(c, i, j, k) += (nu * g.dt / Real(2.0)) * lap;
-                }
 }
 
 // A(t) and A'(t)
@@ -246,169 +158,158 @@ static void fill_p_true(ScalarVariable &p_true, const Grid & /*g*/, Real /*t*/)
     p_true.set_all(Real(0.0));
 }
 
-// --------- Centered differences for ScalarVariable p ---------
-static inline Real ddx_c(const ScalarVariable &q, Dim i, Dim j, Dim k, Real dx)
-{
-    return (q.get(i + 1, j, k) - q.get(i - 1, j, k)) / (Real(2.0) * dx);
-}
-static inline Real ddy_c(const ScalarVariable &q, Dim i, Dim j, Dim k, Real dy)
-{
-    return (q.get(i, j + 1, k) - q.get(i, j - 1, k)) / (Real(2.0) * dy);
-}
-static inline Real ddz_c(const ScalarVariable &q, Dim i, Dim j, Dim k, Real dz)
-{
-    return (q.get(i, j, k + 1) - q.get(i, j, k - 1)) / (Real(2.0) * dz);
-}
-
-// --------- Centered differences for VectorVariable components ---------
-static inline Real ddx_c_comp(const VectorVariable &u, int c, Dim i, Dim j, Dim k, Real dx)
-{
-    return (u.value(c, i + 1, j, k) - u.value(c, i - 1, j, k)) / (Real(2.0) * dx);
-}
-static inline Real ddy_c_comp(const VectorVariable &u, int c, Dim i, Dim j, Dim k, Real dy)
-{
-    return (u.value(c, i, j + 1, k) - u.value(c, i, j - 1, k)) / (Real(2.0) * dy);
-}
-static inline Real ddz_c_comp(const VectorVariable &u, int c, Dim i, Dim j, Dim k, Real dz)
-{
-    return (u.value(c, i, j, k + 1) - u.value(c, i, j, k - 1)) / (Real(2.0) * dz);
-}
-
 // ===============================================================
-// Analytic Laplacian for the manufactured field used in uvw_true_at
+// Compute analytic forcing for MMS Brinkman–Stokes
+//
+// Manufactured field:
 // psi = sin(t) * sin^2(x) * sin^2(y) * sin^2(z)
-// u = dpsi/dy = sin(t) * sin^2(x) * sin(2y) * sin^2(z)
-// v =-dpsi/dx =-sin(t) * sin(2x) * sin^2(y) * sin^2(z)
+//
+// u =  sin(t) * sin^2(x) * sin(2y) * sin^2(z)
+// v = -sin(t) * sin(2x) * sin^2(y) * sin^2(z)
 // w = 0
 //
-// Returns Δu, Δv, Δw at a physical point (x,y,z,t).
+// PDE:
+// u_t - nu Δu + (nu/k) u = f
+//
+// This function computes f analytically at staggered locations.
 // ===============================================================
-static inline void laplacian_uvw_true_at(Real x, Real y, Real z, Real t,
-                                         Real &lap_u, Real &lap_v, Real &lap_w)
-{
-    const Real A = std::sin(t);
-
-    // Common trig
-    const Real sx = std::sin(x), cx = std::cos(x);
-    const Real sy = std::sin(y), cy = std::cos(y);
-    const Real sz = std::sin(z), cz = std::cos(z);
-
-    const Real sx2 = sx * sx;
-    const Real sy2 = sy * sy;
-    const Real sz2 = sz * sz;
-
-    const Real sin2x = Real(2.0) * sx * cx; // sin(2x)
-    const Real sin2y = Real(2.0) * sy * cy; // sin(2y)
-    const Real cos2x = cx * cx - sx * sx;   // cos(2x)
-    const Real cos2y = cy * cy - sy * sy;   // cos(2y)
-    const Real cos2z = cz * cz - sz * sz;   // cos(2z)
-
-    // --------------------------
-    // u(x,y,z,t) = A * sin^2(x) * sin(2y) * sin^2(z)
-    // Δu = u_xx + u_yy + u_zz
-    //
-    // u_xx = 2*A*cos(2x)*sin(2y)*sin^2(z)
-    // u_yy = -4*A*sin^2(x)*sin(2y)*sin^2(z)
-    // u_zz = 2*A*sin^2(x)*sin(2y)*cos(2z)
-    // --------------------------
-    lap_u =
-        A * sin2y *
-        (Real(2.0) * cos2x * sz2 - Real(4.0) * sx2 * sz2 + Real(2.0) * sx2 * cos2z);
-
-    // --------------------------
-    // v(x,y,z,t) = -A * sin(2x) * sin^2(y) * sin^2(z)
-    //
-    // v_xx = 4*A*sin(2x)*sin^2(y)*sin^2(z)
-    // v_yy = -2*A*sin(2x)*cos(2y)*sin^2(z)
-    // v_zz = -2*A*sin(2x)*sin^2(y)*cos(2z)
-    // --------------------------
-    lap_v =
-        A * sin2x *
-        (Real(4.0) * sy2 * sz2 - Real(2.0) * cos2y * sz2 - Real(2.0) * sy2 * cos2z);
-
-    // --------------------------
-    // w = 0
-    // --------------------------
-    lap_w = Real(0.0);
-}
-
-// Compute f = u_t - nu * Δu (analytic Laplacian), p = 0
 static void compute_forcing_analytic(VectorVariable &f,
                                      const Grid &g,
                                      Real t,
-                                     Real nu)
+                                     Real nu,
+                                     Real k)
 {
     f.set_all(Real(0.0));
 
-    for (Dim k = 1; k < g.Nz - 1; ++k)
-        for (Dim j = 1; j < g.Ny - 1; ++j)
-            for (Dim i = 1; i < g.Nx - 1; ++i)
+    const Real A = std::sin(t);
+    const Real Ap = std::cos(t);
+
+    for (Dim kk = 1; kk < g.Nz - 1; ++kk)
+        for (Dim jj = 1; jj < g.Ny - 1; ++jj)
+            for (Dim ii = 1; ii < g.Nx - 1; ++ii)
             {
-                // comp 0: u at (x+dx/2, y, z)
+                // ==================================================
+                // Component 0: u at (x+dx/2, y, z)
+                // ==================================================
                 {
-                    const Real x = (Real(i) + Real(0.5)) * g.dx;
-                    const Real y = Real(j) * g.dy;
-                    const Real z = Real(k) * g.dz;
+                    const Real x = (Real(ii) + Real(0.5)) * g.dx;
+                    const Real y = Real(jj) * g.dy;
+                    const Real z = Real(kk) * g.dz;
 
-                    Real ut, vt, wt;
-                    uvw_t_true_at(x, y, z, t, ut, vt, wt);
+                    const Real sx = std::sin(x), cx = std::cos(x);
+                    const Real sy = std::sin(y), cy = std::cos(y);
+                    const Real sz = std::sin(z), cz = std::cos(z);
 
-                    Real lap_u, lap_v, lap_w;
-                    laplacian_uvw_true_at(x, y, z, t, lap_u, lap_v, lap_w);
+                    const Real sx2 = sx * sx;
+                    const Real sz2 = sz * sz;
 
-                    f.set(0, i, j, k) = ut - nu * lap_u;
+                    const Real sin2y = Real(2.0) * sy * cy;
+                    const Real cos2x = cx * cx - sx * sx;
+                    const Real cos2z = cz * cz - sz * sz;
+
+                    // u and u_t
+                    const Real u = A * sx2 * sin2y * sz2;
+                    const Real ut = Ap * sx2 * sin2y * sz2;
+
+                    // Laplacian of u
+                    const Real lap_u =
+                        A * sin2y *
+                        (Real(2.0) * cos2x * sz2 - Real(4.0) * sx2 * sz2 + Real(2.0) * sx2 * cos2z);
+
+                    f.set(0, ii, jj, kk) = ut - nu * lap_u + (nu / k) * u;
                 }
 
-                // comp 1: v at (x, y+dy/2, z)
+                // ==================================================
+                // Component 1: v at (x, y+dy/2, z)
+                // ==================================================
                 {
-                    const Real x = Real(i) * g.dx;
-                    const Real y = (Real(j) + Real(0.5)) * g.dy;
-                    const Real z = Real(k) * g.dz;
+                    const Real x = Real(ii) * g.dx;
+                    const Real y = (Real(jj) + Real(0.5)) * g.dy;
+                    const Real z = Real(kk) * g.dz;
 
-                    Real ut, vt, wt;
-                    uvw_t_true_at(x, y, z, t, ut, vt, wt);
+                    const Real sx = std::sin(x), cx = std::cos(x);
+                    const Real sy = std::sin(y), cy = std::cos(y);
+                    const Real sz = std::sin(z), cz = std::cos(z);
 
-                    Real lap_u, lap_v, lap_w;
-                    laplacian_uvw_true_at(x, y, z, t, lap_u, lap_v, lap_w);
+                    const Real sy2 = sy * sy;
+                    const Real sz2 = sz * sz;
 
-                    f.set(1, i, j, k) = vt - nu * lap_v;
+                    const Real sin2x = Real(2.0) * sx * cx;
+                    const Real cos2y = cy * cy - sy * sy;
+                    const Real cos2z = cz * cz - sz * sz;
+
+                    // v and v_t
+                    const Real v = -A * sin2x * sy2 * sz2;
+                    const Real vt = -Ap * sin2x * sy2 * sz2;
+
+                    // Laplacian of v
+                    const Real lap_v =
+                        A * sin2x *
+                        (Real(4.0) * sy2 * sz2 - Real(2.0) * cos2y * sz2 - Real(2.0) * sy2 * cos2z);
+
+                    f.set(1, ii, jj, kk) = vt - nu * lap_v + (nu / k) * v;
                 }
 
-                // comp 2: w at (x, y, z+dz/2)
+                // ==================================================
+                // Component 2: w = 0 everywhere
+                // ==================================================
                 {
-                    const Real x = Real(i) * g.dx;
-                    const Real y = Real(j) * g.dy;
-                    const Real z = (Real(k) + Real(0.5)) * g.dz;
-
-                    Real ut, vt, wt;
-                    uvw_t_true_at(x, y, z, t, ut, vt, wt);
-
-                    Real lap_u, lap_v, lap_w;
-                    laplacian_uvw_true_at(x, y, z, t, lap_u, lap_v, lap_w);
-
-                    f.set(2, i, j, k) = wt - nu * lap_w; // = 0
+                    f.set(2, ii, jj, kk) = Real(0.0);
                 }
             }
 }
 
-static void build_momentum_rhs_cn(VectorVariable &rhs,
-                                  const VectorVariable &u_n,
-                                  const VectorVariable &f_half,
-                                  const Grid &g,
-                                  Real nu)
+// ===============================================================
+// Build RHS for CN + Brinkman (Option B: scaled gamma & RHS)
+//
+// RHS = ( u^n + dt f^{n+1/2}
+//         - beta u^n
+//         + (nu dt/2) * Lap_h(u^n) ) / (1 + beta)
+//
+// beta = nu*dt/(2k)
+// ===============================================================
+static void build_rhs(VectorVariable &rhs,
+                      const VectorVariable &u_n,
+                      const VectorVariable &f_half,
+                      const Grid &g,
+                      Real nu,
+                      Real k)
 {
-    // RHS = u^n + dt f^{n+1/2} + (nu dt/2) * Lap(u^n)   (Laplacian added below)
-    for (int comp = 0; comp < 3; ++comp)
-        for (Dim k = 0; k < g.Nz; ++k)
-            for (Dim j = 0; j < g.Ny; ++j)
-                for (Dim i = 0; i < g.Nx; ++i)
-                {
-                    rhs.set(comp, i, j, k) =
-                        u_n.value(comp, i, j, k) + g.dt * f_half.value(comp, i, j, k);
-                }
+    const Real beta = (nu * g.dt) / (Real(2.0) * k);
+    const Real scale = Real(1.0) / (Real(1.0) + beta);
+    const Real diff = (nu * g.dt) / Real(2.0);
 
-    // Adds (nu dt/2) Lap(u_n) into rhs (assuming your function does that)
-    add_explicit_laplacian_full(u_n, rhs, g, nu);
+    for (int c = 0; c < 3; ++c)
+        for (Dim k0 = 0; k0 < g.Nz; ++k0)
+            for (Dim j0 = 0; j0 < g.Ny; ++j0)
+                for (Dim i0 = 0; i0 < g.Nx; ++i0)
+                {
+                    // Base RHS terms
+                    Real val =
+                        u_n.value(c, i0, j0, k0) + g.dt * f_half.value(c, i0, j0, k0) - beta * u_n.value(c, i0, j0, k0);
+
+                    // Interior: add explicit Laplacian
+                    if (i0 > 0 && i0 < g.Nx - 1 &&
+                        j0 > 0 && j0 < g.Ny - 1 &&
+                        k0 > 0 && k0 < g.Nz - 1)
+                    {
+                        const Real u0 = u_n.value(c, i0, j0, k0);
+
+                        const Real uxx =
+                            (u_n.value(c, i0 + 1, j0, k0) - Real(2.0) * u0 + u_n.value(c, i0 - 1, j0, k0)) / (g.dx * g.dx);
+
+                        const Real uyy =
+                            (u_n.value(c, i0, j0 + 1, k0) - Real(2.0) * u0 + u_n.value(c, i0, j0 - 1, k0)) / (g.dy * g.dy);
+
+                        const Real uzz =
+                            (u_n.value(c, i0, j0, k0 + 1) - Real(2.0) * u0 + u_n.value(c, i0, j0, k0 - 1)) / (g.dz * g.dz);
+
+                        val += diff * (uxx + uyy + uzz);
+                    }
+
+                    // Option B scaling
+                    rhs.set(c, i0, j0, k0) = val * scale;
+                }
 }
 
 static Real compute_L2_error_velocity(const VectorVariable &u_num,
@@ -457,7 +358,7 @@ static Real compute_L2_error_velocity(const VectorVariable &u_num,
 static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
                                        Real dt_try,
                                        Real t0, Real Tfinal,
-                                       Real nu,
+                                       Real nu, Real k,
                                        ErrorRegion region)
 {
     const Real pi = Real(3.14159265358979323846);
@@ -479,9 +380,11 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
     };
     u_boundary.set_string_expression(bc);
 
-    // gamma = nu*dt/2
+    const Real beta = (nu * g.dt) / (Real(2.0) * k); // β = ν dt / (2k)
+    const Real gamma_eff = (nu * g.dt / Real(2.0)) / (Real(1.0) + beta);
+
     ScalarVariable gamma_field(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    gamma_field.set_all(nu * g.dt / Real(2.0));
+    gamma_field.set_all(gamma_eff);
 
     // Solver
     VelocitySolver solver(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz, g.dt, gamma_field, u_boundary);
@@ -494,9 +397,6 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
     VectorVariable u_np1(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable rhs(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     VectorVariable f_half(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-
-    // If you really need pressure for something else, keep it;
-    // here p_true is not used in the shown snippet (so you can remove it)
     // ScalarVariable p_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     // fill_p_true(p_true, g, t0);
 
@@ -512,10 +412,9 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
 
         solver.set_t(t_np1);
 
-        compute_forcing_analytic(f_half, g, t_half, nu);
-
+        compute_forcing_analytic(f_half, g, t_half, nu, k);
         // RHS = u^n + dt f^{n+1/2} + (nu dt/2) Lap(u^n)
-        build_momentum_rhs_cn(rhs, u_n, f_half, g, nu);
+        build_rhs(rhs, u_n, f_half, g, nu, k);
 
         // ADI: X -> Y -> Z
         solver.solve_x_only(rhs, u_tmp, false);
@@ -544,7 +443,7 @@ template <class GetAbscissa>
 static void run_sweep_and_print(const std::string &title,
                                 const std::string &abscissa_name,
                                 const std::vector<std::pair<Dim, Real>> &cases, // (N, dt_try)
-                                Real t0, Real Tfinal, Real nu,
+                                Real t0, Real Tfinal, Real nu, Real k,
                                 ErrorRegion region,
                                 GetAbscissa getX)
 {
@@ -565,7 +464,7 @@ static void run_sweep_and_print(const std::string &title,
         const Dim N = cases[idx].first;
         const Real dt_try = cases[idx].second;
 
-        RunResult r = run_mms_velocity_case(N, N, N, dt_try, t0, Tfinal, nu, region);
+        RunResult r = run_mms_velocity_case(N, N, N, dt_try, t0, Tfinal, nu, k, region);
 
         const Real x = getX(r); // either r.dx or r.dt
         X.push_back(x);
@@ -586,13 +485,9 @@ static void run_sweep_and_print(const std::string &title,
     std::cout << "-----------------------------------------------------------------------\n";
 }
 
-void test_refine_dx()
+void test_refine_dx(Real nu, Real k, Real t0, Real Tfinal)
 {
     std::cout << std::scientific << std::setprecision(12);
-
-    const Real nu = Real(0.1);
-    const Real t0 = Real(0.15);
-    const Real Tfinal = Real(0.155);
 
     // N doubles => dx halves
     std::vector<Dim> Ns = {5, 10, 20, 40, 80, 160};
@@ -609,19 +504,15 @@ void test_refine_dx()
         "MMS NS TEST: refine dx (dt fixed; fixed Tfinal)",
         "dx",
         cases,
-        t0, Tfinal, nu,
+        t0, Tfinal, nu, k,
         ErrorRegion::FullDomain,
         [](const RunResult &r)
         { return r.dx; });
 }
 
-void test_refine_dt()
+void test_refine_dt(Real nu, Real k, Real t0, Real Tfinal)
 {
     std::cout << std::scientific << std::setprecision(12);
-
-    const Real nu = Real(0.1);
-    const Real t0 = Real(0.015);
-    const Real Tfinal = Real(5);
 
     // N fixed => dx fixed
     const Dim N = 80;
@@ -644,7 +535,7 @@ void test_refine_dt()
         "MMS NS TEST: refine dt (dx fixed; fixed Tfinal)",
         "dt",
         cases,
-        t0, Tfinal, nu,
+        t0, Tfinal, nu, k,
         ErrorRegion::InteriorOnly,
         [](const RunResult &r)
         { return r.dt; });
@@ -652,7 +543,12 @@ void test_refine_dt()
 
 int main()
 {
-    // test_refine_dx();
-    test_refine_dt();
+    const Real nu = Real(0.1);
+    const Real k = Real(0.10);
+    const Real t0 = Real(0.15);
+    const Real Tfinal = Real(0.155);
+
+    test_refine_dx(nu, k, t0, Tfinal);
+    // test_refine_dt(nu, k, t0, Tfinal);
     return 0;
 }
