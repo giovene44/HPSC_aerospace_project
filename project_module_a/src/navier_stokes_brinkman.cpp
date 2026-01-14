@@ -369,7 +369,7 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         // if (int(t / dt) % 10 == 0)
         // {
-            std::cout << "Time: " << t << " / " << T << "\n";
+        std::cout << "Time: " << t << " / " << T << "\n";
         // }
 
         // pressure_time_series.emplace_back(pressure_solution);

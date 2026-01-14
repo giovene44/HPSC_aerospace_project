@@ -124,74 +124,71 @@ public:
     template <Dim direction>
     void block_solver(const ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar &dim_handler)
     {
-        std::vector<Real> a(dim_handler.N1, Real(-1.0) / (dim_handler.dN1 * dim_handler.dN1));
-        std::vector<Real> b(dim_handler.N1, Real(1.0) + (Real(2.0) / (dim_handler.dN1 * dim_handler.dN1)));
-        std::vector<Real> c(dim_handler.N1, Real(-1.0) / (dim_handler.dN1 * dim_handler.dN1));
-        std::vector<Real> d(dim_handler.N1);
-        std::vector<Real> x(dim_handler.N1);
+        const Real alpha = Real(1.0) / (dy * dy);
+
+        std::vector<Real> a(Ny, -alpha);
+        std::vector<Real> b(Ny, Real(1.0) + Real(2.0) * alpha);
+        std::vector<Real> c(Ny, -alpha);
+        std::vector<Real> d(Ny), x(Ny);
 
         a[0] = Real(0.0);
-        c[0] = Real(-2.0) / (dim_handler.dN1 * dim_handler.dN1);
-        b[dim_handler.N1 - 1] = Real(1.0) + Real(1.0) / (dim_handler.dN1 * dim_handler.dN1);
-        c[dim_handler.N1 - 1] = Real(0.0);
+        c[0] = -Real(2.0) * alpha;
 
-        if constexpr (direction == 0)
-        {
-            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
+        a[Ny - 1] = -Real(2.0) * alpha;
+        c[Ny - 1] = Real(0.0);
+
+        for (Dim i = 0; i < Nx; ++i)
+            for (Dim k = 0; k < Nz; ++k)
             {
-                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
-                {
-                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
-                        d[index_0] = rhs.get(index_0, index_1, index_2);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
-                        solution.set(index_0, index_1, index_2) = x[index_0];
-                }
+                for (Dim j = 0; j < Ny; ++j)
+                    d[j] = rhs.get(i, j, k);
+
+                const Real gB = p_boundary.value<1>(i * dx, Real(0.0), k * dz, t);
+                const Real gT = p_boundary.value<1>(i * dx, (Ny - Real(0.5)) * dy, k * dz, t);
+
+                d[0] -= Real(2.0) * gB / dy;
+                d[Ny - 1] += Real(2.0) * gT / dy;
+
+                thomas_algorithm(a, b, c, d, x);
+
+                for (Dim j = 0; j < Ny; ++j)
+                    solution.set(i, j, k) = x[j];
             }
-        }
-        else if constexpr (direction == 1)
-        {
-            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
-            {
-                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
-                {
-                    for (Dim index_0 = 0; index_0 < Ny; ++index_0)
-                        d[index_0] = rhs.get(index_1, index_0, index_2);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim index_0 = 0; index_0 < Ny; ++index_0)
-                        solution.set(index_1, index_0, index_2) = x[index_0];
-                }
-            }
-        }
-        else if constexpr (direction == 2)
-        {
-            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
-            {
-                for (Dim index_2 = 0; index_2 < Ny; ++index_2)
-                {
-                    for (Dim index_0 = 0; index_0 < Nz; ++index_0)
-                        d[index_0] = rhs.get(index_1, index_2, index_0);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim index_0 = 0; index_0 < Nz; ++index_0)
-                        solution.set(index_1, index_2, index_0) = x[index_0];
-                }
-            }
-        }
     }
 
-    BoundaryFunctions &p_boundary;
-
-    PressureSolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, Real dt_, BoundaryFunctions &p_boundary_)
-        : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), p_boundary(p_boundary_) {}
-
-    template <Dim direction>
-    void solve_pressure(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar &dim_handler)
+    void solve_z(ScalarVariable &rhs, ScalarVariable &solution)
     {
-        apply_bc<direction>(rhs);
-        block_solver<direction>(rhs, solution, dim_handler);
-        advance_time();
-    };
-    BoundaryFunctions &set_p_boundary() { return p_boundary; }
+        const Real alpha = Real(1.0) / (dz * dz);
+
+        std::vector<Real> a(Nz, -alpha);
+        std::vector<Real> b(Nz, Real(1.0) + Real(2.0) * alpha);
+        std::vector<Real> c(Nz, -alpha);
+        std::vector<Real> d(Nz), x(Nz);
+
+        a[0] = Real(0.0);
+        c[0] = -Real(2.0) * alpha;
+
+        a[Nz - 1] = -Real(2.0) * alpha;
+        c[Nz - 1] = Real(0.0);
+
+        for (Dim i = 0; i < Nx; ++i)
+            for (Dim j = 0; j < Ny; ++j)
+            {
+                for (Dim k = 0; k < Nz; ++k)
+                    d[k] = rhs.get(i, j, k);
+
+                const Real gF = p_boundary.value<2>(i * dx, j * dy, Real(0.0), t);
+                const Real gB = p_boundary.value<2>(i * dx, j * dy, (Nz - Real(0.5)) * dz, t);
+
+                d[0] -= Real(2.0) * gF / dz;
+                d[Nz - 1] += Real(2.0) * gB / dz;
+
+                thomas_algorithm(a, b, c, d, x);
+
+                for (Dim k = 0; k < Nz; ++k)
+                    solution.set(i, j, k) = x[k];
+            }
+    }
 };
 
 // =============================================================================================
@@ -203,75 +200,75 @@ class VelocitySolver : public Solver
 public:
     ScalarVariable &gamma_field;
     BoundaryFunctions &u_boundary;
+    VelocitySolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, Real dt_, ScalarVariable &gam, BoundaryFunctions &u_bnd)
+        : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), gamma_field(gam), u_boundary(u_bnd) {}
 
-    // --- HELPER: Computes a,b,c,d for INTERNAL points (1 to N-2) ---
-    // Coefficients matched to Professor's slides: a = -gamma/h^2, b = 1 + 2*gamma/h^2, c = -gamma/h^2
-    template <typename RhsGetter, typename GammaGetter>
-    void setup_TDMA_internal(
-        Dim N, Real h,
-        std::vector<Real> &a, std::vector<Real> &b, std::vector<Real> &c, std::vector<Real> &d,
-        RhsGetter get_rhs, GammaGetter get_gamma)
+    void set_gamma(ScalarVariable &g) { gamma_field = g; }
+    BoundaryFunctions &set_u_boundary() { return u_boundary; }
+
+    // =============================================================
+    // X-DIRECTION ONLY SOLVE (direction splitting validation)
+    // Solves: (I - gamma * dxx) u = rhs   along x
+    // =============================================================
+
+    void solve_x_only(VectorVariable &rhs,
+                      VectorVariable &solution,
+                      bool use_omp = false)
     {
-        Real h2 = h * h;
-        // Iterate over internal points only
-        for (Dim i = 1; i < N - 1; ++i)
-        {
-            Real gamma_val = get_gamma(i); // Assumes gamma is positive
-            Real coeff = gamma_val / h2;
+        const Dim N = Nx;
+        const Real h = dx;
+        const Real h2 = h * h;
 
-            d[i] = get_rhs(i);
-
-            // STABLE COEFFICIENTS for (I - gamma*L) u = RHS
-            a[i] = -coeff;
-            b[i] = 1.0f + 2.0f * coeff;
-            c[i] = -coeff;
-        }
-    }
-
-    template <Dim direction>
-    bool is_known_face(Dim index_1, Dim index_2, Dim component) const
-    {
-        if constexpr (direction == 0)
+        const Real Lx = dx * (Nx - Real(0.5));
+        auto is_known_face_x = [&](Dim j, Dim k, int comp) -> bool
         {
-            if (component == 0)
-                return (index_1 == 0 || index_2 == 0);
-            if (component == 1)
-                return (index_1 == Ny - 1 || index_2 == 0);
-            if (component == 2)
-                return (index_1 == 0 || index_2 == Nz - 1);
-        }
-        else if constexpr (direction == 1) // Sweep Y-direction
-        {
-            if (component == 0)
-                return (index_1 == Nx - 1 || index_2 == 0);
-            if (component == 1)
-                return (index_1 == 0 || index_2 == 0);
-            if (component == 2)
-                return (index_1 == 0 || index_2 == Nz - 1);
-        }
-        else
-        { // direction == 2
-            if (component == 0)
-                return (index_1 == Nx - 1 || index_2 == 0);
-            if (component == 1)
-                return (index_1 == 0 || index_2 == Ny - 1);
-            if (component == 2)
-                return (index_1 == 0 || index_2 == 0);
-        }
-        return false;
-    }
-    template <Dim direction>
-    bool handle_known_face(VectorVariable &solution, Dim index_1, Dim index_2, Dim component)
-    {
-        if (!is_known_face<direction>(index_1, index_2, component))
-            return false;
+            // Matches your previous is_known_face<0>(j,k,comp)
+            if (comp == 0)
+                return (j == 0 || k == 0);
+            if (comp == 1)
+                return (j == Ny - 1 || k == 0);
+            // comp == 2
+            return (j == 0 || k == Nz - 1);
+        };
 
-        auto update_bc = [&](Dim i, Dim j, Dim k)
+        auto fill_known_face_x = [&](Dim j, Dim k, int comp)
         {
-            Real x = i * dx, y = j * dy, z = k * dz;
-            if (t == 0.0f)
+            // Fill ONLY this component along the whole x-line at (j,k)
+            const Real y_u = Real(j) * dy;
+            const Real y_v = (Real(j) + Real(0.5)) * dy;
+
+            const Real z_w = (Real(k) + Real(0.5)) * dz;
+            const Real z_u = Real(k) * dz;
+
+            for (Dim i = 0; i < Nx; ++i)
             {
-                printf("IF YOU SEE THIS MESSAGE IN VelocitySolver::handle_known_face THEN SOMETHING IS WRONG\n");
+                const Real x_u = (Real(i) + Real(0.5)) * dx; // u location
+                const Real x_vw = Real(i) * dx;              // v,w location
+
+                if (comp == 0)
+                {
+                    // u(i,j,k) at (x+dx/2, y, z)
+                    solution.set(0, i, j, k) = u_boundary.value<0>(x_u, y_u, z_u, t);
+                }
+                else if (comp == 1)
+                {
+                    // v(i,j,k) at (x, y+dy/2, z)
+                    solution.set(1, i, j, k) = u_boundary.value<1>(x_vw, y_v, z_u, t);
+                }
+                else
+                {
+                    // w(i,j,k) at (x, y, z+dz/2)
+                    solution.set(2, i, j, k) = u_boundary.value<2>(x_vw, y_u, z_w, t);
+                }
+            }
+        };
+
+        auto solve_line_for_component = [&](Dim j, Dim k, int comp)
+        {
+            std::vector<Real> a(N, 0.0), b(N, 0.0), c(N, 0.0), d(N, 0.0), x(N, 0.0);
+            if (is_known_face_x(j, k, comp))
+            {
+                fill_known_face_x(j, k, comp);
                 return;
             }
             Real t_prev = t - dt;
@@ -297,22 +294,18 @@ public:
         else
         {
             for (Dim k = 0; k < Nz; ++k)
-                update_bc(index_1, index_2, k);
+                for (Dim j = 0; j < Ny; ++j)
+                {
+                    solve_line_for_component(j, k, 0);
+                    solve_line_for_component(j, k, 1);
+                    solve_line_for_component(j, k, 2);
+                }
+            return;
         }
+#endif
 
-        return true;
-    }
-    template <Dim direction>
-    void apply_bc(VectorVariable &rhs)
-    {
-        // Domain lengths:
-        Real Lx = dx * (Nx - 0.5);
-        Real Ly = dy * (Ny - 0.5);
-        Real Lz = dz * (Nz - 0.5);
-
-        if constexpr (direction == 0)
-        {
-            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
+        for (Dim k = 0; k < Nz; ++k)
+            for (Dim j = 0; j < Ny; ++j)
             {
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
@@ -363,10 +356,13 @@ public:
                     rhs.set(2, index_1, Ny - 1, index_2) = rhs.value(2, index_1, Ny - 1, index_2) + Real(2.0) * gamma_field.get(index_1, Ny - 1, index_2) / (dy * dy) * (u_boundary.value<2>(index_1 * dx, Ly, 0.5 * dz + index_2 * dz, t));
                 }
             }
-        }
-        else if constexpr (direction == 2)
-        {
-            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+
+            // =========================================================
+            // RIGHT boundary (y=Ly): lecture BCs
+            // Normal comp=1 (v): Dirichlet at j=N-1 (v located at y=Ly)
+            // Tangentials (u,w): ghost elimination at j=N-1
+            // =========================================================
+            if (comp == 1)
             {
                 for (Dim index_2 = 0; index_2 < Ny; ++index_2)
                 {
@@ -394,143 +390,201 @@ public:
     template <Dim direction>
     void block_solver(const VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector &dim_handler, bool use_omp = false)
     {
-        Dim N = (direction == 0) ? Nx : ((direction == 1) ? Ny : Nz);
-        Real h = (direction == 0) ? dx : ((direction == 1) ? dy : dz);
+        const Dim N = Nz;
+        const Real h = dz;
+        const Real h2 = h * h;
 
-        Dim Comp1 = dim_handler.Comp1;
-        Dim Comp2 = dim_handler.Comp2;
-        Dim Comp3 = dim_handler.Comp3;
+        const Real Lz = dz * (Nz - Real(0.5));
 
-        std::vector<Real> a(N), b(N), c(N), d(N), x(N);
-
-        Dim Outer1 = dim_handler.N2;
-        Dim Outer2 = dim_handler.N3;
-
-        auto worker = [&](Dim i1, Dim i2)
+        // ---- Known face logic for direction = 2 (matches your earlier is_known_face<2>) ----
+        // Here index_1 = i, index_2 = j
+        auto is_known_face_z = [&](Dim i, Dim j, int comp) -> bool
         {
-            std::vector<Real> a_loc = a, b_loc = b, c_loc = c, d_loc = d, x_loc = x;
+            if (comp == 0)
+                return (i == Nx - 1 || j == 0);
+            if (comp == 1)
+                return (i == 0 || j == Ny - 1);
+            // comp == 2
+            return (i == 0 || j == 0);
+        };
 
-            auto get_gamma = [&](Dim i)
+        // Fill ONLY the requested component along the whole z-line at (i,j)
+        auto fill_known_face_z = [&](Dim i, Dim j, int comp)
+        {
+            const Real x_u = (Real(i) + Real(0.5)) * dx; // u location in x
+            const Real x_vw = Real(i) * dx;              // v,w location in x
+
+            const Real y_u = Real(j) * dy;               // u,w location in y
+            const Real y_v = (Real(j) + Real(0.5)) * dy; // v location in y
+
+            for (Dim k = 0; k < Nz; ++k)
             {
-                if constexpr (direction == 0)
-                    return gamma_field.get(i, i1, i2);
-                else if constexpr (direction == 1)
-                    return gamma_field.get(i1, i, i2);
+                const Real z_u = Real(k) * dz;               // u,v location in z
+                const Real z_w = (Real(k) + Real(0.5)) * dz; // w location in z
+
+                if (comp == 0)
+                {
+                    // u at (x+dx/2, y, z)
+                    solution.set(0, i, j, k) = u_boundary.value<0>(x_u, y_u, z_u, t);
+                }
+                else if (comp == 1)
+                {
+                    // v at (x, y+dy/2, z)
+                    solution.set(1, i, j, k) = u_boundary.value<1>(x_vw, y_v, z_u, t);
+                }
                 else
-                    return gamma_field.get(i1, i2, i);
-            };
-            auto get_rhs_comp = [&](Dim comp, Dim i)
-            {
-                if constexpr (direction == 0)
-                    return rhs.value(comp, i, i1, i2);
-                else if constexpr (direction == 1)
-                    return rhs.value(comp, i1, i, i2);
-                else
-                    return rhs.value(comp, i1, i2, i);
-            };
-            auto set_sol_comp = [&](Dim comp, Dim i, Real val)
-            {
-                if constexpr (direction == 0)
-                    solution.set(comp, i, i1, i2) = val;
-                else if constexpr (direction == 1)
-                    solution.set(comp, i1, i, i2) = val;
-                else
-                    solution.set(comp, i1, i2, i) = val;
-            };
-
-            // Comp1 (Normal)
-            if (!handle_known_face<direction>(solution, i1, i2, Comp1))
-            {
-                setup_TDMA_internal(N, h, a_loc, b_loc, c_loc, d_loc, [&](Dim i)
-                                    { return get_rhs_comp(Comp1, i); }, get_gamma);
-
-                a_loc[0] = 0.0;
-                b_loc[0] = 1.0;
-                c_loc[0] = 0.0;
-                d_loc[0] = get_rhs_comp(Comp1, 0);
-                a_loc[N - 1] = 0.0;
-                b_loc[N - 1] = 1.0;
-                c_loc[N - 1] = 0.0;
-                d_loc[N - 1] = get_rhs_comp(Comp1, N - 1);
-                thomas_algorithm(a_loc, b_loc, c_loc, d_loc, x_loc);
-                for (Dim i = 0; i < N; ++i)
-                    set_sol_comp(Comp1, i, x_loc[i]);
-            }
-
-            // Comp2 (Tangent)
-            if (!handle_known_face<direction>(solution, i1, i2, Comp2))
-            {
-                setup_TDMA_internal(N, h, a_loc, b_loc, c_loc, d_loc, [&](Dim i)
-                                    { return get_rhs_comp(Comp2, i); }, get_gamma);
-                a_loc[0] = 0.0;
-                b_loc[0] = 1.0;
-                c_loc[0] = 0.0;
-                d_loc[0] = get_rhs_comp(Comp2, 0);
-                Real gamma_N = get_gamma(N - 1);
-                Real coeff = gamma_N / (h * h);
-                a_loc[N - 1] = -coeff;
-                b_loc[N - 1] = (1.0f + 2.0f * coeff) - (-coeff);
-                c_loc[N - 1] = 0.0;
-                d_loc[N - 1] = get_rhs_comp(Comp2, N - 1);
-                thomas_algorithm(a_loc, b_loc, c_loc, d_loc, x_loc);
-                for (Dim i = 0; i < N; ++i)
-                    set_sol_comp(Comp2, i, x_loc[i]);
-            }
-
-            // Comp3 (Tangent)
-            if (!handle_known_face<direction>(solution, i1, i2, Comp3))
-            {
-                setup_TDMA_internal(N, h, a_loc, b_loc, c_loc, d_loc, [&](Dim i)
-                                    { return get_rhs_comp(Comp3, i); }, get_gamma);
-                a_loc[0] = 0.0;
-                b_loc[0] = 1.0;
-                c_loc[0] = 0.0;
-                d_loc[0] = get_rhs_comp(Comp3, 0);
-                Real gamma_N = get_gamma(N - 1);
-                Real coeff = gamma_N / (h * h);
-                a_loc[N - 1] = -coeff;
-                b_loc[N - 1] = (1.0f + 2.0f * coeff) - (-coeff);
-                c_loc[N - 1] = 0.0;
-                d_loc[N - 1] = get_rhs_comp(Comp3, N - 1);
-                thomas_algorithm(a_loc, b_loc, c_loc, d_loc, x_loc);
-                for (Dim i = 0; i < N; ++i)
-                    set_sol_comp(Comp3, i, x_loc[i]);
+                {
+                    // w at (x, y, z+dz/2)
+                    solution.set(2, i, j, k) = u_boundary.value<2>(x_vw, y_u, z_w, t);
+                }
             }
         };
 
+        auto solve_line_for_component = [&](Dim i, Dim j, int comp)
+        {
+            std::vector<Real> a(N, 0.0), b(N, 0.0), c(N, 0.0), d(N, 0.0), x(N, 0.0);
+
+            // Known face: skip TDMA
+            if (is_known_face_z(i, j, comp))
+            {
+                fill_known_face_z(i, j, comp);
+                return;
+            }
+
+            // -------------------------
+            // Interior coefficients
+            // -------------------------
+            for (Dim k = 1; k < N - 1; ++k)
+            {
+                const Real gamma_val = gamma_field.get(i, j, k);
+                const Real coeff = gamma_val / h2;
+
+                a[k] = -coeff;
+                b[k] = Real(1.0) + Real(2.0) * coeff;
+                c[k] = -coeff;
+
+                d[k] = rhs.value(comp, i, j, k);
+            }
+
+            // =========================================================
+            // LEFT boundary (z=0): lecture BCs
+            // Normal comp=2 (w): incompressibility reconstruction
+            // Tangentials (u,v): Dirichlet
+            // =========================================================
+            {
+                a[0] = 0.0;
+                b[0] = 1.0;
+                c[0] = 0.0;
+
+                const Real x_u = (Real(i) + Real(0.5)) * dx;
+                const Real x_vw = Real(i) * dx;
+
+                const Real y_u = Real(j) * dy;
+                const Real y_v = (Real(j) + Real(0.5)) * dy;
+
+                if (comp == 2)
+                {
+                    // w is stored at z = dz/2 -> that's w_{1/2}
+                    // w_{1/2} = w(0) + (dw/dz)|0 * dz/2
+                    // (dw/dz)|0 = -(du/dx)|0 - (dv/dy)|0
+                    const Real w0_wall = u_boundary.value<2>(x_vw, y_u, Real(0.0), t);
+
+                    const Real u_plus = u_boundary.value<0>(x_u + Real(0.5) * dx, y_u, Real(0.0), t);
+                    const Real u_minus = u_boundary.value<0>(x_u - Real(0.5) * dx, y_u, Real(0.0), t);
+                    const Real du_dx = (u_plus - u_minus) / dx;
+
+                    const Real v_plus = u_boundary.value<1>(x_vw, y_v + Real(0.5) * dy, Real(0.0), t);
+                    const Real v_minus = u_boundary.value<1>(x_vw, y_v - Real(0.5) * dy, Real(0.0), t);
+                    const Real dv_dy = (v_plus - v_minus) / dy;
+
+                    const Real dwdz0 = -(du_dx + dv_dy);
+
+                    const Real w_half = w0_wall + dwdz0 * (dz * Real(0.5));
+                    d[0] = w_half;
+                }
+                else if (comp == 0)
+                {
+                    // u at z=0 is on boundary
+                    d[0] = u_boundary.value<0>(x_u, y_u, Real(0.0), t);
+                }
+                else // comp == 1
+                {
+                    // v at z=0 is on boundary
+                    d[0] = u_boundary.value<1>(x_vw, y_v, Real(0.0), t);
+                }
+            }
+
+            // =========================================================
+            // RIGHT boundary (z=Lz): lecture BCs
+            // Normal comp=2 (w): Dirichlet at k=N-1 (w located at z=Lz)
+            // Tangentials (u,v): ghost elimination at k=N-1
+            // =========================================================
+            if (comp == 2)
+            {
+                a[N - 1] = 0.0;
+                b[N - 1] = 1.0;
+                c[N - 1] = 0.0;
+
+                const Real x_vw = Real(i) * dx;
+                const Real y_u = Real(j) * dy;
+                d[N - 1] = u_boundary.value<2>(x_vw, y_u, Lz, t);
+            }
+            else
+            {
+                const Real gammaN = gamma_field.get(i, j, N - 1);
+                const Real coeff = gammaN / h2;
+
+                a[N - 1] = -coeff;
+                b[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff); // 1 + 3*coeff
+                c[N - 1] = 0.0;
+
+                const Real x_u = (Real(i) + Real(0.5)) * dx;
+                const Real x_vw = Real(i) * dx;
+
+                const Real y_u = Real(j) * dy;
+                const Real y_v = (Real(j) + Real(0.5)) * dy;
+
+                Real u_ex = 0.0;
+                if (comp == 0)
+                    u_ex = u_boundary.value<0>(x_u, y_u, Lz, t);
+                else
+                    u_ex = u_boundary.value<1>(x_vw, y_v, Lz, t);
+
+                d[N - 1] = rhs.value(comp, i, j, N - 1) + Real(2.0) * coeff * u_ex;
+            }
+
+            // Solve TDMA
+            thomas_algorithm(a, b, c, d, x);
+
+            // Write back
+            for (Dim k = 0; k < N; ++k)
+                solution.set(comp, i, j, k) = x[k];
+        };
+
+        // Solve for all (i,j) lines and all 3 components
 #ifdef _OPENMP
         if (use_omp)
         {
-            if (DEBUG_BLOCK)
-            {
-                int max_threads = omp_get_max_threads();
-                printf("[OMP] block_solver<%d>: using up to %d threads\n", int(direction), max_threads);
-            }
-#pragma omp parallel for collapse(2) default(none) shared(Outer1, Outer2, worker)
-            for (Dim i2 = 0; i2 < Outer2; ++i2)
-                for (Dim i1 = 0; i1 < Outer1; ++i1)
-                    worker(i1, i2);
+#pragma omp parallel for collapse(2) default(none) shared(solve_line_for_component)
+            for (Dim j = 0; j < Ny; ++j)
+                for (Dim i = 0; i < Nx; ++i)
+                {
+                    solve_line_for_component(i, j, 0);
+                    solve_line_for_component(i, j, 1);
+                    solve_line_for_component(i, j, 2);
+                }
             return;
         }
-
 #endif
 
-        for (Dim i2 = 0; i2 < Outer2; ++i2)
-            for (Dim i1 = 0; i1 < Outer1; ++i1)
-                worker(i1, i2);
+        for (Dim j = 0; j < Ny; ++j)
+            for (Dim i = 0; i < Nx; ++i)
+            {
+                solve_line_for_component(i, j, 0);
+                solve_line_for_component(i, j, 1);
+                solve_line_for_component(i, j, 2);
+            }
     }
-
-    VelocitySolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, Real dt_, ScalarVariable &gam, BoundaryFunctions &u_bnd)
-        : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), gamma_field(gam), u_boundary(u_bnd) {}
-
-    template <Dim direction>
-    void solve(VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector &dim_handler, bool use_omp = false)
-    {
-        apply_bc<direction>(rhs);
-        block_solver<direction>(rhs, solution, dim_handler, use_omp);
-    };
-    void set_gamma(ScalarVariable &g) { gamma_field = g; }
-    BoundaryFunctions &set_u_boundary() { return u_boundary; }
 };
 #endif // SOLVER_HPP
 
