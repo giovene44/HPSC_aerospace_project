@@ -406,6 +406,27 @@ public:
         return data[axes];
     }
 
+    void print_vector()
+    {
+        for (int a = 0; a < 3; a++)
+        {
+            std::cout << "Component " << a << ":\n";
+            for (Dim k = 0; k < Nz; k++)
+            {
+                for (Dim j = Ny - 1; j >= 0; j--)
+                {
+                    for (Dim i = 0; i < Nx; i++)
+                    {
+                        std::cout << value(a, i, j, k) << " ";
+                    }
+                    std::cout << "\n";
+                }
+                std::cout << "----\n";
+            }
+            std::cout << "====================\n";
+        }
+    }
+
     // Convenient named accessors
     inline ScalarVariable &x() { return component(0); }
     inline ScalarVariable &y() { return component(1); }
