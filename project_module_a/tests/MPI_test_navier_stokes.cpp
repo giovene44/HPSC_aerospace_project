@@ -6,7 +6,8 @@
 #include <fstream>
 #include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
-#include "SolverCorrectSequential.hpp"
+#include "SolverCorrectMPI.hpp"
+#include "MPICommunicator.hpp"
 
 // ===============================================================
 // 1. Setup Grid Parameters
@@ -441,7 +442,7 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
                                        Real dt_try,
                                        Real t0, Real Tfinal,
                                        Real nu, Real k,
-                                       ErrorRegion region)
+                                       ErrorRegion region, const MPITopology3D &topo)
 {
     const Real pi = Real(3.14159265358979323846);
 
@@ -519,7 +520,7 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
         const Real t_np1 = t + g.dt;
         const Real t_half = t + g.dt / Real(2.0);
 
-        // ---- Pressure predictor (Auteri): p_star = p^{n-1/2} + ϕ^{n-1/2}
+        // ---- Pressure predictor : p_star = p^{n-1/2} + ϕ^{n-1/2}
         for (Dim kk = 0; kk < g.Nz; ++kk)
             for (Dim jj = 0; jj < g.Ny; ++jj)
                 for (Dim ii = 0; ii < g.Nx; ++ii)
@@ -534,7 +535,7 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
         // RHS uses (f_half - ∇p_star) in an Auteri-consistent way
         build_rhs(rhs, u_n, p_star, f_half, g, nu, k);
 
-        solver.solve_x_only(rhs, u_tmp, false);
+        solver.solve_x_only(rhs, u_tmp, topo, false);
         solver.solve_y_only(u_tmp, u_np1, false);
         solver.solve_z_only(u_np1, u_tmp, false);
 
@@ -558,7 +559,7 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
         psolver.solve_y(psi, phi);
         psolver.solve_z(phi, corr_new);
 
-        // ---- Pressure update at half-step (Auteri):
+        // ---- Pressure update at half-step:
         // p^{n+1/2} = p^{n-1/2} + ϕ^{n+1/2}
         for (Dim kk = 0; kk < g.Nz; ++kk)
             for (Dim jj = 0; jj < g.Ny; ++jj)
@@ -598,7 +599,7 @@ static void run_sweep_and_print(const std::string &title,
                                 const std::vector<std::pair<Dim, Real>> &cases, // (N, dt_try)
                                 Real t0, Real Tfinal, Real nu, Real k,
                                 ErrorRegion region,
-                                GetAbscissa getX)
+                                GetAbscissa getX, const MPITopology3D &topo)
 {
     std::cout << "=================================================\n";
     std::cout << title << "\n";
@@ -617,7 +618,7 @@ static void run_sweep_and_print(const std::string &title,
         const Dim N = cases[idx].first;
         const Real dt_try = cases[idx].second;
 
-        RunResult r = run_mms_velocity_case(N, N, N, dt_try, t0, Tfinal, nu, k, region);
+        RunResult r = run_mms_velocity_case(N, N, N, dt_try, t0, Tfinal, nu, k, region, topo);
 
         const Real x = getX(r); // either r.dx or r.dt
         X.push_back(x);
@@ -639,7 +640,7 @@ static void run_sweep_and_print(const std::string &title,
     std::cout << "-----------------------------------------------------------------------\n";
 }
 
-void test_refine_dx(Real nu, Real k, Real t0, Real Tfinal)
+void test_refine_dx(Real nu, Real k, Real t0, Real Tfinal, const MPITopology3D &topo)
 {
     std::cout << std::scientific << std::setprecision(12);
 
@@ -664,10 +665,10 @@ void test_refine_dx(Real nu, Real k, Real t0, Real Tfinal)
         t0, Tfinal, nu, k,
         ErrorRegion::FullDomain,
         [](const RunResult &r)
-        { return r.dx; });
+        { return r.dx; }, topo);
 }
 
-void test_refine_dt(Real nu, Real k, Real t0, Real Tfinal)
+void test_refine_dt(Real nu, Real k, Real t0, Real Tfinal, const MPITopology3D &topo)
 {
     std::cout << std::scientific << std::setprecision(12);
 
@@ -695,17 +696,39 @@ void test_refine_dt(Real nu, Real k, Real t0, Real Tfinal)
         t0, Tfinal, nu, k,
         ErrorRegion::InteriorOnly,
         [](const RunResult &r)
-        { return r.dt; });
+        { return r.dt; }, topo);
 }
 
-int main()
+int main(int argc, char **argv)
 {
+    MPICommunicator comm;
+    comm.init(&argc, &argv); // MPI_Init inside
+
+    int world_rank = comm.get_rank();
+    int world_size = comm.get_size();
+
+    // Example: choose a 3D grid Px * Py * Pz
+    int Px = 2;
+    int Py = 1;
+    int Pz = 1;
+
+    if (world_size != Px * Py * Pz)
+    {
+        if (world_rank == 0)
+            std::cerr << "MPI size must be Px*Py*Pz\n";
+        comm.finalize();
+        return 1;
+    }
+
+    // 1) Create 3D Cartesian topology
+    MPITopology3D topo(MPI_COMM_WORLD, Pz, Py, Px);
+
     const Real nu = Real(0.1);
     const Real k = Real(0.10);
     const Real t0 = Real(0.15);
     const Real Tfinal = Real(0.155);
 
-    test_refine_dx(nu, k, t0, Tfinal);
+    test_refine_dx(nu, k, t0, Tfinal, topo);
     // test_refine_dt(nu, k, t0, Tfinal);
     return 0;
 }
