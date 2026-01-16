@@ -93,7 +93,115 @@ public:
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), p_boundary(p_boundary_) {}
 
     BoundaryFunctions &set_p_boundary() { return p_boundary; }
+    void solve_x_mpi(ScalarVariable &rhs,
+                     ScalarVariable &solution,
+                     const MPITopology3D &topo)
+    {
+        const Dim N = Nx;
+        const Real h = dx;
+        const Real alpha = Real(1.0) / (h * h);
 
+        // ---------------------------
+        // Communicator in X
+        // ---------------------------
+        MPI_Comm comm_x_raw = topo.comm_x();
+
+        int rank_x = 0, size_x = 1;
+        MPI_Comm_rank(comm_x_raw, &rank_x);
+        MPI_Comm_size(comm_x_raw, &size_x);
+
+        MPICommunicator comm_x(comm_x_raw, false);
+
+        // ---------------------------
+        // Build global a,b,c once (scalar)
+        // (I - dxx) with Neumann via ghost elimination like your serial code
+        // ---------------------------
+        std::vector<Real> a_full(N, -alpha);
+        std::vector<Real> b_full(N, Real(1.0) + Real(2.0) * alpha);
+        std::vector<Real> c_full(N, -alpha);
+
+        // Neumann rows (ghost elimination)
+        // left:  (1+2α) ψ0 - 2α ψ1 = rhs0 - 2 gL/h
+        a_full[0] = Real(0.0);
+        c_full[0] = -Real(2.0) * alpha;
+
+        // right: -2α ψ_{N-2} + (1+2α) ψ_{N-1} = rhs_{N-1} + 2 gR/h
+        a_full[N - 1] = -Real(2.0) * alpha;
+        c_full[N - 1] = Real(0.0);
+
+        // ---------------------------
+        // Schur solver preprocess (once)
+        // ---------------------------
+        SchurComplementSolver schur(N, size_x, rank_x, comm_x);
+
+        const int local_N = schur.get_local_N();
+        const int global_start = schur.get_global_start();
+
+        std::vector<Real> a_local(local_N, 0.0), b_local(local_N, 0.0), c_local(local_N, 0.0);
+        for (int il = 0; il < local_N; ++il)
+        {
+            int ig = global_start + il;
+            if (ig < 0 || ig >= (int)N)
+                continue;
+            a_local[il] = a_full[ig];
+            b_local[il] = b_full[ig];
+            c_local[il] = c_full[ig];
+        }
+        schur.preprocess(a_local, b_local, c_local);
+
+        // ---------------------------
+        // Local (j,k) slab for this rank (in Py,Pz)
+        // ---------------------------
+        Dim j0 = topo.local_j0(Ny);
+        Dim j1 = topo.local_j1(Ny);
+        Dim k0 = topo.local_k0(Nz);
+        Dim k1 = topo.local_k1(Nz);
+
+        // ---------------------------
+        // Loop lines (j,k) and solve
+        // ---------------------------
+        for (Dim k = k0; k < k1; ++k)
+            for (Dim j = j0; j < j1; ++j)
+            {
+                // Global RHS line d
+                std::vector<Real> d(N, 0.0);
+
+                for (Dim i = 0; i < N; ++i)
+                    d[i] = rhs.get(i, j, k);
+
+                // Neumann BC contributions (g = dψ/dx at boundary)
+                const Real gL = p_boundary.value<0>(Real(0.0), j * dy, k * dz, t);
+                const Real gR = p_boundary.value<0>((Nx - Real(0.5)) * dx, j * dy, k * dz, t);
+
+                d[0] -= Real(2.0) * gL / h;
+                d[N - 1] += Real(2.0) * gR / h;
+
+                // Extract local RHS
+                std::vector<Real> rhs_local(local_N, 0.0);
+                for (int il = 0; il < local_N; ++il)
+                {
+                    int ig = global_start + il;
+                    if (ig < 0 || ig >= (int)N)
+                        continue;
+                    rhs_local[il] = d[ig];
+                }
+
+                // Solve
+                std::vector<Real> x_local;
+                schur.solve(rhs_local, x_local);
+
+                // Write back only owned part
+                // (avoid duplicating the left interface point on ranks > 0)
+                int i0_local = (rank_x == 0) ? 0 : 1;
+                for (int il = i0_local; il < local_N; ++il)
+                {
+                    int ig = global_start + il;
+                    if (ig < 0 || ig >= (int)N)
+                        continue;
+                    solution.set(ig, j, k) = x_local[il];
+                }
+            }
+    }
     void solve_x(ScalarVariable &rhs, ScalarVariable &solution)
     {
         const Real alpha = Real(1.0) / (dx * dx); // α = 1/dx^2
