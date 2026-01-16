@@ -320,19 +320,29 @@ static void build_rhs(VectorVariable &rhs,
                 }
 }
 
-static Real compute_L2_error_velocity(const VectorVariable &u_num,
-                                      const Grid &g,
-                                      Real t,
-                                      ErrorRegion region)
+static Real allreduce_sum_real(Real local, MPI_Comm comm)
 {
-    // Exact solution at time t
-    VectorVariable u_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    fill_u_true(u_true, g, t);
+#ifdef USE_MPI
+    Real global = 0;
+    MPI_Allreduce(&local, &global, 1, MPI_FLOAT, MPI_SUM, comm);
+    return global;
+#else
+    return local;
+#endif
+}
 
-    // Index range
-    Dim i0 = 0, i1 = g.Nx;
-    Dim j0 = 0, j1 = g.Ny;
-    Dim k0 = 0, k1 = g.Nz;
+static Real compute_err2_velocity_local(const VectorVariable &u_num,
+                                        const Grid &g,
+                                        Real t,
+                                        ErrorRegion region,
+                                        const MPITopology3D &topo)
+{
+    VectorVariable u_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    fill_u_true(u_true, g, t); // usa la tua fill_u_true (replicata)
+
+    Dim i0 = topo.local_i0(g.Nx), i1 = topo.local_i1(g.Nx);
+    Dim j0 = topo.local_j0(g.Ny), j1 = topo.local_j1(g.Ny);
+    Dim k0 = topo.local_k0(g.Nz), k1 = topo.local_k1(g.Nz);
 
     if (region == ErrorRegion::InteriorOnly)
     {
@@ -344,33 +354,32 @@ static Real compute_L2_error_velocity(const VectorVariable &u_num,
         k1 = g.Nz - 1;
     }
 
-    Real err2 = Real(0);
+    Real err2_local = Real(0);
 
     for (int comp = 0; comp < 3; ++comp)
         for (Dim k = k0; k < k1; ++k)
             for (Dim j = j0; j < j1; ++j)
                 for (Dim i = i0; i < i1; ++i)
                 {
-                    const Real diff =
-                        u_num.value(comp, i, j, k) -
-                        u_true.value(comp, i, j, k);
-                    err2 += diff * diff;
+                    const Real diff = u_num.value(comp, i, j, k) - u_true.value(comp, i, j, k);
+                    err2_local += diff * diff;
                 }
 
-    return std::sqrt(err2 * g.dx * g.dy * g.dz);
+    return err2_local;
 }
 
-static Real compute_L2_error_pressure(const ScalarVariable &p_num,
-                                      const Grid &g,
-                                      Real t,
-                                      ErrorRegion region)
+static Real compute_err2_pressure_local(const ScalarVariable &p_num,
+                                        const Grid &g,
+                                        Real t,
+                                        ErrorRegion region,
+                                        const MPITopology3D &topo)
 {
     ScalarVariable p_true(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     fill_p_true(p_true, g, t);
 
-    Dim i0 = 0, i1 = g.Nx;
-    Dim j0 = 0, j1 = g.Ny;
-    Dim k0 = 0, k1 = g.Nz;
+    Dim i0 = topo.local_i0(g.Nx), i1 = topo.local_i1(g.Nx);
+    Dim j0 = topo.local_j0(g.Ny), j1 = topo.local_j1(g.Ny);
+    Dim k0 = topo.local_k0(g.Nz), k1 = topo.local_k1(g.Nz);
 
     if (region == ErrorRegion::InteriorOnly)
     {
@@ -382,17 +391,17 @@ static Real compute_L2_error_pressure(const ScalarVariable &p_num,
         k1 = g.Nz - 1;
     }
 
-    Real err2 = Real(0.0);
+    Real err2_local = Real(0);
 
     for (Dim k = k0; k < k1; ++k)
         for (Dim j = j0; j < j1; ++j)
             for (Dim i = i0; i < i1; ++i)
             {
                 const Real diff = p_num.get(i, j, k) - p_true.get(i, j, k);
-                err2 += diff * diff;
+                err2_local += diff * diff;
             }
 
-    return std::sqrt(err2 * g.dx * g.dy * g.dz);
+    return err2_local;
 }
 
 static void compute_divergence_cell_center(const VectorVariable &u,
@@ -536,8 +545,8 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
         build_rhs(rhs, u_n, p_star, f_half, g, nu, k);
 
         solver.solve_x_only(rhs, u_tmp, topo, false);
-        solver.solve_y_only(u_tmp, u_np1, false);
-        solver.solve_z_only(u_np1, u_tmp, false);
+        solver.solve_y_only(u_tmp, u_np1, topo, false);
+        solver.solve_z_only(u_np1, u_tmp, topo, false);
 
         u_n = u_tmp; // now u_n is u^{n+1}
 
@@ -575,17 +584,23 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
         t = t_np1;
     }
 
-    const Real L2_u = compute_L2_error_velocity(u_n, g, Tfinal, region);
+    const Real L2_u_local = compute_err2_velocity_local(u_n, g, Tfinal, region, topo);
 
     // pressure is stored at half-step; compare to true pressure at same time
-    const Real L2_p = compute_L2_error_pressure(p_half, g, Tfinal, region);
+    const Real L2_p_local = compute_err2_pressure_local(p_half, g, Tfinal, region, topo);
+
+    Real err2_u_global = allreduce_sum_real(L2_u_local, topo.cart_comm());
+    Real L2_u_global = std::sqrt(err2_u_global * g.dx * g.dy * g.dz);
+
+    Real err2_p_global = allreduce_sum_real(L2_p_local, topo.cart_comm());
+    Real L2_p_global = std::sqrt(err2_p_global * g.dx * g.dy * g.dz);
 
     RunResult out;
     out.dx = g.dx;
     out.dt = g.dt;
     out.nsteps = nsteps;
-    out.L2_u = L2_u;
-    out.L2_p = L2_p;
+    out.L2_u = L2_u_global;
+    out.L2_p = L2_p_global;
     return out;
 }
 
@@ -601,15 +616,17 @@ static void run_sweep_and_print(const std::string &title,
                                 ErrorRegion region,
                                 GetAbscissa getX, const MPITopology3D &topo)
 {
-    std::cout << "=================================================\n";
-    std::cout << title << "\n";
-    std::cout << "t0=" << t0 << "  Tfinal=" << Tfinal << "  nu=" << nu << "\n";
-    std::cout << "Domain: [0,2pi]^3\n";
-    std::cout << "=================================================\n\n";
+    if (topo.cart_rank() == 0)
+    {
+        std::cout << "=================================================\n";
+        std::cout << title << "\n";
+        std::cout << "t0=" << t0 << "  Tfinal=" << Tfinal << "  nu=" << nu << "\n";
+        std::cout << "Domain: [0,2pi]^3\n";
+        std::cout << "=================================================\n\n";
 
-    std::cout << "Grid    dx            dt            nsteps   L2_error_u(Tfinal)   L2_error_p(Tfinal)   rate\n";
-    std::cout << "-----------------------------------------------------------------------\n";
-
+        std::cout << "Grid    dx            dt            nsteps   L2_error_u(Tfinal)   L2_error_p(Tfinal)   rate\n";
+        std::cout << "-----------------------------------------------------------------------\n";
+    }
     std::vector<Real> X;
     std::vector<Real> E;
 
@@ -627,17 +644,20 @@ static void run_sweep_and_print(const std::string &title,
         Real rate = 0.0;
         if (idx > 0)
             rate = std::log(E[idx - 1] / E[idx]) / std::log(X[idx - 1] / X[idx]);
+        if (topo.cart_rank() == 0)
+        {
 
-        std::cout << std::setw(5) << N << "  "
-                  << std::setw(12) << r.dx << "  "
-                  << std::setw(12) << r.dt << "  "
-                  << std::setw(6) << r.nsteps << "  "
-                  << std::setw(16) << r.L2_u << "  "
-                  << std::setw(16) << r.L2_p << "  "
-                  << std::setw(7) << rate << "\n";
+            std::cout << std::setw(5) << N << "  "
+                      << std::setw(12) << r.dx << "  "
+                      << std::setw(12) << r.dt << "  "
+                      << std::setw(6) << r.nsteps << "  "
+                      << std::setw(16) << r.L2_u << "  "
+                      << std::setw(16) << r.L2_p << "  "
+                      << std::setw(7) << rate << "\n";
+        }
     }
-
-    std::cout << "-----------------------------------------------------------------------\n";
+    if (topo.cart_rank() == 0)
+        std::cout << "-----------------------------------------------------------------------\n";
 }
 
 void test_refine_dx(Real nu, Real k, Real t0, Real Tfinal, const MPITopology3D &topo)
@@ -645,16 +665,16 @@ void test_refine_dx(Real nu, Real k, Real t0, Real Tfinal, const MPITopology3D &
     std::cout << std::scientific << std::setprecision(12);
 
     // N doubles => dx halves
-    std::vector<Dim> Ns = {5, 10, 20, 40, 80, 160};
+    std::vector<Dim> Ns = {10, 20, 40, 80, 160};
 
     // dt is fixed (only later adjusted slightly inside run_mms_velocity_case to hit Tfinal exactly)
-    Real dt0 = Real(8e-4);
+    Real dt0 = Real(8e-5);
 
     std::vector<std::pair<Dim, Real>> cases;
     cases.reserve(Ns.size());
     for (Dim N : Ns)
     {
-        dt0 = dt0 / 2; // keep dt fixed
+        dt0 = dt0; // keep dt fixed
         cases.push_back({N, dt0});
     }
 
@@ -709,8 +729,8 @@ int main(int argc, char **argv)
 
     // Example: choose a 3D grid Px * Py * Pz
     int Px = 2;
-    int Py = 1;
-    int Pz = 1;
+    int Py = 2;
+    int Pz = 2;
 
     if (world_size != Px * Py * Pz)
     {
@@ -726,9 +746,10 @@ int main(int argc, char **argv)
     const Real nu = Real(0.1);
     const Real k = Real(0.10);
     const Real t0 = Real(0.15);
-    const Real Tfinal = Real(0.155);
+    const Real Tfinal = Real(0.1505);
 
     test_refine_dx(nu, k, t0, Tfinal, topo);
     // test_refine_dt(nu, k, t0, Tfinal);
+    comm.finalize(); // MPI_Finalize inside
     return 0;
 }

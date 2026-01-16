@@ -491,6 +491,7 @@ public:
     // =============================================================
     void solve_y_only(VectorVariable &rhs,
                       VectorVariable &solution,
+                      const MPITopology3D &topo,
                       bool use_omp = false)
     {
         const Dim N = Ny;
@@ -498,6 +499,63 @@ public:
         const Real h2 = h * h;
 
         const Real Ly = dy * (Ny - Real(0.5));
+
+        // ============================================================
+        // 0) Communicator in Y e rank/size
+        // ============================================================
+        MPI_Comm comm_y_raw = topo.comm_y();
+        int rank_y = 0, size_y = 1;
+        MPI_Comm_rank(comm_y_raw, &rank_y);
+        MPI_Comm_size(comm_y_raw, &size_y);
+
+        // Create an MPICommunicator view wrapper around the MPI_Comm
+        MPICommunicator comm_y(comm_y_raw, false);
+
+        auto build_abc_for_comp = [&](int comp,
+                                      std::vector<Real> &a,
+                                      std::vector<Real> &b,
+                                      std::vector<Real> &c)
+        {
+            a.assign(N, 0.0);
+            b.assign(N, 0.0);
+            c.assign(N, 0.0);
+
+            // Intern
+            for (Dim j = 1; j < N - 1; ++j)
+            {
+                const Real gamma_val = gamma_field.get(0, j, 0); // test: costante in (i,k)
+                const Real coeff = gamma_val / h2;
+                a[j] = -coeff;
+                b[j] = Real(1.0) + Real(2.0) * coeff;
+                c[j] = -coeff;
+            }
+
+            // Left boundary: Dirichlet fixed row (as in your code)
+            {
+                a[0] = 0.0;
+                b[0] = 1.0;
+                c[0] = 0.0;
+            }
+            // Right boundary
+            {
+                if (comp == 1)
+                {
+                    // v: Dirichlet
+                    a[N - 1] = 0.0;
+                    b[N - 1] = 1.0;
+                    c[N - 1] = 0.0;
+                }
+                else
+                {
+                    // u,w: ghost elimination
+                    const Real gammaN = gamma_field.get(0, N - 1, 0);
+                    const Real coeff = gammaN / h2;
+                    a[N - 1] = -coeff;
+                    b[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff); // 1 + 3*coeff
+                    c[N - 1] = 0.0;
+                }
+            }
+        };
 
         // ---- Known face logic for direction = 1 (matches your earlier is_known_face<1>) ----
         auto is_known_face_y = [&](Dim i, Dim k, int comp) -> bool
@@ -542,10 +600,41 @@ public:
             }
         };
 
-        auto solve_line_for_component = [&](Dim i, Dim k, int comp)
-        {
-            std::vector<Real> a(N, 0.0), b(N, 0.0), c(N, 0.0), d(N, 0.0), x(N, 0.0);
+        // ============================================================
+        // 3) Crea 3 solver Schur (uno per componente) e preprocess UNA VOLTA
+        // ============================================================
+        SchurComplementSolver schur_u(N, size_y, rank_y, comm_y);
+        SchurComplementSolver schur_v(N, size_y, rank_y, comm_y);
+        SchurComplementSolver schur_w(N, size_y, rank_y, comm_y);
 
+        const int local_N = schur_u.get_local_N();
+        const int global_start = schur_u.get_global_start();
+        std::vector<Real> a_full, b_full, c_full;
+
+        auto preprocess_solver = [&](SchurComplementSolver &schur, int comp)
+        {
+            build_abc_for_comp(comp, a_full, b_full, c_full);
+
+            std::vector<Real> a_local(local_N, 0.0), b_local(local_N, 0.0), c_local(local_N, 0.0);
+            for (int il = 0; il < local_N; ++il)
+            {
+                int ig = global_start + il;
+                if (ig < 0 || ig >= N)
+                    continue;
+                a_local[il] = a_full[ig];
+                b_local[il] = b_full[ig];
+                c_local[il] = c_full[ig];
+            }
+            schur.preprocess(a_local, b_local, c_local);
+        };
+
+        preprocess_solver(schur_u, 0);
+        preprocess_solver(schur_v, 1);
+        preprocess_solver(schur_w, 2);
+
+        std::vector<Real> d(N, 0.0);
+        auto solve_line_for_component = [&](Dim i, Dim k, int comp, SchurComplementSolver &schur)
+        {
             // Known face: skip TDMA
             if (is_known_face_y(i, k, comp))
             {
@@ -557,16 +646,7 @@ public:
             // Interior coefficients
             // -------------------------
             for (Dim j = 1; j < N - 1; ++j)
-            {
-                const Real gamma_val = gamma_field.get(i, j, k); // gamma at (i,j,k)
-                const Real coeff = gamma_val / h2;
-
-                a[j] = -coeff;
-                b[j] = Real(1.0) + Real(2.0) * coeff;
-                c[j] = -coeff;
-
                 d[j] = rhs.value(comp, i, j, k);
-            }
 
             // =========================================================
             // LEFT boundary (y=0): lecture BCs
@@ -574,9 +654,6 @@ public:
             // Tangentials (u,w): Dirichlet
             // =========================================================
             {
-                a[0] = 0.0;
-                b[0] = 1.0;
-                c[0] = 0.0;
 
                 const Real x_u = (Real(i) + Real(0.5)) * dx;
                 const Real x_vw = Real(i) * dx;
@@ -622,9 +699,6 @@ public:
             // =========================================================
             if (comp == 1)
             {
-                a[N - 1] = 0.0;
-                b[N - 1] = 1.0;
-                c[N - 1] = 0.0;
 
                 const Real x_vw = Real(i) * dx;
                 const Real z_u = Real(k) * dz;
@@ -636,10 +710,6 @@ public:
                 // a u_{N-2} + (b - c) u_{N-1} = rhs + 2*coeff*u_ex
                 const Real gammaN = gamma_field.get(i, N - 1, k);
                 const Real coeff = gammaN / h2;
-
-                a[N - 1] = -coeff;
-                b[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff); // 1 + 3*coeff
-                c[N - 1] = 0.0;
 
                 const Real x_u = (Real(i) + Real(0.5)) * dx;
                 const Real x_vw = Real(i) * dx;
@@ -655,20 +725,46 @@ public:
                 d[N - 1] = rhs.value(comp, i, N - 1, k) + Real(2.0) * coeff * u_ex;
             }
 
-            // Solve TDMA
-            thomas_algorithm(a, b, c, d, x);
+            // ------------------------------------------------------------
+            // RHS locale per Schur
+            // ------------------------------------------------------------
+            std::vector<Real> rhs_local(local_N, 0.0);
+            for (int il = 0; il < local_N; ++il)
+            {
+                int ig = global_start + il;
+                if (ig < 0 || ig >= N)
+                    continue;
+                rhs_local[il] = d[ig];
+            }
 
-            // Write back
-            for (Dim j = 0; j < N; ++j)
-                solution.set(comp, i, j, k) = x[j];
+            // solve locale (Schur fa comunicazione solo in comm_y)
+            std::vector<Real> x_local;
+            schur.solve(rhs_local, x_local);
+
+            // Write back solo porzione owned (evita duplicato interfaccia sinistra)
+            int j0_local = (rank_y == 0) ? 0 : 1;
+            for (int il = j0_local; il < local_N; ++il)
+            {
+                int ig = global_start + il;
+                if (ig < 0 || ig >= N)
+                    continue;
+                solution.set(comp, i, ig, k) = x_local[il];
+            }
         };
 
-        for (Dim k = 0; k < Nz; ++k)
-            for (Dim i = 0; i < Nx; ++i)
+        // ============================================================
+        // 5) Loop locale su (i,k) del process (Px,Pz)
+        // ============================================================
+        Dim i0 = topo.local_i0(Nx);
+        Dim i1 = topo.local_i1(Nx);
+        Dim k0 = topo.local_k0(Nz);
+        Dim k1 = topo.local_k1(Nz);
+        for (Dim k = k0; k < k1; ++k)
+            for (Dim i = i0; i < i1; ++i)
             {
-                solve_line_for_component(i, k, 0);
-                solve_line_for_component(i, k, 1);
-                solve_line_for_component(i, k, 2);
+                solve_line_for_component(i, k, 0, schur_u);
+                solve_line_for_component(i, k, 1, schur_v);
+                solve_line_for_component(i, k, 2, schur_w);
             }
     }
 
@@ -678,6 +774,7 @@ public:
     // =============================================================
     void solve_z_only(VectorVariable &rhs,
                       VectorVariable &solution,
+                      const MPITopology3D &topo,
                       bool use_omp = false)
     {
         const Dim N = Nz;
@@ -685,6 +782,63 @@ public:
         const Real h2 = h * h;
 
         const Real Lz = dz * (Nz - Real(0.5));
+
+        // ============================================================
+        // 0) Communicator in Z e rank/size
+        // ============================================================
+        MPI_Comm comm_z_raw = topo.comm_z();
+        int rank_z = 0, size_z = 1;
+        MPI_Comm_rank(comm_z_raw, &rank_z);
+        MPI_Comm_size(comm_z_raw, &size_z);
+
+        // Create an MPICommunicator view wrapper around the MPI_Comm
+        MPICommunicator comm_z(comm_z_raw, false);
+
+        auto build_abc_for_comp = [&](int comp,
+                                      std::vector<Real> &a,
+                                      std::vector<Real> &b,
+                                      std::vector<Real> &c)
+        {
+            a.assign(N, 0.0);
+            b.assign(N, 0.0);
+            c.assign(N, 0.0);
+
+            // Intern
+            for (Dim k = 1; k < N - 1; ++k)
+            {
+                const Real gamma_val = gamma_field.get(0, 0, k); // test: costante in (i,j)
+                const Real coeff = gamma_val / h2;
+                a[k] = -coeff;
+                b[k] = Real(1.0) + Real(2.0) * coeff;
+                c[k] = -coeff;
+            }
+
+            // Left boundary: Dirichlet fixed row (as in your code)
+            {
+                a[0] = 0.0;
+                b[0] = 1.0;
+                c[0] = 0.0;
+            }
+            // Right boundary
+            {
+                if (comp == 2)
+                {
+                    // w: Dirichlet
+                    a[N - 1] = 0.0;
+                    b[N - 1] = 1.0;
+                    c[N - 1] = 0.0;
+                }
+                else
+                {
+                    // u,v: ghost elimination
+                    const Real gammaN = gamma_field.get(0, 0, N - 1);
+                    const Real coeff = gammaN / h2;
+                    a[N - 1] = -coeff;
+                    b[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff); // 1 + 3*coeff
+                    c[N - 1] = 0.0;
+                }
+            }
+        };
 
         // ---- Known face logic for direction = 2 (matches your earlier is_known_face<2>) ----
         // Here index_1 = i, index_2 = j
@@ -730,10 +884,40 @@ public:
             }
         };
 
-        auto solve_line_for_component = [&](Dim i, Dim j, int comp)
-        {
-            std::vector<Real> a(N, 0.0), b(N, 0.0), c(N, 0.0), d(N, 0.0), x(N, 0.0);
+        // ============================================================
+        // 3) Crea 3 solver Schur (uno per componente) e preprocess
+        // ============================================================
+        SchurComplementSolver schur_u(N, size_z, rank_z, comm_z);
+        SchurComplementSolver schur_v(N, size_z, rank_z, comm_z);
+        SchurComplementSolver schur_w(N, size_z, rank_z, comm_z);
+        const int local_N = schur_u.get_local_N();
+        const int global_start = schur_u.get_global_start();
+        std::vector<Real> a_full, b_full, c_full;
 
+        auto preprocess_solver = [&](SchurComplementSolver &schur, int comp)
+        {
+            build_abc_for_comp(comp, a_full, b_full, c_full);
+
+            std::vector<Real> a_local(local_N, 0.0), b_local(local_N, 0.0), c_local(local_N, 0.0);
+            for (int il = 0; il < local_N; ++il)
+            {
+                int ig = global_start + il;
+                if (ig < 0 || ig >= N)
+                    continue;
+                a_local[il] = a_full[ig];
+                b_local[il] = b_full[ig];
+                c_local[il] = c_full[ig];
+            }
+            schur.preprocess(a_local, b_local, c_local);
+        };
+
+        preprocess_solver(schur_u, 0);
+        preprocess_solver(schur_v, 1);
+        preprocess_solver(schur_w, 2);
+        std::vector<Real> d(N, 0.0);
+
+        auto solve_line_for_component = [&](Dim i, Dim j, int comp, SchurComplementSolver &schur)
+        {
             // Known face: skip TDMA
             if (is_known_face_z(i, j, comp))
             {
@@ -749,10 +933,6 @@ public:
                 const Real gamma_val = gamma_field.get(i, j, k);
                 const Real coeff = gamma_val / h2;
 
-                a[k] = -coeff;
-                b[k] = Real(1.0) + Real(2.0) * coeff;
-                c[k] = -coeff;
-
                 d[k] = rhs.value(comp, i, j, k);
             }
 
@@ -762,9 +942,6 @@ public:
             // Tangentials (u,v): Dirichlet
             // =========================================================
             {
-                a[0] = 0.0;
-                b[0] = 1.0;
-                c[0] = 0.0;
 
                 const Real x_u = (Real(i) + Real(0.5)) * dx;
                 const Real x_vw = Real(i) * dx;
@@ -811,10 +988,6 @@ public:
             // =========================================================
             if (comp == 2)
             {
-                a[N - 1] = 0.0;
-                b[N - 1] = 1.0;
-                c[N - 1] = 0.0;
-
                 const Real x_vw = Real(i) * dx;
                 const Real y_u = Real(j) * dy;
                 d[N - 1] = u_boundary.value<2>(x_vw, y_u, Lz, t);
@@ -823,10 +996,6 @@ public:
             {
                 const Real gammaN = gamma_field.get(i, j, N - 1);
                 const Real coeff = gammaN / h2;
-
-                a[N - 1] = -coeff;
-                b[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff); // 1 + 3*coeff
-                c[N - 1] = 0.0;
 
                 const Real x_u = (Real(i) + Real(0.5)) * dx;
                 const Real x_vw = Real(i) * dx;
@@ -843,20 +1012,46 @@ public:
                 d[N - 1] = rhs.value(comp, i, j, N - 1) + Real(2.0) * coeff * u_ex;
             }
 
-            // Solve TDMA
-            thomas_algorithm(a, b, c, d, x);
+            // ------------------------------------------------------------
+            // RHS locale per Schur
+            // ------------------------------------------------------------
+            std::vector<Real> rhs_local(local_N, 0.0);
+            for (int il = 0; il < local_N; ++il)
+            {
+                int ig = global_start + il;
+                if (ig < 0 || ig >= N)
+                    continue;
+                rhs_local[il] = d[ig];
+            }
 
-            // Write back
-            for (Dim k = 0; k < N; ++k)
-                solution.set(comp, i, j, k) = x[k];
+            // solve locale (Schur fa comunicazione solo in comm_z)
+            std::vector<Real> x_local;
+            schur.solve(rhs_local, x_local);
+
+            // Write back solo porzione owned (evita duplicato interfaccia sinistra)
+            int k0_local = (rank_z == 0) ? 0 : 1;
+            for (int il = k0_local; il < local_N; ++il)
+            {
+                int ig = global_start + il;
+                if (ig < 0 || ig >= N)
+                    continue;
+                solution.set(comp, i, j, ig) = x_local[il];
+            }
         };
 
-        for (Dim j = 0; j < Ny; ++j)
-            for (Dim i = 0; i < Nx; ++i)
+        // ============================================================
+        // 5) Loop locale su (i,j) del process (Px,Py)
+        // ============================================================
+        Dim i0 = topo.local_i0(Nx);
+        Dim i1 = topo.local_i1(Nx);
+        Dim j0 = topo.local_j0(Ny);
+        Dim j1 = topo.local_j1(Ny);
+        for (Dim j = j0; j < j1; ++j)
+            for (Dim i = i0; i < i1; ++i)
             {
-                solve_line_for_component(i, j, 0);
-                solve_line_for_component(i, j, 1);
-                solve_line_for_component(i, j, 2);
+                solve_line_for_component(i, j, 0, schur_u);
+                solve_line_for_component(i, j, 1, schur_v);
+                solve_line_for_component(i, j, 2, schur_w);
             }
     }
 };
