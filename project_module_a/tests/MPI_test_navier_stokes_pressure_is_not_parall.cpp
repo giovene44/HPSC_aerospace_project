@@ -331,6 +331,154 @@ static Real allreduce_sum_real(Real local, MPI_Comm comm)
 #endif
 }
 
+// Simple full-array synchronization: all ranks exchange complete arrays
+// This is inefficient but correct for debugging
+static void sync_scalar_field_full(ScalarVariable &field, const Grid &g,
+                                    const MPITopology3D &topo)
+{
+#ifdef USE_MPI
+    MPI_Comm comm = topo.cart_comm();
+    int world_rank;
+    MPI_Comm_rank(comm, &world_rank);
+
+    // Total number of elements
+    const int total = g.Nx * g.Ny * g.Nz;
+
+    // Pack local field data
+    std::vector<Real> local_data(total);
+    for (Dim k = 0; k < g.Nz; ++k)
+        for (Dim j = 0; j < g.Ny; ++j)
+            for (Dim i = 0; i < g.Nx; ++i)
+            {
+                int idx = i + j * g.Nx + k * g.Nx * g.Ny;
+                local_data[idx] = field.get(i, j, k);
+            }
+
+    // Each rank may have written to different portions
+    // To correctly combine, rank 0 gathers all and distributes
+    // Simple approach: use Allreduce with a custom operation that picks
+    // the value from the "owner" rank. Since we can't easily do that,
+    // we use a simpler but less efficient approach: Bcast from each rank
+    // for its owned region.
+
+    // For now, use the fact that each rank writes to disjoint regions
+    // and the initial values are the same across all ranks.
+    // The correct value is the one written by the owning rank.
+    // Other ranks still have the old (pre-solve) value.
+
+    // Let's use a different strategy: rank 0 collects everything
+    // and broadcasts back. This is O(P) but simple and correct.
+
+    if (world_rank == 0)
+    {
+        // Receive from all other ranks
+        int world_size;
+        MPI_Comm_size(comm, &world_size);
+
+        for (int src = 1; src < world_size; ++src)
+        {
+            // Get src's local ranges
+            int src_coords[3];
+            MPI_Cart_coords(comm, src, 3, src_coords);
+
+            auto block_range = [](Dim Nglobal, int p, int P) -> std::pair<Dim, Dim>
+            {
+                const Dim q = Nglobal / Dim(P);
+                const Dim r = Nglobal % Dim(P);
+                Dim begin, end;
+                if (Dim(p) < r)
+                {
+                    begin = Dim(p) * (q + 1);
+                    end = begin + (q + 1);
+                }
+                else
+                {
+                    begin = r * (q + 1) + (Dim(p) - r) * q;
+                    end = begin + q;
+                }
+                return {begin, end};
+            };
+
+            auto [i0, i1] = block_range(g.Nx, src_coords[2], topo.Px());
+            auto [j0, j1] = block_range(g.Ny, src_coords[1], topo.Py());
+            auto [k0, k1] = block_range(g.Nz, src_coords[0], topo.Pz());
+
+            Dim ni = i1 - i0;
+            Dim nj = j1 - j0;
+            Dim nk = k1 - k0;
+            int count = ni * nj * nk;
+
+            std::vector<Real> recv_buf(count);
+            MPI_Recv(recv_buf.data(), count, MPI_FLOAT, src, 0, comm, MPI_STATUS_IGNORE);
+
+            // Unpack into local_data
+            int idx = 0;
+            for (Dim k = k0; k < k1; ++k)
+                for (Dim j = j0; j < j1; ++j)
+                    for (Dim i = i0; i < i1; ++i)
+                    {
+                        int gidx = i + j * g.Nx + k * g.Nx * g.Ny;
+                        local_data[gidx] = recv_buf[idx++];
+                    }
+        }
+    }
+    else
+    {
+        // Send my local data to rank 0
+        auto block_range = [](Dim Nglobal, int p, int P) -> std::pair<Dim, Dim>
+        {
+            const Dim q = Nglobal / Dim(P);
+            const Dim r = Nglobal % Dim(P);
+            Dim begin, end;
+            if (Dim(p) < r)
+            {
+                begin = Dim(p) * (q + 1);
+                end = begin + (q + 1);
+            }
+            else
+            {
+                begin = r * (q + 1) + (Dim(p) - r) * q;
+                end = begin + q;
+            }
+            return {begin, end};
+        };
+
+        int my_coords[3];
+        MPI_Cart_coords(comm, world_rank, 3, my_coords);
+
+        auto [i0, i1] = block_range(g.Nx, my_coords[2], topo.Px());
+        auto [j0, j1] = block_range(g.Ny, my_coords[1], topo.Py());
+        auto [k0, k1] = block_range(g.Nz, my_coords[0], topo.Pz());
+
+        Dim ni = i1 - i0;
+        Dim nj = j1 - j0;
+        Dim nk = k1 - k0;
+        int count = ni * nj * nk;
+
+        std::vector<Real> send_buf(count);
+        int idx = 0;
+        for (Dim k = k0; k < k1; ++k)
+            for (Dim j = j0; j < j1; ++j)
+                for (Dim i = i0; i < i1; ++i)
+                    send_buf[idx++] = field.get(i, j, k);
+
+        MPI_Send(send_buf.data(), count, MPI_FLOAT, 0, 0, comm);
+    }
+
+    // Broadcast complete data from rank 0 to all
+    MPI_Bcast(local_data.data(), total, MPI_FLOAT, 0, comm);
+
+    // Unpack into field
+    for (Dim k = 0; k < g.Nz; ++k)
+        for (Dim j = 0; j < g.Ny; ++j)
+            for (Dim i = 0; i < g.Nx; ++i)
+            {
+                int idx = i + j * g.Nx + k * g.Nx * g.Ny;
+                field.set(i, j, k) = local_data[idx];
+            }
+#endif
+}
+
 static Real compute_err2_velocity_local(const VectorVariable &u_num,
                                         const Grid &g,
                                         Real t,
@@ -564,9 +712,14 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
         // (I - dxx) psi = rhs_p
         // (I - dyy) phi = psi
         // (I - dzz) corr_new = phi
-        psolver.solve_x(rhs_p, psi);
-        psolver.solve_y(psi, phi);
-        psolver.solve_z(phi, corr_new);
+        psolver.solve_x_mpi(rhs_p, psi, topo);
+        sync_scalar_field_full(psi, g, topo);  // Sync psi for Y-solve
+
+        psolver.solve_y_mpi(psi, phi, topo);
+        sync_scalar_field_full(phi, g, topo);  // Sync phi for Z-solve
+
+        psolver.solve_z_mpi(phi, corr_new, topo);
+        sync_scalar_field_full(corr_new, g, topo);  // Sync corr_new for pressure update
 
         // ---- Pressure update at half-step:
         // p^{n+1/2} = p^{n-1/2} + ϕ^{n+1/2}
