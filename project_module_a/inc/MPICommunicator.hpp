@@ -294,6 +294,10 @@ public:
                                    Real left_value, Real right_value,
                                    Real &recv_from_left, Real &recv_from_right);
 
+    void allreduce_interface_rhs_batched(
+        const std::vector<Real> &local_rhs_flat,
+        std::vector<Real> &global_rhs_flat) const;
+
 private:
     int rank_;
     int size_;
@@ -646,6 +650,23 @@ inline void MPICommunicator::allreduce_interface_rhs(const std::vector<Real> &lo
                   MPI_FLOAT, MPI_SUM, get_active_comm(comm_, cart_comm_, world_comm_));
 #else
     global_rhs = local_rhs;
+#endif
+}
+
+inline void MPICommunicator::allreduce_interface_rhs_batched(
+    const std::vector<Real> &local_rhs_flat,
+    std::vector<Real> &global_rhs_flat) const
+{
+#ifdef USE_MPI
+    global_rhs_flat.resize(local_rhs_flat.size());
+
+    MPI_Allreduce(local_rhs_flat.data(),
+                  global_rhs_flat.data(),
+                  static_cast<int>(local_rhs_flat.size()),
+                  MPI_FLOAT, MPI_SUM,
+                  get_active_comm(comm_, cart_comm_, world_comm_));
+#else
+    global_rhs_flat = local_rhs_flat;
 #endif
 }
 

@@ -804,13 +804,159 @@ public:
         Dim k0 = topo.local_k0(Nz);
         Dim k1 = topo.local_k1(Nz);
 
-        for (Dim k = k0; k < k1; ++k)
-            for (Dim j = j0; j < j1; ++j)
+        const int nJ = int(j1 - j0);
+        const int nK = int(k1 - k0);
+        const int nLinesLocal = nJ * nK;
+
+        auto lid_of = [&](Dim j, Dim k) -> int
+        {
+            return int((k - k0) * nJ + (j - j0));
+        };
+
+        auto jk_of_lid = [&](int lid, Dim &j, Dim &k)
+        {
+            k = k0 + Dim(lid / nJ);
+            j = j0 + Dim(lid - int(k - k0) * nJ);
+        };
+
+        // Fill rhs_local (only local_N entries) for a given (j,k,comp)
+        auto build_rhs_local = [&](Dim j, Dim k, int comp, Real *out_local)
+        {
+            for (int il = 0; il < local_N; ++il)
             {
-                solve_line_for_component(j, k, 0, schur_u);
-                solve_line_for_component(j, k, 1, schur_v);
-                solve_line_for_component(j, k, 2, schur_w);
+                const int ig = global_start + il;
+                Real val = 0.0;
+
+                // internal points
+                if (ig >= 1 && ig <= int(N) - 2)
+                {
+                    val = rhs.value(comp, ig, j, k);
+                }
+
+                // left boundary ig==0
+                if (ig == 0)
+                {
+                    const Real y = j * dy;
+                    const Real z = k * dz;
+
+                    if (comp == 0)
+                    {
+                        const Real u0_wall = u_boundary.value<0>(Real(0.0), y, z, t);
+
+                        const Real v_plus = u_boundary.value<1>(Real(0.0), (Real(j) + Real(0.5)) * dy, z, t);
+                        const Real v_minus = u_boundary.value<1>(Real(0.0), (Real(j) - Real(0.5)) * dy, z, t);
+                        const Real dv_dy = (v_plus - v_minus) / dy;
+
+                        const Real w_plus = u_boundary.value<2>(Real(0.0), y, (Real(k) + Real(0.5)) * dz, t);
+                        const Real w_minus = u_boundary.value<2>(Real(0.0), y, (Real(k) - Real(0.5)) * dz, t);
+                        const Real dw_dz = (w_plus - w_minus) / dz;
+
+                        const Real dudx0 = -(dv_dy + dw_dz);
+                        const Real u_half = u0_wall + dudx0 * (dx * Real(0.5));
+                        val = u_half;
+                    }
+                    else if (comp == 1)
+                    {
+                        val = u_boundary.value<1>(Real(0.0), (Real(j) + Real(0.5)) * dy, z, t);
+                    }
+                    else
+                    {
+                        val = u_boundary.value<2>(Real(0.0), y, (Real(k) + Real(0.5)) * dz, t);
+                    }
+                }
+
+                // right boundary ig==N-1
+                if (ig == int(N) - 1)
+                {
+                    const Real y = j * dy;
+                    const Real z = k * dz;
+
+                    if (comp == 0)
+                    {
+                        val = u_boundary.value<0>(Lx, y, z, t);
+                    }
+                    else
+                    {
+                        Real u_ex = 0.0;
+                        if (comp == 1)
+                            u_ex = u_boundary.value<1>(Lx, (Real(j) + Real(0.5)) * dy, z, t);
+                        else
+                            u_ex = u_boundary.value<2>(Lx, y, (Real(k) + Real(0.5)) * dz, t);
+
+                        const Real gammaN = gamma_field.get(N - 1, j, k);
+                        const Real coeff = gammaN / h2;
+                        val = rhs.value(comp, N - 1, j, k) + Real(2.0) * coeff * u_ex;
+                    }
+                }
+
+                out_local[il] = val;
             }
+        };
+
+        auto solve_component_batched = [&](int comp, SchurComplementSolver &schur)
+        {
+            // 1) build list of active (unknown) lines for this component
+            std::vector<int> active_lids;
+            active_lids.reserve(nLinesLocal);
+
+            for (Dim k = k0; k < k1; ++k)
+                for (Dim j = j0; j < j1; ++j)
+                    if (!is_known_face_x(j, k, comp))
+                        active_lids.push_back(lid_of(j, k));
+
+            // 2) fill known lines immediately (no solve)
+            for (Dim k = k0; k < k1; ++k)
+                for (Dim j = j0; j < j1; ++j)
+                    if (is_known_face_x(j, k, comp))
+                        fill_known_face_x(j, k, comp);
+
+            const int nActive = int(active_lids.size());
+            if (nActive == 0)
+                return;
+
+            // 3) allocate flat buffers for batch
+            std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
+            std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
+
+// 4) build rhs_flat in parallel (OpenMP)
+#pragma omp parallel for schedule(static) if (use_omp)
+            for (int p = 0; p < nActive; ++p)
+            {
+                Dim j, k;
+                jk_of_lid(active_lids[p], j, k);
+
+                Real *out = rhs_flat.data() + size_t(p) * size_t(local_N);
+                build_rhs_local(j, k, comp, out);
+            }
+
+            // 5) batched solve: internally does
+            //    phase1-2 (omp), one allreduce, phase4-5 (omp)
+            schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
+
+            // 6) write-back owned part (parallel)
+            const int i0_local = (rank_x == 0) ? 0 : 1;
+
+#pragma omp parallel for schedule(static) if (use_omp)
+            for (int p = 0; p < nActive; ++p)
+            {
+                Dim j, k;
+                jk_of_lid(active_lids[p], j, k);
+
+                const Real *x_local = sol_flat.data() + size_t(p) * size_t(local_N);
+
+                for (int il = i0_local; il < local_N; ++il)
+                {
+                    const int ig = global_start + il;
+                    if (ig < 0 || ig >= int(N))
+                        continue;
+                    solution.set(comp, ig, j, k) = x_local[il];
+                }
+            }
+        };
+
+        solve_component_batched(0, schur_u);
+        solve_component_batched(1, schur_v);
+        solve_component_batched(2, schur_w);
     }
 
     // =============================================================
@@ -1081,19 +1227,180 @@ public:
         };
 
         // ============================================================
-        // 5) Loop locale su (i,k) del process (Px,Pz)
+        // 5) Loop locale su (i,k) del process (Px,Pz)  + BATCHED SOLVE
         // ============================================================
         Dim i0 = topo.local_i0(Nx);
         Dim i1 = topo.local_i1(Nx);
         Dim k0 = topo.local_k0(Nz);
         Dim k1 = topo.local_k1(Nz);
-        for (Dim k = k0; k < k1; ++k)
-            for (Dim i = i0; i < i1; ++i)
+
+        const int nI = int(i1 - i0);
+        const int nK = int(k1 - k0);
+        const int nLinesLocal = nI * nK;
+
+        auto lid_of = [&](Dim i, Dim k) -> int
+        {
+            return int((k - k0) * nI + (i - i0));
+        };
+
+        auto ik_of_lid = [&](int lid, Dim &i, Dim &k)
+        {
+            k = k0 + Dim(lid / nI);
+            i = i0 + Dim(lid - int(k - k0) * nI);
+        };
+
+        // Fill rhs_local (only local_N entries) for a given (i,k,comp)
+        auto build_rhs_local = [&](Dim i, Dim k, int comp, Real *out_local)
+        {
+            for (int il = 0; il < local_N; ++il)
             {
-                solve_line_for_component(i, k, 0, schur_u);
-                solve_line_for_component(i, k, 1, schur_v);
-                solve_line_for_component(i, k, 2, schur_w);
+                const int jg = global_start + il;
+                Real val = 0.0;
+
+                // -------------------------
+                // interior 1..N-2
+                // -------------------------
+                if (jg >= 1 && jg <= int(N) - 2)
+                {
+                    val = rhs.value(comp, i, jg, k);
+                }
+
+                // =========================================================
+                // LEFT boundary j=0 (y=0)
+                // comp==1: incompressibility reconstruction
+                // comp==0,2: Dirichlet
+                // =========================================================
+                if (jg == 0)
+                {
+                    const Real x_u = (Real(i) + Real(0.5)) * dx;
+                    const Real x_vw = Real(i) * dx;
+                    const Real z_u = Real(k) * dz;
+                    const Real z_w = (Real(k) + Real(0.5)) * dz;
+
+                    if (comp == 1)
+                    {
+                        const Real v0_wall = u_boundary.value<1>(x_vw, Real(0.0), z_u, t);
+
+                        const Real u_plus = u_boundary.value<0>(x_u + Real(0.5) * dx, Real(0.0), z_u, t);
+                        const Real u_minus = u_boundary.value<0>(x_u - Real(0.5) * dx, Real(0.0), z_u, t);
+                        const Real du_dx = (u_plus - u_minus) / dx;
+
+                        const Real w_plus = u_boundary.value<2>(x_vw, Real(0.0), z_w + Real(0.5) * dz, t);
+                        const Real w_minus = u_boundary.value<2>(x_vw, Real(0.0), z_w - Real(0.5) * dz, t);
+                        const Real dw_dz = (w_plus - w_minus) / dz;
+
+                        const Real dvdy0 = -(du_dx + dw_dz);
+                        const Real v_half = v0_wall + dvdy0 * (dy * Real(0.5));
+                        val = v_half;
+                    }
+                    else if (comp == 0)
+                    {
+                        val = u_boundary.value<0>(x_u, Real(0.0), z_u, t);
+                    }
+                    else
+                    {
+                        val = u_boundary.value<2>(x_vw, Real(0.0), z_w, t);
+                    }
+                }
+
+                // =========================================================
+                // RIGHT boundary j=N-1 (y=Ly)
+                // comp==1: Dirichlet
+                // comp==0,2: ghost elimination + 2*coeff*u_ex
+                // =========================================================
+                if (jg == int(N) - 1)
+                {
+                    const Real x_u = (Real(i) + Real(0.5)) * dx;
+                    const Real x_vw = Real(i) * dx;
+                    const Real z_u = Real(k) * dz;
+                    const Real z_w = (Real(k) + Real(0.5)) * dz;
+
+                    if (comp == 1)
+                    {
+                        val = u_boundary.value<1>(x_vw, Ly, z_u, t);
+                    }
+                    else
+                    {
+                        const Real gammaN = gamma_field.get(i, N - 1, k);
+                        const Real coeff = gammaN / h2;
+
+                        Real u_ex = 0.0;
+                        if (comp == 0)
+                            u_ex = u_boundary.value<0>(x_u, Ly, z_u, t);
+                        else
+                            u_ex = u_boundary.value<2>(x_vw, Ly, z_w, t);
+
+                        val = rhs.value(comp, i, N - 1, k) + Real(2.0) * coeff * u_ex;
+                    }
+                }
+
+                out_local[il] = val;
             }
+        };
+
+        auto solve_component_batched = [&](int comp, SchurComplementSolver &schur)
+        {
+            // 1) build list of active (unknown) lines for this component
+            std::vector<int> active_lids;
+            active_lids.reserve(nLinesLocal);
+
+            for (Dim k = k0; k < k1; ++k)
+                for (Dim i = i0; i < i1; ++i)
+                    if (!is_known_face_y(i, k, comp))
+                        active_lids.push_back(lid_of(i, k));
+
+            // 2) fill known lines immediately (no solve)
+            for (Dim k = k0; k < k1; ++k)
+                for (Dim i = i0; i < i1; ++i)
+                    if (is_known_face_y(i, k, comp))
+                        fill_known_face_y(i, k, comp);
+
+            const int nActive = int(active_lids.size());
+            if (nActive == 0)
+                return;
+
+            // 3) allocate flat buffers for batch
+            std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
+            std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
+
+            // 4) build rhs_flat in parallel (OpenMP)
+#pragma omp parallel for schedule(static) if (use_omp)
+            for (int p = 0; p < nActive; ++p)
+            {
+                Dim i, k;
+                ik_of_lid(active_lids[p], i, k);
+
+                Real *out = rhs_flat.data() + size_t(p) * size_t(local_N);
+                build_rhs_local(i, k, comp, out);
+            }
+
+            // 5) batched solve
+            schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
+
+            // 6) write-back owned part (avoid duplicate left interface)
+            const int j0_local = (rank_y == 0) ? 0 : 1;
+
+#pragma omp parallel for schedule(static) if (use_omp)
+            for (int p = 0; p < nActive; ++p)
+            {
+                Dim i, k;
+                ik_of_lid(active_lids[p], i, k);
+
+                const Real *x_local = sol_flat.data() + size_t(p) * size_t(local_N);
+
+                for (int il = j0_local; il < local_N; ++il)
+                {
+                    const int jg = global_start + il;
+                    if (jg < 0 || jg >= int(N))
+                        continue;
+                    solution.set(comp, i, jg, k) = x_local[il];
+                }
+            }
+        };
+
+        solve_component_batched(0, schur_u);
+        solve_component_batched(1, schur_v);
+        solve_component_batched(2, schur_w);
     }
 
     // =============================================================
@@ -1368,19 +1675,180 @@ public:
         };
 
         // ============================================================
-        // 5) Loop locale su (i,j) del process (Px,Py)
+        // 5) Loop locale su (i,j) del process (Px,Py)  + BATCHED SOLVE
         // ============================================================
         Dim i0 = topo.local_i0(Nx);
         Dim i1 = topo.local_i1(Nx);
         Dim j0 = topo.local_j0(Ny);
         Dim j1 = topo.local_j1(Ny);
-        for (Dim j = j0; j < j1; ++j)
-            for (Dim i = i0; i < i1; ++i)
+
+        const int nI = int(i1 - i0);
+        const int nJ = int(j1 - j0);
+        const int nLinesLocal = nI * nJ;
+
+        auto lid_of = [&](Dim i, Dim j) -> int
+        {
+            return int((j - j0) * nI + (i - i0));
+        };
+
+        auto ij_of_lid = [&](int lid, Dim &i, Dim &j)
+        {
+            j = j0 + Dim(lid / nI);
+            i = i0 + Dim(lid - int(j - j0) * nI);
+        };
+
+        // Fill rhs_local (only local_N entries) for a given (i,j,comp)
+        auto build_rhs_local = [&](Dim i, Dim j, int comp, Real *out_local)
+        {
+            for (int il = 0; il < local_N; ++il)
             {
-                solve_line_for_component(i, j, 0, schur_u);
-                solve_line_for_component(i, j, 1, schur_v);
-                solve_line_for_component(i, j, 2, schur_w);
+                const int kg = global_start + il;
+                Real val = 0.0;
+
+                // -------------------------
+                // interior 1..N-2
+                // -------------------------
+                if (kg >= 1 && kg <= int(N) - 2)
+                {
+                    val = rhs.value(comp, i, j, kg);
+                }
+
+                // =========================================================
+                // LEFT boundary k=0 (z=0)
+                // comp==2: incompressibility reconstruction
+                // comp==0,1: Dirichlet
+                // =========================================================
+                if (kg == 0)
+                {
+                    const Real x_u = (Real(i) + Real(0.5)) * dx;
+                    const Real x_vw = Real(i) * dx;
+                    const Real y_u = Real(j) * dy;
+                    const Real y_v = (Real(j) + Real(0.5)) * dy;
+
+                    if (comp == 2)
+                    {
+                        const Real w0_wall = u_boundary.value<2>(x_vw, y_u, Real(0.0), t);
+
+                        const Real u_plus = u_boundary.value<0>(x_u + Real(0.5) * dx, y_u, Real(0.0), t);
+                        const Real u_minus = u_boundary.value<0>(x_u - Real(0.5) * dx, y_u, Real(0.0), t);
+                        const Real du_dx = (u_plus - u_minus) / dx;
+
+                        const Real v_plus = u_boundary.value<1>(x_vw, y_v + Real(0.5) * dy, Real(0.0), t);
+                        const Real v_minus = u_boundary.value<1>(x_vw, y_v - Real(0.5) * dy, Real(0.0), t);
+                        const Real dv_dy = (v_plus - v_minus) / dy;
+
+                        const Real dwdz0 = -(du_dx + dv_dy);
+                        const Real w_half = w0_wall + dwdz0 * (dz * Real(0.5));
+                        val = w_half;
+                    }
+                    else if (comp == 0)
+                    {
+                        val = u_boundary.value<0>(x_u, y_u, Real(0.0), t);
+                    }
+                    else
+                    {
+                        val = u_boundary.value<1>(x_vw, y_v, Real(0.0), t);
+                    }
+                }
+
+                // =========================================================
+                // RIGHT boundary k=N-1 (z=Lz)
+                // comp==2: Dirichlet
+                // comp==0,1: ghost elimination + 2*coeff*u_ex
+                // =========================================================
+                if (kg == int(N) - 1)
+                {
+                    const Real x_u = (Real(i) + Real(0.5)) * dx;
+                    const Real x_vw = Real(i) * dx;
+                    const Real y_u = Real(j) * dy;
+                    const Real y_v = (Real(j) + Real(0.5)) * dy;
+
+                    if (comp == 2)
+                    {
+                        val = u_boundary.value<2>(x_vw, y_u, Lz, t);
+                    }
+                    else
+                    {
+                        const Real gammaN = gamma_field.get(i, j, N - 1);
+                        const Real coeff = gammaN / h2;
+
+                        Real u_ex = 0.0;
+                        if (comp == 0)
+                            u_ex = u_boundary.value<0>(x_u, y_u, Lz, t);
+                        else
+                            u_ex = u_boundary.value<1>(x_vw, y_v, Lz, t);
+
+                        val = rhs.value(comp, i, j, N - 1) + Real(2.0) * coeff * u_ex;
+                    }
+                }
+
+                out_local[il] = val;
             }
+        };
+
+        auto solve_component_batched = [&](int comp, SchurComplementSolver &schur)
+        {
+            // 1) build list of active (unknown) lines for this component
+            std::vector<int> active_lids;
+            active_lids.reserve(nLinesLocal);
+
+            for (Dim j = j0; j < j1; ++j)
+                for (Dim i = i0; i < i1; ++i)
+                    if (!is_known_face_z(i, j, comp))
+                        active_lids.push_back(lid_of(i, j));
+
+            // 2) fill known lines immediately (no solve)
+            for (Dim j = j0; j < j1; ++j)
+                for (Dim i = i0; i < i1; ++i)
+                    if (is_known_face_z(i, j, comp))
+                        fill_known_face_z(i, j, comp);
+
+            const int nActive = int(active_lids.size());
+            if (nActive == 0)
+                return;
+
+            // 3) allocate flat buffers for batch
+            std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
+            std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
+
+            // 4) build rhs_flat in parallel (OpenMP)
+#pragma omp parallel for schedule(static) if (use_omp)
+            for (int p = 0; p < nActive; ++p)
+            {
+                Dim i, j;
+                ij_of_lid(active_lids[p], i, j);
+
+                Real *out = rhs_flat.data() + size_t(p) * size_t(local_N);
+                build_rhs_local(i, j, comp, out);
+            }
+
+            // 5) batched solve
+            schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
+
+            // 6) write-back owned part (avoid duplicate left interface)
+            const int k0_local = (rank_z == 0) ? 0 : 1;
+
+#pragma omp parallel for schedule(static) if (use_omp)
+            for (int p = 0; p < nActive; ++p)
+            {
+                Dim i, j;
+                ij_of_lid(active_lids[p], i, j);
+
+                const Real *x_local = sol_flat.data() + size_t(p) * size_t(local_N);
+
+                for (int il = k0_local; il < local_N; ++il)
+                {
+                    const int kg = global_start + il;
+                    if (kg < 0 || kg >= int(N))
+                        continue;
+                    solution.set(comp, i, j, kg) = x_local[il];
+                }
+            }
+        };
+
+        solve_component_batched(0, schur_u);
+        solve_component_batched(1, schur_v);
+        solve_component_batched(2, schur_w);
     }
 };
 #endif // SOLVER_HPP

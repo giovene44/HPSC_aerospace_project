@@ -679,7 +679,7 @@ int main()
     const Real nu = Real(0.1);
     const Real k = Real(0.10);
     const Real t0 = Real(0.15);
-    const Real Tfinal = Real(0.1505);
+    const Real Tfinal = Real(0.151);
 
     test_refine_dx(nu, k, t0, Tfinal);
     // test_refine_dt(nu, k, t0, Tfinal);
