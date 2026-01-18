@@ -5,6 +5,7 @@ set -e
 
 echo "--- Cleaning Build ---"
 make clean
+rm -rf ./Output
 
 echo "--- Compiling Tests ---"
 make -j OMP=1

@@ -126,8 +126,6 @@ public:
     // -------------------------------------------------------------------------
     // Uses centered difference (u_{i+1} - u_{i-1}) / (2*h) for interior points.
     // Uses one-sided difference at boundaries (1st Order).
-
-    // TODO: This should be changed: it needs to shift to the pressure nodes!
     Real first_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k, BoundaryFunctions const &other, Real t) const
     {
 
@@ -310,12 +308,16 @@ public:
         Dim i = index % Nx;
         Dim j = (index / Nx) % Ny;
         Dim k = index / (Nx * Ny);
-        return divergence(i, j, k, other, t);
+        return divergence(i, j, k);
     }
 
-    Real divergence(Dim i, Dim j, Dim k, BoundaryFunctions const &other, Real t) const
+    Real divergence(Dim i, Dim j, Dim k) const
     {
-        return (first_derivative(0, 0, i, j, k, other, t) + first_derivative(1, 1, i, j, k, other, t) + first_derivative(2, 2, i, j, k, other, t));
+        Real dudx = (value(0, i, j, k) - value(0, i - 1, j, k)) / dx;
+        Real dvdy = (value(1, i, j, k) - value(1, i, j - 1, k)) / dy;
+        Real dwdz = (value(2, i, j, k) - value(2, i, j, k - 1)) / dz;
+
+        return dudx + dvdy + dwdz;
     }
 
     VectorVariable &operator+=(const VectorVariable &rhs)

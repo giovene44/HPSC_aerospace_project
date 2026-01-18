@@ -219,7 +219,10 @@ public:
     {
         // Overloaded function to compute gradient for all elements
         ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
-        for (Dim i = 0; i < Nx; ++i)
+
+        gradient.set_all(0.0f); // Initialize to zero
+
+        for (Dim i = 1; i < Nx-1; ++i)
         {
             for (Dim j = 0; j < Ny; ++j)
             {
@@ -236,9 +239,10 @@ public:
     {
         // Overloaded function to compute gradient for all elements
         ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
+        gradient.set_all(0.0f); // Initialize to zero
         for (Dim i = 0; i < Nx; ++i)
         {
-            for (Dim j = 0; j < Ny; ++j)
+            for (Dim j = 1; j < Ny - 1; ++j)
             {
                 for (Dim k = 0; k < Nz; ++k)
                 {
@@ -253,11 +257,12 @@ public:
     {
         // Overloaded function to compute gradient for all elements
         ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
+        gradient.set_all(0.0f); // Initialize to zero
         for (Dim i = 0; i < Nx; ++i)
         {
             for (Dim j = 0; j < Ny; ++j)
             {
-                for (Dim k = 0; k < Nz; ++k)
+                for (Dim k = 1; k < Nz - 1; ++k)
                 {
                     gradient.set(i, j, k) = getGradient_z(i, j, k);
                 }

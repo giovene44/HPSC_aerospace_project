@@ -3,6 +3,7 @@
 #include <cstdlib> // for system()
 #include <utility> // for std::pair
 #include <fstream>
+#include <iomanip>
 
 #include "manufactured_solution_technique.hpp"
 #include "navier_stokes_brinkman.hpp"
@@ -16,7 +17,7 @@
 #include <string>
 #include <functional>
 
-std::pair<Real, Real> single_run(
+std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
     Dim Nx_in, Dim Ny_in, Dim Nz_in, Real dt_in,
     Real dx_in, Real dy_in, Real dz_in, Real T_final,
     const std::string &u_boundary_file,
@@ -30,9 +31,11 @@ std::pair<Real, Real> single_run(
 
     // Retrieve functions
     auto forcing_func = parser.get_forcing_function();
+    auto forcing_func_bf = parser.get_forcing_function_bf();
     auto k_func = parser.get_k_function();
     auto u_exact_func = parser.get_exact_velocity_function();
     auto p_exact_func = parser.get_exact_pressure_function();
+    auto p_exact_bf = parser.get_exact_pressure_function_bf();
 
     // 2) MANUFACTURED SOLUTION
     ManufacturedSolution mms(
@@ -45,10 +48,11 @@ std::pair<Real, Real> single_run(
     NavierStokesBrinkmann nsb_solver(
         Nx_in, Ny_in, Nz_in,
         dt_in, T_final,
-        forcing_func,
+        forcing_func_bf,
         k_func,
         u_boundary_file,
         p_boundary_file,
+        p_exact_bf,
         dx_in, dy_in, dz_in,
         nu);
 
@@ -59,57 +63,21 @@ std::pair<Real, Real> single_run(
     std::cout << "\nSolver run completed.\n";
 
     // 5) COMPUTE ERRORS
-    Real err_u = 0.0, err_p = 0.0;
-    Real norm_u = 0.0, norm_p = 0.0;
-    Real dV = dx_in * dy_in * dz_in;
+
+    T_final += Real(1.5);
 
     std::cout << "Computing Errors at T = " << T_final << "...\n";
+    
 
-    for (Dim k = 0; k < Nz_in; ++k)
-    {
-        for (Dim j = 0; j < Ny_in; ++j)
-        {
-            for (Dim i = 0; i < Nx_in; ++i)
-            {
-                Real x = i * dx_in;
-                Real y = j * dy_in;
-                Real z = k * dz_in;
-
-                auto u_ex_x = mms.velocity(x+dx_in*0.5, y, z, T_final);
-                auto u_ex_y = mms.velocity(x, y+dy_in*0.5, z, T_final);
-                auto u_ex_z = mms.velocity(x, y, z+dz_in*0.5, T_final);
-                std::vector<Real> u_ex = {u_ex_x[0], u_ex_y[1], u_ex_z[2]};
-
-
-                Real p_ex = mms.pressure(x, y, z, T_final);
-
-                Real ux = nsb_solver.velocity_solution.value(0, i, j, k);
-                Real uy = nsb_solver.velocity_solution.value(1, i, j, k);
-                Real uz = nsb_solver.velocity_solution.value(2, i, j, k);
-                Real pN = nsb_solver.pressure_solution.get(i, j, k);
-
-                Real dux = ux - u_ex[0];
-                Real duy = uy - u_ex[1];
-                Real duz = uz - u_ex[2];
-
-                err_u += dux * dux + duy * duy + duz * duz;
-                norm_u += u_ex[0] * u_ex[0] + u_ex[1] * u_ex[1] + u_ex[2] * u_ex[2];
-
-                err_p += (pN - p_ex) * (pN - p_ex);
-                norm_p += p_ex * p_ex;
-
-
-            }
-        }
-    }
-
-    err_u = std::sqrt(err_u * dV);
-    norm_u = std::sqrt(norm_u * dV);
-    err_p = std::sqrt(err_p * dV);
-    norm_p = std::sqrt(norm_p * dV);
-
-    Real rel_err_u = (norm_u > 1e-12) ? err_u / norm_u : err_u;
-    Real rel_err_p = (norm_p > 1e-12) ? err_p / norm_p : err_p;
+    auto errors = nsb_solver.compute_L2_errors(
+        nsb_solver.u_0,
+        nsb_solver.p_0,
+        mms,
+        T_final);
+    Real err_u = errors.first.first;
+    Real err_p = errors.second.first;
+    Real rel_err_u = errors.first.second;
+    Real rel_err_p = errors.second.second;
 
     std::cout << "=============================\n";
     std::cout << "   MMS Accuracy Results      \n";
@@ -120,7 +88,7 @@ std::pair<Real, Real> single_run(
     std::cout << "Pressure L2 relative  = " << rel_err_p << "\n";
     std::cout << "=============================\n";
 
-    return std::make_pair(rel_err_u, rel_err_p);
+    return std::make_pair(std::make_pair(err_u, rel_err_u), std::make_pair(err_p, rel_err_p));
 }
 
 int run_multiple()
@@ -133,8 +101,8 @@ int run_multiple()
         ParseInput &parser = ParseInput::getInstance();
         // The path is relative to the execution directory. Using "./Input/Input.in"
         // assumes the Input folder is a direct subfolder of the execution directory.
+        
         parser.parse_input("./Input/Input.in");
-
         // Get initial values from the parser (used as base for refinement)
         int num_runs = parser.num_runs;
 
@@ -148,6 +116,8 @@ int run_multiple()
         std::vector<Real> dt_values;
         std::vector<Real> errors_u;
         std::vector<Real> errors_p;
+        std::vector<Real> errors_rel_u;
+        std::vector<Real> errors_rel_p;
 
         for (int i = 0; i < num_runs; i++)
         {
@@ -182,8 +152,10 @@ int run_multiple()
             // We track the number of grid points (Nx) and the time step (dt) for plotting
             N_values.emplace_back(Nx_curr);
             dt_values.emplace_back(dt_curr);
-            errors_u.emplace_back(errors.first);
-            errors_p.emplace_back(errors.second);
+            errors_u.emplace_back(errors.first.first);
+            errors_p.emplace_back(errors.second.first);
+            errors_rel_u.emplace_back(errors.first.second);
+            errors_rel_p.emplace_back(errors.second.second);
         }
 
         // ===============================================================
@@ -214,7 +186,41 @@ int run_multiple()
         }
         file_p.close();
 
-        std::system("python ./utils/plot.py ./velocity_error.dat");
+        std::cout << "\n=============================\n";
+        std::cout << "   Convergence Analysis      \n";
+        std::cout << "=============================\n";
+        std::cout << "Nx\t\tdx\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tRate_u\t\tRate_p\n";
+
+        for (size_t i = 0; i < N_values.size(); ++i)
+        {
+            Real dx = parser.DimX / (Real)(N_values[i] - 0.5);
+            Real dx_prev = (i > 0) ? parser.DimX / (Real)(N_values[i-1] - 0.5) : 0.0;
+            Dim nsteps = (Dim)(T_final / dt_values[i]);
+            
+            Real rate_u = (i > 0) ? std::log(errors_u[i-1] / errors_u[i]) / std::log(dx_prev / dx) : 0.0;
+            Real rate_p = (i > 0) ? std::log(errors_p[i-1] / errors_p[i]) / std::log(dx_prev / dx) : 0.0;
+            
+            std::cout << std::fixed << std::setprecision(0)
+              << N_values[i] << "\t" 
+              << std::scientific<<std::setprecision(6)
+              << dx << "\t" 
+              << dt_values[i] << "\t"
+              << nsteps << "\t\t" 
+              << errors_u[i] << "\t\t" 
+              << errors_p[i] << "\t\t"
+              << errors_rel_u[i] << "\t\t"
+              << errors_rel_p[i] << "\t\t"
+              << std::fixed << std::setprecision(2)
+              << rate_u << "\t\t" 
+              << rate_p << "\n";
+        }
+        std::cout << std::defaultfloat;
+        std::cout << "=============================\n";
+
+
+
+        // std::system("python ./utils/plot.py ./velocity_error.dat");
+        // std::system("python ./utils/plot.py ./pressure_error.dat");
 
         return 0;
     }

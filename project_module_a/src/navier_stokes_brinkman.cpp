@@ -13,7 +13,7 @@ Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
 
-    return Real(1.0)+ (dt * nu) / (Real(2.0) * k_val);
+    return (dt * nu) / (Real(2.0) * k_val);
 }
 
 Real NavierStokesBrinkmann::compute_beta(Dim index) const
@@ -60,11 +60,11 @@ void NavierStokesBrinkmann::center_pressure(ScalarVariable &pressure_field)
 Real NavierStokesBrinkmann::compute_gamma(Dim i, Dim j, Dim k) const
 {
     Real k_val = k_field.get(i, j, k);
-    if (std::fabs(k_val) < 1e-12f)
-        k_val = 1e-12f;
+    if (std::fabs(k_val) < Real(1e-12))
+        k_val = Real(1e-12);
 
-    Real beta = 1.0f + (dt * nu) / (2.0f * k_val);
-    return (dt * nu) / (2.0f * beta);
+    Real beta = compute_beta(i, j, k);
+    return (dt * nu / Real(2.0)) / (Real(1.0) + beta);
 }
 
 Real NavierStokesBrinkmann::compute_gamma(Dim index) const
@@ -110,11 +110,6 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
     //
     //   g = f - ∇p + (ν/2)(Dxx*η0 + Dyy*ζ0 + Dzz*u0) - (ν / (2k)) * u0
     // -------------------------------------------------------------------------
-    pressure_predictor = pressure_solution + other_phi;
-
-    gradient_pressure_predictor.set(0) = pressure_predictor.getGradient_x();
-    gradient_pressure_predictor.set(1) = pressure_predictor.getGradient_y();
-    gradient_pressure_predictor.set(2) = pressure_predictor.getGradient_z();
 
     // Define a target index for debugging prints to avoid console flood
     /*
@@ -125,9 +120,11 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
 
     */
 
+    g.set_all(Real(0.0));
+
     for (Dim comp = 0; comp < vector_rhs.size(); ++comp)
     {
-        for (Dim idx = 0; idx < vector_rhs.elements_per_component(); ++idx)
+        for (Dim idx = 0; idx < g.elements_per_component(); ++idx)
         {
             // Convert linear index to 3D coordinates
             Dim i = idx % Nx;
@@ -151,53 +148,43 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // -----------------------------------------------------------------
             // Directional Laplacian terms
             // -----------------------------------------------------------------
-            Real dxx_eta = eta.second_derivative(comp, 0, idx);             // ∂²η/∂x²
-            Real dyy_zeta = zeta.second_derivative(comp, 1, idx);           // ∂²ζ/∂y²
-            Real dzz_u = velocity_solution.second_derivative(comp, 2, idx); // ∂²u/∂z²
+            Real dxx_eta = velocity_solution.second_derivative(comp, 0, idx);  // ∂²η/∂x²
+            Real dyy_zeta = velocity_solution.second_derivative(comp, 1, idx); // ∂²ζ/∂y²
+            Real dzz_u = velocity_solution.second_derivative(comp, 2, idx);    // ∂²u/∂z²
             Real laplacian = dxx_eta + dyy_zeta + dzz_u;
 
             // -----------------------------------------------------------------
             // Physical properties
             // -----------------------------------------------------------------
-            // Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k (unused)
+            Real k_val = std::max(k_field.get(idx), Real(1e-12)); // local permeability k (unused)
 
             // Evaluate forcing function
-            std::vector<Real> forcing_current = forcing_function(x, y, z, t);
-            std::vector<Real> forcing_previous = forcing_function(x, y, z, t - dt);
-            Real forcing = Real(0.5) * (forcing_current[comp] + forcing_previous[comp]);
+            std::vector<Real> forcing_current = {forcing_function.value<0>(x, y, z, t + dt * Real(0.5)),
+                                                 forcing_function.value<1>(x, y, z, t + dt * Real(0.5)),
+                                                 forcing_function.value<2>(x, y, z, t + dt * Real(0.5))};
+            Real forcing = forcing_current[comp];
+
             // Real p_grad = gradient_pressure_predictor.value(comp, idx); // unused
             // Real velocity = velocity_solution.value(comp, idx); // unused
-
-            // =================================================================
-            // DEBUGGING OUTPUT
-            // =================================================================
-            /*
-            if (i == DEBUG_I && j == DEBUG_J && k == DEBUG_K && comp == DEBUG_COMP)
-            {
-                std::cout << "\n--- DEBUG: Time=" << t << ", Index (" << i << "," << j << "," << k << "), Comp=" << comp << " ---\n";
-                std::cout << "k_val (permeability): " << k_val << "\n";
-                std::cout << "Laplacian components:\n";
-                std::cout << "  Dxx_eta: " << dxx_eta << "\n";
-                std::cout << "  Dyy_zeta: " << dyy_zeta << "\n";
-                std::cout << "  Dzz_u: " << dzz_u << "\n";
-                std::cout << "Laplacian sum: " << laplacian << "\n";
-                std::cout << "p_grad: " << p_grad << "\n";
-                std::cout << "Forcing: " << forcing << "\n";
-            }
-
-
-            */
 
             // =================================================================
 
             // -----------------------------------------------------------------
             // Assemble RHS term
             // -----------------------------------------------------------------
+
+            if (i == 0 || j == 0 || k == 0 || i == Nx - 1 || j == Ny - 1 || k == Nz - 1)
+            {
+                // Boundary points: set g to zero (or handle as needed)
+                g.set(comp, idx) = forcing - nu / (Real(2.0) * k) * velocity_solution.value(comp, idx);
+                continue;
+            }
+
             Real g_val =
-                forcing // f
-                - gradient_pressure_predictor.value(comp, idx)                                     // -∇p
-                + Real(0.5) * nu * laplacian // + (ν/2)(∇²η + ∇²ζ + ∇²u)
-                - (nu / (Real(2.0) * k)) * velocity_solution.value(comp, idx) // - (ν/(2k))u₀
+                forcing                                                           // f
+                - gradient_pressure_predictor.value(comp, idx)                    // -∇p
+                + Real(0.5) * nu * laplacian                                      // + (ν/2)(∇²η + ∇²ζ + ∇²u)
+                - (nu / (Real(2.0) * k_val)) * velocity_solution.value(comp, idx) // - (ν/(2k))u₀
                 ;
 
             // =================================================================
@@ -228,74 +215,183 @@ void NavierStokesBrinkmann::compute_vector_xi()
         for (Dim idx = 0; idx < xi.elements_per_component(); ++idx)
         {
             xi.set(comp, idx) =
-                velocity_solution.value(comp, idx) + (dt / compute_beta(idx)) * g.value(comp, idx);
+                (velocity_solution.value(comp, idx) + dt * g.value(comp, idx)) / compute_beta(idx);
         }
     }
 }
 
 void NavierStokesBrinkmann::compute_rhs_pressure(Real t)
 {
-    for (Dim x = 1; x < Nx; ++x)
-    {
-        for (Dim y = 1; y < Ny; ++y)
-        {
-            for (Dim z = 1; z < Nz; ++z)
+
+    rhs.set_all(Real(0.0));
+
+    for (Dim k = 1; k < Nz - 1; ++k)
+        for (Dim j = 1; j < Ny - 1; ++j)
+            for (Dim i = 1; i < Nx - 1; ++i)
             {
-                rhs.set(x, y, z) =
-                    -(Real(1.0) / dt) *
-                    velocity_solution.divergence(x, y, z, u_boundary, t);
+
+                rhs.set(i, j, k) =
+                    Real(-(velocity_solution.divergence(i, j, k)) / dt);
             }
-        }
-    }
+}
 
-    // We Impose div(u)=0 at boundaries:
+static void compute_forcing_analytic(VectorVariable &f,
+                                     Real dx, Real dy, Real dz,
+                                     Dim Nx, Dim Ny, Dim Nz,
+                                     Real t,
+                                     Real nu,
+                                     ScalarVariable k)
+{
+    f.set_all(Real(0.0));
 
-    for (Dim j = 1; j < Ny; ++j)
-    {
-        for (Dim k = 1; k < Nz; ++k)
-        {
-            rhs.set(0, j, k) = 0.0;
-        }
-    }
+    const Real A = std::sin(t);
+    const Real Ap = std::cos(t);
 
-    for (Dim i = 1; i < Nx; ++i)
-    {
-        for (Dim k = 1; k < Nz; ++k)
-        {
-            rhs.set(i, 0, k) = 0.0;
-        }
-    }
+    for (Dim kk = 1; kk < Nz - 1; ++kk)
+        for (Dim jj = 1; jj < Ny - 1; ++jj)
+            for (Dim ii = 1; ii < Nx - 1; ++ii)
+            {
+                // --------------------------------------------------
+                // Component 0: u at (x+dx/2, y, z)
+                // u = sin(t)*sin(x)*sin(y)*sin(z)
+                // --------------------------------------------------
+                {
+                    const Real x = (Real(ii) + Real(0.5)) * dx;
+                    const Real y = Real(jj) * dy;
+                    const Real z = Real(kk) * dz;
 
-    for (Dim i = 1; i < Nx; ++i)
-    {
-        for (Dim j = 1; j < Ny; ++j)
-        {
-            rhs.set(i, j, 0) = 0.0;
-        }
-    }
+                    const Real sx = std::sin(x), cx = std::cos(x);
+                    const Real sy = std::sin(y), cy = std::cos(y);
+                    const Real sz = std::sin(z), cz = std::cos(z);
 
-    rhs.set(0, 0, 0) = 0.0;
+                    const Real u = A * sx * sy * sz;
+                    const Real ut = Ap * sx * sy * sz;
 
-    // edge (x,0,0):
-    for (Dim i = 1; i < Nx; ++i)
-    {
-        rhs.set(i, 0, 0) = 0.0;
-    }
+                    // Laplacian: d²u/dx² + d²u/dy² + d²u/dz²
+                    const Real lap_u = -A * sx * sy * sz - A * sx * sy * sz - A * sx * sy * sz;
 
-    // edge (0,y,0):
-    for (Dim j = 1; j < Ny; ++j)
-    {
-        rhs.set(0, j, 0) = 0.0;
-    }
-    // edge (0,0,z):
-    for (Dim k = 1; k < Nz; ++k)
-    {
-        rhs.set(0, 0, k) = 0.0;
-    }
+                    // Pressure gradient: dp/dx for p = sin(t)*cos(x)*cos(y)*cos(z)
+                    const Real dp_dx = -std::sin(t) * std::sin(x) * std::cos(y) * std::cos(z);
+
+                    f.set(0, ii, jj, kk) = ut - nu * lap_u + (nu / k.get(ii, jj, kk)) * u + dp_dx;
+                }
+
+                // --------------------------------------------------
+                // Component 1: v at (x, y+dy/2, z)
+                // v = sin(t)*cos(x)*cos(y)*cos(z)
+                // --------------------------------------------------
+                {
+                    const Real x = Real(ii) * dx;
+                    const Real y = (Real(jj) + Real(0.5)) * dy;
+                    const Real z = Real(kk) * dz;
+
+                    const Real sx = std::sin(x), cx = std::cos(x);
+                    const Real sy = std::sin(y), cy = std::cos(y);
+                    const Real sz = std::sin(z), cz = std::cos(z);
+
+                    const Real v = A * cx * cy * cz;
+                    const Real vt = Ap * cx * cy * cz;
+
+                    // Laplacian
+                    const Real lap_v = -A * cx * cy * cz - A * cx * cy * cz - A * cx * cy * cz;
+
+                    // dp/dy = -sin(t)*cos(x)*sin(y)*cos(z)
+                    const Real dp_dy = -std::sin(t) * std::cos(x) * std::sin(y) * std::cos(z);
+                    
+                    f.set(1, ii, jj, kk) = vt - nu * lap_v + (nu / k.get(ii, jj, kk)) * v + dp_dy;
+                }
+
+                // --------------------------------------------------
+                // Component 2: w at (x, y, z+dz/2)
+                // w = sin(t)*cos(x)*sin(y)*(cos(z)+sin(z))
+                // --------------------------------------------------
+                {
+                    const Real x = Real(ii) * dx;
+                    const Real y = Real(jj) * dy;
+                    const Real z = (Real(kk) + Real(0.5)) * dz;
+
+                    const Real sx = std::sin(x), cx = std::cos(x);
+                    const Real sy = std::sin(y), cy = std::cos(y);
+                    const Real sz = std::sin(z), cz = std::cos(z);
+
+                    const Real w = A * cx * sy * (cz + sz);
+                    const Real wt = Ap * cx * sy * (cz + sz);
+
+                    // Laplacian
+                    const Real lap_w = -A * cx * sy * (cz + sz) - A * cx * sy * (cz + sz) - A * cx * sy * (cz + sz);
+
+                    // dp/dz = -sin(t)*cos(x)*cos(y)*sin(z)
+                    const Real dp_dz = -std::sin(t) * std::cos(x) * std::cos(y) * std::sin(z);
+
+                    f.set(2, ii, jj, kk) = wt - nu * lap_w + (nu / k.get(ii, jj, kk)) * w + dp_dz;
+                }
+            }
+}
+
+static void build_rhs(VectorVariable &rhs,
+                      const VectorVariable &velocity_solution,
+                      const ScalarVariable &p_star, // predictor pressure at cell centers
+                      const VectorVariable &f_half,
+                      Real dx, Real dy, Real dz,
+                      Dim Nx, Dim Ny, Dim Nz,
+                      Real dt,
+                      Real nu,
+                      const ScalarVariable &k)
+{
+    for (int c = 0; c < 3; ++c)
+        for (Dim kk = 0; kk < Nz; ++kk)
+            for (Dim jj = 0; jj < Ny; ++jj)
+                for (Dim ii = 0; ii < Nx; ++ii)
+                {
+                    const Real beta = (nu * dt) / (Real(2.0) * k.get(ii, jj, kk));
+                    const Real scale = Real(1.0) / (Real(1.0) + beta);
+                    const Real diff = (nu * dt) / Real(2.0);
+
+
+                    Real val = velocity_solution.value(c, ii, jj, kk) + dt * f_half.value(c, ii, jj, kk) - beta * velocity_solution.value(c, ii, jj, kk);
+
+                    const bool interior =
+                        (ii > 0 && ii < Nx - 1 &&
+                         jj > 0 && jj < Ny - 1 &&
+                         kk > 0 && kk < Nz - 1);
+                    if (interior)
+                    {
+                        // Explicit CN half diffusion: + (nu dt/2) Lap(u^n)
+                        const Real u0 = velocity_solution.value(c, ii, jj, kk);
+
+                        const Real uxx =
+                            (velocity_solution.value(c, ii + 1, jj, kk) - Real(2.0) * u0 + velocity_solution.value(c, ii - 1, jj, kk)) / (dx * dx);
+                        const Real uyy =
+                            (velocity_solution.value(c, ii, jj + 1, kk) - Real(2.0) * u0 + velocity_solution.value(c, ii, jj - 1, kk)) / (dy * dy);
+                        const Real uzz =
+                            (velocity_solution.value(c, ii, jj, kk + 1) - Real(2.0) * u0 + velocity_solution.value(c, ii, jj, kk - 1)) / (dz * dz);
+
+                        val += diff * (uxx + uyy + uzz);
+
+                        // Predictor pressure gradient at staggered locations (MAC-consistent one-sided):
+                        // u-face: dp/dx ≈ (p(i+1)-p(i))/dx
+                        // v-face: dp/dy ≈ (p(j+1)-p(j))/dy
+                        // w-face: dp/dz ≈ (p(k+1)-p(k))/dz
+                        const Real dp_dx = (p_star.get(ii + 1, jj, kk) - p_star.get(ii, jj, kk)) / dx;
+                        const Real dp_dy = (p_star.get(ii, jj + 1, kk) - p_star.get(ii, jj, kk)) / dy;
+                        const Real dp_dz = (p_star.get(ii, jj, kk + 1) - p_star.get(ii, jj, kk)) / dz;
+
+                        if (c == 0)
+                            val -= dt * dp_dx;
+                        else if (c == 1)
+                            val -= dt * dp_dy;
+                        else
+                            val -= dt * dp_dz;
+                    }
+
+                    rhs.set(c, ii, jj, kk) = val * scale;
+                }
 }
 
 void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
-{
+{   
+    Real t = Real(1.5);
+
     (void)mms; // Unused parameter
     DimensionsHandlerScalar x_scalar_handler(Nx, Ny, Nz, dx);
     DimensionsHandlerScalar y_scalar_handler(Ny, Nx, Nz, dy);
@@ -305,76 +401,86 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
     DimensionsHandlerVector y_vector_handler(Ny, Nx, Nz, 1, 0, 2, dy);
     DimensionsHandlerVector z_vector_handler(Nz, Nx, Ny, 2, 0, 1, dz);
 
+    VectorVariable f_half(Nx, Ny, Nz, dx, dy, dz);
+
     // Initialize
-    velocity_solution.set_all(u_boundary, Real(0.0));
-    pressure_solution.set_all(p_boundary, Real(0.0));
+    velocity_solution.set_all(u_boundary, t);
+    pressure_solution.set_all(p_exact, t);
 
     // Init intermediate vars to avoid junk values
     xi = eta = zeta = velocity_solution;
-    psi = phi = other_phi = pressure_solution;
+    other_phi = phi = pressure_solution;
+    // other_phi.set_all(Real(0.0));
 
     velocity_time_series.clear();
     pressure_time_series.clear();
     velocity_time_series.emplace_back(velocity_solution);
     pressure_time_series.emplace_back(pressure_solution);
 
-    Dim total_steps = static_cast<int>(T / dt);
 
+    // write_pressure_vtk("./Output/pressure_N"+std::to_string(Nx) +"_step"+ std::to_string(0) + ".vtk");
+
+    Dim nsteps = static_cast<Dim>(std::ceil(T / dt));
     // --- Time Stepping Loop ---
-    for (Dim step = 1; step <= total_steps; ++step)
+
+    // ScalarVariable corr_prev(Nx, Ny, Nz, dx, dy, dz);
+    ScalarVariable div_u(Nx, Ny, Nz, dx, dy, dz);
+    VectorVariable u_tmp(Nx, Ny, Nz, dx, dy, dz);
+    VectorVariable u_np1(Nx, Ny, Nz, dx, dy, dz);
+
+    for (int n = 0; n < nsteps; ++n)
     {
-        // 1. Momentum Predictor Step (Calculate u*)
-        // ------------------------------------------
+        const Real t_np1 = t + dt;
+        const Real t_half = t + dt / Real(2.0);
 
-        Real t = step * dt;
+        pressure_predictor = pressure_solution + other_phi;
 
-        compute_vector_g(t);
-        compute_vector_xi();
+        // ---- Momentum step (ADI) with predictor pressure
+        velocity_solver.set_t(t_np1);
 
-        // X-Sweep
-        vector_rhs = xi - eta.A_operator(0, 0, gamma_field);
-        velocity_solver.solve<0>(vector_rhs, eta, x_vector_handler, true);
-        // eta += vector_intermediate_solution;
+        compute_forcing_analytic(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field);
 
-        // Y-Sweep
-        vector_rhs = eta - zeta.A_operator(1, 1, gamma_field);
-        velocity_solver.solve<1>(vector_rhs, zeta, y_vector_handler, true);
-        // zeta += vector_intermediate_solution;
 
-        // Z-Sweep
-        vector_rhs = zeta - velocity_solution.A_operator(2, 2, gamma_field);
-        velocity_solver.solve<2>(vector_rhs, velocity_solution, z_vector_handler, true);
-
-        // Update to Intermediate Velocity u*
-        // velocity_solution += vector_intermediate_solution;
-
-        // 2. Pressure Projection Step (Calculate phi)
-        // -------------------------------------------
+        // RHS uses (pressure_solution - ∇pressure_predictor) in an Auteri-consistent way
+        build_rhs(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field);
         
-        compute_rhs_pressure(t); // RHS = -div(u*) / dt
+        // compute_vector_g(t_half);
+        // compute_vector_xi();
 
-        // Solve Poisson Equation: Laplacian(phi) = RHS
+        vector_rhs = xi  - eta.A_operator(0,0,gamma_field);
+        velocity_solver.solve<0>(vector_rhs, eta, x_vector_handler);
+
+        vector_rhs = eta - zeta.A_operator(1,1,gamma_field);
+
+        velocity_solver.solve_y_only(vector_rhs, zeta, false);
+
+
+        vector_rhs = zeta - xi.A_operator(2,2,gamma_field);
+        velocity_solver.solve_z_only(vector_rhs, velocity_solution, false);
+
+        // ---- Pressure correction (space-factored operator A)
+        // rhs_p = -(1/dt) div(u^{n+1})
+
+        compute_rhs_pressure(t_np1);
+
+        pressure_solver.set_t(t_np1);
+
+        // (I - dxx) psi = rhs_p
+        // (I - dyy) phi = psi
+        // (I - dzz) corr_new = phi
         pressure_solver.solve_pressure<0>(rhs, psi, x_scalar_handler);
+
         pressure_solver.solve_pressure<1>(psi, phi, y_scalar_handler);
+
         pressure_solver.solve_pressure<2>(phi, other_phi, z_scalar_handler);
 
-        // 3. Update Fields
-        // -------------------------------------------
+        // ---- Pressure update at half-step (Auteri):
+        // p^{n+1/2} = p^{n-1/2} + ϕ^{n+1/2}
 
-        // Update Pressure: p^{n+1} = phi (assuming phi is total pressure from BCs)
         pressure_solution += other_phi;
-        
-        velocity_solver.advance_time();
-        velocity_time_series.emplace_back(velocity_solution);
 
-        // if (int(t / dt) % 10 == 0)
-        // {
-        std::cout << "Time: " << t << " / " << T << "\n";
-        // }
 
-        // pressure_time_series.emplace_back(pressure_solution);
-
-        // write_velocity_vtk("./Output/velocity_N"+std::to_string(Nx) +"_step"+ std::to_string(step) + ".vtk");
+        t = t_np1;
     }
 }
 
@@ -406,6 +512,38 @@ void NavierStokesBrinkmann::write_velocity_vtk(const std::string &filename) cons
         Real v = velocity_solution.value(1, idx);
         Real w = velocity_solution.value(2, idx);
         file << u << " " << v << " " << w << "\n";
+    }
+
+    file.close();
+}
+
+void NavierStokesBrinkmann::write_pressure_vtk(const std::string &filename) const
+{
+    // Ensure the output directory exists
+    std::filesystem::path filepath(filename);
+    std::filesystem::create_directories(filepath.parent_path());
+
+    std::ofstream file(filename);
+    if (!file.is_open())
+        throw std::runtime_error("Cannot open file: " + filename);
+
+    // VTK header
+    file << "# vtk DataFile Version 3.0\n";
+    file << "Pressure field\n";
+    file << "ASCII\n";
+    file << "DATASET STRUCTURED_POINTS\n";
+    file << "DIMENSIONS " << Nx << " " << Ny << " " << Nz << "\n";
+    file << "SPACING " << dx << " " << dy << " " << dz << "\n";
+    file << "ORIGIN 0 0 0\n";
+    file << "POINT_DATA " << (Nx * Ny * Nz) << "\n";
+    file << "SCALARS pressure float 1\n";
+    file << "LOOKUP_TABLE default\n";
+
+    // Write pressure data
+    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+    {
+        Real p = pressure_solution.get(idx);
+        file << p << "\n";
     }
 
     file.close();

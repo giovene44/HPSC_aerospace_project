@@ -1,4 +1,5 @@
 project_module_a/bin/
+project_module_a/obj/
 project_module_a/build/
 project_module_a/report/slides/presentation.toc
 project_module_a/report/slides/presentation.synctex.gz
@@ -18,3 +19,6 @@ project_module_a/error_vs_dt.dat
 project_module_a/Output/
 project_module_a/callgrind.out.*
 .DS_Store
+project_module_a/log
+project_module_a/log_main
+project_module_a/log_test

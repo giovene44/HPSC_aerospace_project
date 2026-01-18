@@ -27,10 +27,11 @@ public:
 public:
     NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz,
                           const Real dt, const Real T,
-                          std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_func,
+                          BoundaryFunctions forcing_func,
                           std::function<Real(Real, Real, Real)> k_func,
                           std::string u_boundary_file,
                           std::string p_boundary_file,
+                          BoundaryFunctions p_exact,
                           const Real dx, const Real dy, const Real dz,
                           const Real nu)
         : // ============================
@@ -65,6 +66,7 @@ public:
 
           p_boundary(),
           u_boundary(),
+          p_exact(p_exact),
 
           // ============================
           // VECTOR LINEAR SOLVER VARIABLES
@@ -96,27 +98,30 @@ public:
         // --- Initialize all fields ---
 
         // // Initialize intermediate fields to zero (CRITICAL FIX)
-        // g.set_all(0.0f);
+        g.set_all(0.0f);
 
-        // vector_rhs.set_all(0.0f);
-        // vector_intermediate_solution.set_all(0.0f);
-        // xi.set_all(0.0f);
-        // eta.set_all(0.0f);
-        // zeta.set_all(0.0f);
-        // pressure_predictor.set_all(0.0f);
-        // rhs.set_all(0.0f);
-        // psi.set_all(0.0f);
-        // phi.set_all(0.0f);
+        vector_rhs.set_all(0.0f);
+        vector_intermediate_solution.set_all(0.0f);
+        xi.set_all(0.0f);
+        eta.set_all(0.0f);
+        zeta.set_all(0.0f);
+        pressure_predictor.set_all(Real(0.0));
+        rhs.set_all(0.0f);
+        psi.set_all(0.0f);
+        phi.set_all(0.0f);
         // other_phi.set_all(0.0f);
 
-        // // Final solution fields are set to initial conditions in solve()
-        // velocity_solution.set_all(0.0f);
-        // pressure_solution.set_all(0.0f);
+        // Final solution fields are set to initial conditions in solve()
+        velocity_solution.set_all(0.0f);
+        pressure_solution.set_all(0.0f);
 
         u_boundary.setParsing(u_boundary_file);
         p_boundary.setParsing(p_boundary_file);
         initialize_k_field();
         initialize_gamma_field();
+        velocity_solver.u_boundary = u_boundary;
+        pressure_solver.p_boundary = p_boundary;
+        velocity_solver.gamma_field = gamma_field;
     }
     // initialization methods:
     void initialize_gamma_field();
@@ -146,167 +151,161 @@ public:
      * @param t     Time at which to evaluate the error
      * @return std::pair<Real, Real> {Relative Error Velocity, Relative Error Pressure}
      */
-    std::pair<Real, Real> compute_L2_errors(
+    std::pair<std::pair<Real, Real>, std::pair<Real, Real>> compute_L2_errors(
         const VectorVariable &u_num,
         const ScalarVariable &p_num,
         const ManufacturedSolution &mms,
         Real t)
     {
 
-        // 2. Calculate Volume Element
-        Real dV = dx * dy * dz;
-
         Real err_u = 0.0, err_p = 0.0;
         Real norm_u = 0.0, norm_p = 0.0;
+        Real dV = dx * dy * dz;
 
-        // 3. Loop over grid
         for (Dim k = 0; k < Nz; ++k)
         {
             for (Dim j = 0; j < Ny; ++j)
             {
                 for (Dim i = 0; i < Nx; ++i)
                 {
-                    // Physical Coordinates
                     Real x = i * dx;
                     Real y = j * dy;
                     Real z = k * dz;
 
-                    // --- Exact Solution ---
-                    std::vector<Real> u_ex = mms.velocity(x, y, z, t);
-                    Real p_ex = mms.pressure(x, y, z, t);
+                    auto u_ex_x = u_boundary.value<0>(x + dx * 0.5, y, z, t);
+                    auto u_ex_y = u_boundary.value<1>(x, y + dy * 0.5, z, t);
+                    auto u_ex_z = u_boundary.value<2>(x, y, z + dz * 0.5, t);
+                    std::vector<Real> u_ex = {u_ex_x, u_ex_y, u_ex_z};
 
-                    // --- Numerical Solution ---
-                    Real u_num_x = u_num.value(0, i, j, k);
-                    Real u_num_y = u_num.value(1, i, j, k);
-                    Real u_num_z = u_num.value(2, i, j, k);
-                    Real p_val = p_num.get(i, j, k);
+                    Real p_ex = p_exact.value(x, y, z, t);
+                    Real ux = velocity_solution.value(0, i, j, k);
+                    Real uy = velocity_solution.value(1, i, j, k);
+                    Real uz = velocity_solution.value(2, i, j, k);
+                    Real pN = pressure_solution.get(i, j, k);
 
-                    // --- Velocity Error Accumulation ---
-                    Real dux = u_num_x - u_ex[0];
-                    Real duy = u_num_y - u_ex[1];
-                    Real duz = u_num_z - u_ex[2];
+                    Real dux = ux - u_ex[0];
+                    Real duy = uy - u_ex[1];
+                    Real duz = uz - u_ex[2];
 
                     err_u += dux * dux + duy * duy + duz * duz;
                     norm_u += u_ex[0] * u_ex[0] + u_ex[1] * u_ex[1] + u_ex[2] * u_ex[2];
 
-                    // --- Pressure Error Accumulation ---
-                    err_p += (p_val - p_ex) * (p_val - p_ex);
+                    err_p += (pN - p_ex) * (pN - p_ex);
                     norm_p += p_ex * p_ex;
                 }
             }
         }
 
-        // 4. Scale by Volume (L2 Integral approximation)
         err_u = std::sqrt(err_u * dV);
         norm_u = std::sqrt(norm_u * dV);
         err_p = std::sqrt(err_p * dV);
         norm_p = std::sqrt(norm_p * dV);
 
-        // 5. Compute Relative Errors
-        // If norm is effectively zero (e.g. at t=0), return the absolute error or 0
-        Real rel_err_u = (norm_u > 1e-15) ? err_u / norm_u : 0.0;
-        Real rel_err_p = (norm_p > 1e-15) ? err_p / norm_p : 0.0;
+        Real rel_err_u = (norm_u > 1e-12) ? err_u / norm_u : err_u;
+        Real rel_err_p = (norm_p > 1e-12) ? err_p / norm_p : err_p;
 
         // 6. PRINT DETAILED DIAGNOSTICS (Crucial for debugging)
-        std::cout << "------------------------------------------\n";
-        std::cout << " ERRORS at t = " << t << "\n";
-        std::cout << " Velocity -> Abs: " << err_u << " | Ref Norm: " << norm_u << " | Rel: " << rel_err_u << "\n";
-        std::cout << " Pressure -> Abs: " << err_p << " | Ref Norm: " << norm_p << " | Rel: " << rel_err_p << "\n";
-        std::cout << "------------------------------------------\n";
+        // std::cout << "------------------------------------------\n";
+        // std::cout << " ERRORS at t = " << t << "\n";
+        // std::cout << " Velocity -> Abs: " << err_u << " | Ref Norm: " << norm_u << " | Rel: " << rel_err_u << "\n";
+        // std::cout << " Pressure -> Abs: " << err_p << " | Ref Norm: " << norm_p << " | Rel: " << rel_err_p << "\n";
+        // std::cout << "------------------------------------------\n";
 
-        return {rel_err_u, rel_err_p};
+        return {{err_u, rel_err_u}, {err_p, rel_err_p}};
     }
 
-    /**
-     * @brief Computes the L2 relative error ONLY on the boundary nodes.
-     * Useful to verify if Dirichlet Boundary Conditions are being respected/overwritten.
-     */
-    std::pair<Real, Real> compute_Boundary_L2_errors(
-        const VectorVariable &u_num,
-        const ScalarVariable &p_num,
-        const ManufacturedSolution &mms,
-        Real t)
-    {
-        // 1. Get Grid Dimensions
-        Dim Nx = u_num.get_Nx();
-        Dim Ny = u_num.get_Ny();
-        Dim Nz = u_num.get_Nz();
+    // /**
+    //  * @brief Computes the L2 relative error ONLY on the boundary nodes.
+    //  * Useful to verify if Dirichlet Boundary Conditions are being respected/overwritten.
+    //  */
+    // std::pair<std::pair<Real, Real>, std::pair<Real, Real>> compute_Boundary_L2_errors(
+    //     const VectorVariable &u_num,
+    //     const ScalarVariable &p_num,
+    //     const ManufacturedSolution &mms,
+    //     Real t)
+    // {
+    //     // 1. Get Grid Dimensions
+    //     Dim Nx = u_num.get_Nx();
+    //     Dim Ny = u_num.get_Ny();
+    //     Dim Nz = u_num.get_Nz();
 
-        // 2. Calculate Volume Element
-        // Note: Even on boundary, we treat the node as representing a volume element for consistency
-        Real dV = dx * dy * dz;
+    //     // 2. Calculate Volume Element
+    //     // Note: Even on boundary, we treat the node as representing a volume element for consistency
+    //     Real dV = dx * dy * dz;
 
-        Real err_u = 0.0, err_p = 0.0;
-        Real norm_u = 0.0, norm_p = 0.0;
+    //     Real err_u = 0.0, err_p = 0.0;
+    //     Real norm_u = 0.0, norm_p = 0.0;
 
-        // 3. Loop over grid
-        for (Dim k = 0; k < Nz; ++k)
-        {
-            for (Dim j = 0; j < Ny; ++j)
-            {
-                for (Dim i = 0; i < Nx; ++i)
-                {
-                    // // --- FILTER: ONLY PROCESS BOUNDARY NODES ---
-                    // bool is_boundary = (i == 0 || i == Nx - 1 ||
-                    //                     j == 0 || j == Ny - 1 ||
-                    //                     k == 0 || k == Nz - 1);
+    //     // 3. Loop over grid
+    //     for (Dim k = 0; k < Nz; ++k)
+    //     {
+    //         for (Dim j = 0; j < Ny; ++j)
+    //         {
+    //             for (Dim i = 0; i < Nx; ++i)
+    //             {
+    //                 // // --- FILTER: ONLY PROCESS BOUNDARY NODES ---
+    //                 // bool is_boundary = (i == 0 || i == Nx - 1 ||
+    //                 //                     j == 0 || j == Ny - 1 ||
+    //                 //                     k == 0 || k == Nz - 1);
 
-                    // if (!is_boundary)
-                    //     continue; // Skip internal nodes
+    //                 // if (!is_boundary)
+    //                 //     continue; // Skip internal nodes
 
-                    // boundary_node_count++;
+    //                 // boundary_node_count++;
 
-                    // Physical Coordinates
-                    Real x = i * dx;
-                    Real y = j * dy;
-                    Real z = k * dz;
+    //                 // Physical Coordinates
+    //                 Real x = i * dx;
+    //                 Real y = j * dy;
+    //                 Real z = k * dz;
 
-                    // --- Exact Solution ---
-                    std::vector<Real> u_ex = mms.velocity(x, y, z, t);
-                    Real p_ex = mms.pressure(x, y, z, t);
+    //                 // --- Exact Solution ---
+    //                 std::vector<Real> u_ex = mms.velocity(x, y, z, t);
+    //                 Real p_ex = mms.pressure(x, y, z, t);
 
-                    // --- Numerical Solution ---
-                    Real u_num_x = u_num.value(0, i, j, k);
-                    Real u_num_y = u_num.value(1, i, j, k);
-                    Real u_num_z = u_num.value(2, i, j, k);
-                    Real p_val = p_num.get(i, j, k);
+    //                 // --- Numerical Solution ---
+    //                 Real u_num_x = u_num.value(0, i, j, k);
+    //                 Real u_num_y = u_num.value(1, i, j, k);
+    //                 Real u_num_z = u_num.value(2, i, j, k);
+    //                 Real p_val = p_num.get(i, j, k);
 
-                    // --- Velocity Error Accumulation ---
-                    Real dux = u_num_x - u_ex[0];
-                    Real duy = u_num_y - u_ex[1];
-                    Real duz = u_num_z - u_ex[2];
+    //                 // --- Velocity Error Accumulation ---
+    //                 Real dux = u_num_x - u_ex[0];
+    //                 Real duy = u_num_y - u_ex[1];
+    //                 Real duz = u_num_z - u_ex[2];
 
-                    err_u += dux * dux + duy * duy + duz * duz;
-                    norm_u += u_ex[0] * u_ex[0] + u_ex[1] * u_ex[1] + u_ex[2] * u_ex[2];
+    //                 err_u += dux * dux + duy * duy + duz * duz;
+    //                 norm_u += u_ex[0] * u_ex[0] + u_ex[1] * u_ex[1] + u_ex[2] * u_ex[2];
 
-                    // --- Pressure Error Accumulation ---
-                    err_p += (p_val - p_ex) * (p_val - p_ex);
-                    norm_p += p_ex * p_ex;
-                }
-            }
-        }
+    //                 // --- Pressure Error Accumulation ---
+    //                 err_p += (p_val - p_ex) * (p_val - p_ex);
+    //                 norm_p += p_ex * p_ex;
+    //             }
+    //         }
+    //     }
 
-        // 4. Scale and Root
-        err_u = std::sqrt(err_u * dV);
-        norm_u = std::sqrt(norm_u * dV);
-        err_p = std::sqrt(err_p * dV);
-        norm_p = std::sqrt(norm_p * dV);
+    //     // 4. Scale and Root
+    //     err_u = std::sqrt(err_u * dV);
+    //     norm_u = std::sqrt(norm_u * dV);
+    //     err_p = std::sqrt(err_p * dV);
+    //     norm_p = std::sqrt(norm_p * dV);
 
-        // 5. Compute Relative Errors
-        Real rel_err_u = (norm_u > 1e-15) ? err_u / norm_u : 0.0;
-        Real rel_err_p = (norm_p > 1e-15) ? err_p / norm_p : 0.0;
+    //     // 5. Compute Relative Errors
+    //     Real rel_err_u = (norm_u > 1e-15) ? err_u / norm_u : 0.0;
+    //     Real rel_err_p = (norm_p > 1e-15) ? err_p / norm_p : 0.0;
 
-        // 6. PRINT DIAGNOSTICS
-        // std::cout << "------------------------------------------\n";
-        // std::cout << " BOUNDARY ERRORS at t = " << t << " (Nodes: " << boundary_node_count << ")\n";
-        // std::cout << " Velocity -> Abs: " << err_u << " | Rel: " << rel_err_u << "\n";
-        // std::cout << " Pressure -> Abs: " << err_p << " | Rel: " << rel_err_p << "\n";
-        // std::cout << "------------------------------------------\n";
+    //     // 6. PRINT DIAGNOSTICS
+    //     // std::cout << "------------------------------------------\n";
+    //     // std::cout << " BOUNDARY ERRORS at t = " << t << " (Nodes: " << boundary_node_count << ")\n";
+    //     std::cout << " Velocity -> Abs: " << err_u << " | Rel: " << rel_err_u << "\n";
+    //     std::cout << " Pressure -> Abs: " << err_p << " | Rel: " << rel_err_p << "\n";
+    //     // std::cout << "------------------------------------------\n";
 
-        return {rel_err_u, rel_err_p};
-    };
+    //     // return {rel_err_u, rel_err_p};
+    //     return {err_u, err_p};
+    // };
 
     void write_velocity_vtk(const std::string &filename) const;
+    void write_pressure_vtk(const std::string &filename) const;
 
     // ============================================================================
     // GRID, MATERIAL, AND TIME INFORMATION
@@ -336,13 +335,14 @@ public:
     // ============================================================================
     VectorVariable u_0;                                                        // Velocity field
     ScalarVariable p_0;                                                        // Pressure field
-    std::function<std::vector<Real>(Real, Real, Real, Real)> forcing_function; // Forcing term (can vary in space)
+    BoundaryFunctions forcing_function; // Forcing term (can vary in space)
     std::function<Real(Real, Real, Real)> k_function;                          // Forcing term (can vary in space)
     Real nu;                                                                   // Kinematic viscosity (can vary in space)
     ScalarVariable k_field;                                                    // Brinkman permeability or resistance term
     ScalarVariable gamma_field;                                                // Gamma field for Brinkman term
     BoundaryFunctions p_boundary;                                              // Boundary condition for pressure
     BoundaryFunctions u_boundary;                                              // Boundary condition for velocity
+    BoundaryFunctions p_exact;                                                 // Exact pressure for MMS
 
     // ============================================================================
     // VECTOR LINEAR SOLVER VARIABLES (MOMENTUM EQUATION)
