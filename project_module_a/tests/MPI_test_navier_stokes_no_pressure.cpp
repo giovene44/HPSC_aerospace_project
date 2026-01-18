@@ -712,18 +712,87 @@ void test_refine_dt(Real nu, Real k, Real t0, Real Tfinal, const MPITopology3D &
         { return r.dt; }, topo);
 }
 
+void test_strong_scalability(Real nu, Real k, Real t0, Real Tfinal, const MPITopology3D &topo)
+{
+    std::cout << std::scientific << std::setprecision(12);
+
+    // N doubles => dx halves
+    std::vector<Dim> Ns = {160};
+
+    // dt is fixed (only later adjusted slightly inside run_mms_velocity_case to hit Tfinal exactly)
+    Real dt0 = Real(8e-5);
+
+    std::vector<std::pair<Dim, Real>> cases;
+    cases.reserve(Ns.size());
+    for (Dim N : Ns)
+    {
+        dt0 = dt0; // keep dt fixed
+        cases.push_back({N, dt0});
+    }
+
+    run_sweep_and_print(
+        "[ ---> MPI <--- ]MMS NS TEST: refine dx (dt fixed; fixed Tfinal)",
+        "dx",
+        cases,
+        t0, Tfinal, nu, k,
+        ErrorRegion::FullDomain,
+        [](const RunResult &r)
+        { return r.dx; }, topo);
+}
+
 int main(int argc, char **argv)
 {
+    // number of processes is an input parameter
+    int number_of_processes = 1;
+
+    if (argc > 1)
+    {
+        number_of_processes = std::atoi(argv[1]);
+    }
+    else
+    {
+        std::cerr << "Usage: mpirun -n <num_procs> ./MPI_test_navier_stokes_no_pressure <num_procs>\n";
+        return 1;
+    }
+    // Example: choose a 3D grid Px * Py * Pz
+    int Px;
+    int Py;
+    int Pz;
+    if (number_of_processes == 1)
+    {
+        Px = 1;
+        Py = 1;
+        Pz = 1;
+    }
+    else if (number_of_processes == 2)
+    {
+        Px = 2;
+        Py = 1;
+        Pz = 1;
+    }
+    else if (number_of_processes == 4)
+    {
+        Px = 2;
+        Py = 2;
+        Pz = 1;
+    }
+    else if (number_of_processes == 8)
+    {
+        Px = 2;
+        Py = 2;
+        Pz = 2;
+    }
+    else
+    {
+        std::cerr << "Unsupported number of processes. Use 2, 4, or 8.\n";
+        return 1;
+    }
+
     MPICommunicator comm;
     comm.init(&argc, &argv); // MPI_Init inside
 
     int world_rank = comm.get_rank();
     int world_size = comm.get_size();
-
-    // Example: choose a 3D grid Px * Py * Pz
-    int Px = 2;
-    int Py = 2;
-    int Pz = 2;
 
     if (world_size != Px * Py * Pz)
     {
@@ -741,8 +810,9 @@ int main(int argc, char **argv)
     const Real t0 = Real(0.15);
     const Real Tfinal = Real(0.151);
 
-    test_refine_dx(nu, k, t0, Tfinal, topo);
-    // test_refine_dt(nu, k, t0, Tfinal);
+    // test_refine_dx(nu, k, t0, Tfinal, topo);
+    //  test_refine_dt(nu, k, t0, Tfinal);
+    test_strong_scalability(nu, k, t0, Tfinal, topo);
     comm.finalize(); // MPI_Finalize inside
     return 0;
 }
