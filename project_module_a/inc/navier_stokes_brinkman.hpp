@@ -138,10 +138,12 @@ public:
     void compute_vector_xi();
 
     void center_pressure(ScalarVariable &pressure_field);
+    void compute_divergence_cell_center(const VectorVariable &u,
+                                        ScalarVariable &div);
 
     void compute_rhs_pressure(Real t);
     void update_pressure_and_velocity_fields();
-    void solve(const ManufacturedSolution &mms);
+    Real solve(const ManufacturedSolution &mms, bool openMP = false);
 
     /**
      * @brief Computes the L2 relative error between the numerical solution and the MMS exact solution.
@@ -333,16 +335,16 @@ public:
     // ============================================================================
     // PHYSICAL AND MATERIAL FIELDS
     // ============================================================================
-    VectorVariable u_0;                                                        // Velocity field
-    ScalarVariable p_0;                                                        // Pressure field
-    BoundaryFunctions forcing_function; // Forcing term (can vary in space)
-    std::function<Real(Real, Real, Real)> k_function;                          // Forcing term (can vary in space)
-    Real nu;                                                                   // Kinematic viscosity (can vary in space)
-    ScalarVariable k_field;                                                    // Brinkman permeability or resistance term
-    ScalarVariable gamma_field;                                                // Gamma field for Brinkman term
-    BoundaryFunctions p_boundary;                                              // Boundary condition for pressure
-    BoundaryFunctions u_boundary;                                              // Boundary condition for velocity
-    BoundaryFunctions p_exact;                                                 // Exact pressure for MMS
+    VectorVariable u_0;                               // Velocity field
+    ScalarVariable p_0;                               // Pressure field
+    BoundaryFunctions forcing_function;               // Forcing term (can vary in space)
+    std::function<Real(Real, Real, Real)> k_function; // Forcing term (can vary in space)
+    Real nu;                                          // Kinematic viscosity (can vary in space)
+    ScalarVariable k_field;                           // Brinkman permeability or resistance term
+    ScalarVariable gamma_field;                       // Gamma field for Brinkman term
+    BoundaryFunctions p_boundary;                     // Boundary condition for pressure
+    BoundaryFunctions u_boundary;                     // Boundary condition for velocity
+    BoundaryFunctions p_exact;                        // Exact pressure for MMS
 
     // ============================================================================
     // VECTOR LINEAR SOLVER VARIABLES (MOMENTUM EQUATION)

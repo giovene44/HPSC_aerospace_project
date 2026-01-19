@@ -6,6 +6,7 @@
 #include <sstream>
 #include <helper.hpp>
 #include <filesystem>
+#include <chrono>
 
 Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
 {
@@ -187,20 +188,6 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
                 - (nu / (Real(2.0) * k_val)) * velocity_solution.value(comp, idx) // - (ν/(2k))u₀
                 ;
 
-            // =================================================================
-            // DEBUGGING OUTPUT - Final result
-            // =================================================================
-            /*
-              if (i == DEBUG_I && j == DEBUG_J && k == DEBUG_K && comp == DEBUG_COMP)
-            {
-                std::cout << "g_val (FINAL): " << g_val << "\n";
-                std::cout << "--------------------------------------------------\n";
-            }
-
-            */
-
-            // =================================================================
-
             // -----------------------------------------------------------------
             // Store result
             // -----------------------------------------------------------------
@@ -220,9 +207,28 @@ void NavierStokesBrinkmann::compute_vector_xi()
     }
 }
 
+void NavierStokesBrinkmann::compute_divergence_cell_center(const VectorVariable &u,
+                                                           ScalarVariable &div)
+{
+    div.set_all(Real(0.0));
+
+    for (Dim k = 1; k < Nz - 1; ++k)
+        for (Dim j = 1; j < Ny - 1; ++j)
+            for (Dim i = 1; i < Nx - 1; ++i)
+            {
+                const Real dudx = (u.value(0, i, j, k) - u.value(0, i - 1, j, k)) / dx;
+                const Real dvdy = (u.value(1, i, j, k) - u.value(1, i, j - 1, k)) / dy;
+                const Real dwdz = (u.value(2, i, j, k) - u.value(2, i, j, k - 1)) / dz;
+
+                div.set(i, j, k) = dudx + dvdy + dwdz;
+            }
+}
+
 void NavierStokesBrinkmann::compute_rhs_pressure(Real t)
 {
 
+    ScalarVariable div_u(Nx, Ny, Nz, dx, dy, dz);
+    compute_divergence_cell_center(velocity_solution, div_u);
     rhs.set_all(Real(0.0));
 
     for (Dim k = 1; k < Nz - 1; ++k)
@@ -231,7 +237,7 @@ void NavierStokesBrinkmann::compute_rhs_pressure(Real t)
             {
 
                 rhs.set(i, j, k) =
-                    Real(-(velocity_solution.divergence(i, j, k)) / dt);
+                    -div_u.get(i, j, k) / dt;
             }
 }
 
@@ -297,7 +303,7 @@ static void compute_forcing_analytic(VectorVariable &f,
 
                     // dp/dy = -sin(t)*cos(x)*sin(y)*cos(z)
                     const Real dp_dy = -std::sin(t) * std::cos(x) * std::sin(y) * std::cos(z);
-                    
+
                     f.set(1, ii, jj, kk) = vt - nu * lap_v + (nu / k.get(ii, jj, kk)) * v + dp_dy;
                 }
 
@@ -347,7 +353,6 @@ static void build_rhs(VectorVariable &rhs,
                     const Real scale = Real(1.0) / (Real(1.0) + beta);
                     const Real diff = (nu * dt) / Real(2.0);
 
-
                     Real val = velocity_solution.value(c, ii, jj, kk) + dt * f_half.value(c, ii, jj, kk) - beta * velocity_solution.value(c, ii, jj, kk);
 
                     const bool interior =
@@ -388,8 +393,8 @@ static void build_rhs(VectorVariable &rhs,
                 }
 }
 
-void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
-{   
+Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms, bool openMP)
+{
     Real t = Real(1.5);
 
     (void)mms; // Unused parameter
@@ -417,7 +422,6 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
     velocity_time_series.emplace_back(velocity_solution);
     pressure_time_series.emplace_back(pressure_solution);
 
-
     // write_pressure_vtk("./Output/pressure_N"+std::to_string(Nx) +"_step"+ std::to_string(0) + ".vtk");
 
     Dim nsteps = static_cast<Dim>(std::ceil(T / dt));
@@ -427,6 +431,8 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
     ScalarVariable div_u(Nx, Ny, Nz, dx, dy, dz);
     VectorVariable u_tmp(Nx, Ny, Nz, dx, dy, dz);
     VectorVariable u_np1(Nx, Ny, Nz, dx, dy, dz);
+
+    auto start_time = std::chrono::high_resolution_clock::now();
 
     for (int n = 0; n < nsteps; ++n)
     {
@@ -440,26 +446,19 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 
         compute_forcing_analytic(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field);
 
-
         // RHS uses (pressure_solution - ∇pressure_predictor) in an Auteri-consistent way
         build_rhs(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field);
-        
-        // compute_vector_g(t_half);
-        // compute_vector_xi();
 
-        vector_rhs = xi  - eta.A_operator(0,0,gamma_field);
-        velocity_solver.solve<0>(vector_rhs, eta, x_vector_handler);
+        vector_rhs = xi - eta.A_operator(0, 0, gamma_field);
+        velocity_solver.solve<0>(vector_rhs, eta, x_vector_handler, openMP);
 
-        vector_rhs = eta - zeta.A_operator(1,1,gamma_field);
+        vector_rhs = eta - zeta.A_operator(1, 1, gamma_field);
+        velocity_solver.solve<1>(vector_rhs, zeta, y_vector_handler, openMP);
 
-        velocity_solver.solve_y_only(vector_rhs, zeta, false);
-
-
-        vector_rhs = zeta - xi.A_operator(2,2,gamma_field);
-        velocity_solver.solve_z_only(vector_rhs, velocity_solution, false);
+        vector_rhs = zeta - velocity_solution.A_operator(2, 2, gamma_field);
+        velocity_solver.solve<2>(vector_rhs, velocity_solution, z_vector_handler, openMP);
 
         // ---- Pressure correction (space-factored operator A)
-        // rhs_p = -(1/dt) div(u^{n+1})
 
         compute_rhs_pressure(t_np1);
 
@@ -468,20 +467,21 @@ void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
         // (I - dxx) psi = rhs_p
         // (I - dyy) phi = psi
         // (I - dzz) corr_new = phi
-        pressure_solver.solve_pressure<0>(rhs, psi, x_scalar_handler);
 
-        pressure_solver.solve_pressure<1>(psi, phi, y_scalar_handler);
-
-        pressure_solver.solve_pressure<2>(phi, other_phi, z_scalar_handler);
+        pressure_solver.solve_x(rhs, psi, openMP);
+        pressure_solver.solve_y(psi, phi, openMP);
+        pressure_solver.solve_z(phi, other_phi, openMP);
 
         // ---- Pressure update at half-step (Auteri):
         // p^{n+1/2} = p^{n-1/2} + ϕ^{n+1/2}
 
         pressure_solution += other_phi;
 
-
         t = t_np1;
     }
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end_time - start_time;
+    return elapsed.count();
 }
 
 void NavierStokesBrinkmann::write_velocity_vtk(const std::string &filename) const

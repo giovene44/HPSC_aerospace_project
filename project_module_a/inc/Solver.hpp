@@ -85,8 +85,7 @@ inline Solver::~Solver() {}
 class PressureSolver : public Solver
 {
 public:
-
-    void solve_x(ScalarVariable &rhs, ScalarVariable &solution)
+    void solve_x(ScalarVariable &rhs, ScalarVariable &solution, bool openMP = false)
     {
         const Real alpha = Real(1.0) / (dx * dx); // α = 1/dx^2
 
@@ -104,29 +103,45 @@ public:
         a[Nx - 1] = -Real(2.0) * alpha;
         c[Nx - 1] = Real(0.0);
 
-        for (Dim j = 0; j < Ny; ++j)
+        auto worker = [&](Dim j, Dim k)
+        {
+            std::vector<Real> d(Nx), x(Nx);
+
+            // Copy rhs line
+            for (Dim i = 0; i < Nx; ++i)
+                d[i] = rhs.get(i, j, k);
+
+            // Add Neumann BC contributions to rhs (NOT inside matrix)
+            // g = ∂ψ/∂x at boundary.
+            const Real gL = p_boundary.value<0>(Real(0.0), j * dy, k * dz, t);
+            const Real gR = p_boundary.value<0>((Nx - Real(0.5)) * dx, j * dy, k * dz, t);
+
+            d[0] -= Real(2.0) * gL / dx;
+            d[Nx - 1] += Real(2.0) * gR / dx;
+
+            thomas_algorithm(a, b, c, d, x);
+
+            for (Dim i = 0; i < Nx; ++i)
+                solution.set(i, j, k) = x[i];
+        };
+
+#ifdef _OPENMP
+        if (openMP)
+        {
+#pragma omp parallel for collapse(2) default(none) shared(a, b, c, worker)
             for (Dim k = 0; k < Nz; ++k)
-            {
-                // Copy rhs line
-                for (Dim i = 0; i < Nx; ++i)
-                    d[i] = rhs.get(i, j, k);
+                for (Dim j = 0; j < Ny; ++j)
+                    worker(j, k);
+            return;
+        }
+#endif
 
-                // Add Neumann BC contributions to rhs (NOT inside matrix)
-                // g = ∂ψ/∂x at boundary.
-                const Real gL = p_boundary.value<0>(Real(0.0), j * dy, k * dz, t);
-                const Real gR = p_boundary.value<0>((Nx - Real(0.5)) * dx, j * dy, k * dz, t);
-
-                d[0] -= Real(2.0) * gL / dx;
-                d[Nx - 1] += Real(2.0) * gR / dx;
-
-                thomas_algorithm(a, b, c, d, x);
-
-                for (Dim i = 0; i < Nx; ++i)
-                    solution.set(i, j, k) = x[i];
-            }
+        for (Dim k = 0; k < Nz; ++k)
+            for (Dim j = 0; j < Ny; ++j)
+                worker(j, k);
     }
 
-    void solve_y(ScalarVariable &rhs, ScalarVariable &solution)
+    void solve_y(ScalarVariable &rhs, ScalarVariable &solution, bool openMP = false)
     {
         const Real alpha = Real(1.0) / (dy * dy);
 
@@ -141,26 +156,42 @@ public:
         a[Ny - 1] = -Real(2.0) * alpha;
         c[Ny - 1] = Real(0.0);
 
-        for (Dim i = 0; i < Nx; ++i)
+        auto worker = [&](Dim i, Dim k)
+        {
+            std::vector<Real> d(Ny), x(Ny);
+
+            for (Dim j = 0; j < Ny; ++j)
+                d[j] = rhs.get(i, j, k);
+
+            const Real gB = p_boundary.value<1>(i * dx, Real(0.0), k * dz, t);
+            const Real gT = p_boundary.value<1>(i * dx, (Ny - Real(0.5)) * dy, k * dz, t);
+
+            d[0] -= Real(2.0) * gB / dy;
+            d[Ny - 1] += Real(2.0) * gT / dy;
+
+            thomas_algorithm(a, b, c, d, x);
+
+            for (Dim j = 0; j < Ny; ++j)
+                solution.set(i, j, k) = x[j];
+        };
+
+#ifdef _OPENMP
+        if (openMP)
+        {
+#pragma omp parallel for collapse(2) default(none) shared(a, b, c, worker)
             for (Dim k = 0; k < Nz; ++k)
-            {
-                for (Dim j = 0; j < Ny; ++j)
-                    d[j] = rhs.get(i, j, k);
+                for (Dim i = 0; i < Nx; ++i)
+                    worker(i, k);
+            return;
+        }
+#endif
 
-                const Real gB = p_boundary.value<1>(i * dx, Real(0.0), k * dz, t);
-                const Real gT = p_boundary.value<1>(i * dx, (Ny - Real(0.5)) * dy, k * dz, t);
-
-                d[0] -= Real(2.0) * gB / dy;
-                d[Ny - 1] += Real(2.0) * gT / dy;
-
-                thomas_algorithm(a, b, c, d, x);
-
-                for (Dim j = 0; j < Ny; ++j)
-                    solution.set(i, j, k) = x[j];
-            }
+        for (Dim k = 0; k < Nz; ++k)
+            for (Dim i = 0; i < Nx; ++i)
+                worker(i, k);
     }
 
-    void solve_z(ScalarVariable &rhs, ScalarVariable &solution)
+    void solve_z(ScalarVariable &rhs, ScalarVariable &solution, bool openMP = false)
     {
         const Real alpha = Real(1.0) / (dz * dz);
 
@@ -175,123 +206,39 @@ public:
         a[Nz - 1] = -Real(2.0) * alpha;
         c[Nz - 1] = Real(0.0);
 
-        for (Dim i = 0; i < Nx; ++i)
+        auto worker = [&](Dim i, Dim j)
+        {
+            std::vector<Real> d(Nz), x(Nz);
+
+            for (Dim k = 0; k < Nz; ++k)
+                d[k] = rhs.get(i, j, k);
+
+            const Real gF = p_boundary.value<2>(i * dx, j * dy, Real(0.0), t);
+            const Real gB = p_boundary.value<2>(i * dx, j * dy, (Nz - Real(0.5)) * dz, t);
+
+            d[0] -= Real(2.0) * gF / dz;
+            d[Nz - 1] += Real(2.0) * gB / dz;
+
+            thomas_algorithm(a, b, c, d, x);
+
+            for (Dim k = 0; k < Nz; ++k)
+                solution.set(i, j, k) = x[k];
+        };
+
+#ifdef _OPENMP
+        if (openMP)
+        {
+#pragma omp parallel for collapse(2) default(none) shared(a, b, c, worker)
             for (Dim j = 0; j < Ny; ++j)
-            {
-                for (Dim k = 0; k < Nz; ++k)
-                    d[k] = rhs.get(i, j, k);
-
-                const Real gF = 0.0;//p_boundary.value<2>(i * dx, j * dy, Real(0.0), t);
-                const Real gB = 0.0;//p_boundary.value<2>(i * dx, j * dy, (Nz - Real(0.5)) * dz, t);
-
-                d[0] -= Real(2.0) * gF / dz;
-                d[Nz - 1] += Real(2.0) * gB / dz;
-
-                thomas_algorithm(a, b, c, d, x);
-
-                for (Dim k = 0; k < Nz; ++k)
-                    solution.set(i, j, k) = x[k];
-            }
-    }
-
-        
-
-    template <Dim direction>
-    void apply_bc(ScalarVariable &rhs)
-    {
-        if constexpr (direction == 0) // X direction
-        {
-            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
-            {
-                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
-                {
-                    rhs.set(0, index_1, index_2) = rhs.get(0, index_1, index_2);// + Real(2.0) * dx * (-Real(1.0) / (dx * dx)) * p_boundary.value<0>(Real(0.0), index_1 * dy, index_2 * dz, t);
-                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2) ;//- dx * (-Real(1.0) / (dx * dx)) * p_boundary.value<0>((Nx - 0.5) * dx, index_1 * dy, index_2 * dz, t);
-                }
-            }
+                for (Dim i = 0; i < Nx; ++i)
+                    worker(i, j);
+            return;
         }
-        else if constexpr (direction == 1) // Y direction
-        {
-            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
-            {
-                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
-                {
-                    rhs.set(index_1, 0, index_2) = rhs.get(index_1, 0, index_2);// - Real(2.0) / dy * p_boundary.value<1>(index_1 * dx, Real(0.0), index_2 * dz, t);
-                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2);// + Real(1.0) / dy * p_boundary.value<1>(index_1 * dx, (Ny - 0.5) * dy, index_2 * dz, t);
-                }
-            }
-        }
-        else if constexpr (direction == 2) // Z direction
-        {
-            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
-            {
-                for (Dim index_2 = 0; index_2 < Ny; ++index_2)
-                {
-                    rhs.set(index_1, index_2, 0) = rhs.get(index_1, index_2, 0);// + Real(2.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, Real(0.0), t);
-                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1);// + Real(1.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, (Nz - 0.5) * dz, t);
-                }
-            }
-        }
-    };
+#endif
 
-    
-
-    template <Dim direction>
-    void block_solver(const ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar &dim_handler)
-    {
-        std::vector<Real> a(dim_handler.N1, Real(-1.0) / (dim_handler.dN1 * dim_handler.dN1));
-        std::vector<Real> b(dim_handler.N1, Real(1.0) + (Real(2.0) / (dim_handler.dN1 * dim_handler.dN1)));
-        std::vector<Real> c(dim_handler.N1, Real(-1.0) / (dim_handler.dN1 * dim_handler.dN1));
-        std::vector<Real> d(dim_handler.N1);
-        std::vector<Real> x(dim_handler.N1);
-
-        a[0] = Real(0.0);
-        c[0] = Real(-2.0) / (dim_handler.dN1 * dim_handler.dN1);
-        b[dim_handler.N1 - 1] = Real(1.0) + Real(1.0) / (dim_handler.dN1 * dim_handler.dN1);
-        c[dim_handler.N1 - 1] = Real(0.0);
-
-        if constexpr (direction == 0)
-        {
-            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
-            {
-                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
-                {
-                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
-                        d[index_0] = rhs.get(index_0, index_1, index_2);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim index_0 = 0; index_0 < Nx; ++index_0)
-                        solution.set(index_0, index_1, index_2) = x[index_0];
-                }
-            }
-        }
-        else if constexpr (direction == 1)
-        {
-            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
-            {
-                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
-                {
-                    for (Dim index_0 = 0; index_0 < Ny; ++index_0)
-                        d[index_0] = rhs.get(index_1, index_0, index_2);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim index_0 = 0; index_0 < Ny; ++index_0)
-                        solution.set(index_1, index_0, index_2) = x[index_0];
-                }
-            }
-        }
-        else if constexpr (direction == 2)
-        {
-            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
-            {
-                for (Dim index_2 = 0; index_2 < Ny; ++index_2)
-                {
-                    for (Dim index_0 = 0; index_0 < Nz; ++index_0)
-                        d[index_0] = rhs.get(index_1, index_2, index_0);
-                    thomas_algorithm(a, b, c, d, x);
-                    for (Dim index_0 = 0; index_0 < Nz; ++index_0)
-                        solution.set(index_1, index_2, index_0) = x[index_0];
-                }
-            }
-        }
+        for (Dim j = 0; j < Ny; ++j)
+            for (Dim i = 0; i < Nx; ++i)
+                worker(i, j);
     }
 
     BoundaryFunctions &p_boundary;
@@ -299,13 +246,6 @@ public:
     PressureSolver(Dim Nx_, Dim Ny_, Dim Nz_, Real dx_, Real dy_, Real dz_, Real dt_, BoundaryFunctions &p_boundary_)
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), p_boundary(p_boundary_) {}
 
-    template <Dim direction>
-    void solve_pressure(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar &dim_handler)
-    {
-        apply_bc<direction>(rhs);
-        block_solver<direction>(rhs, solution, dim_handler);
-        
-    };
     BoundaryFunctions &set_p_boundary() { return p_boundary; }
 };
 
@@ -379,7 +319,7 @@ public:
     bool handle_known_face(VectorVariable &solution, Dim index_1, Dim index_2, Dim component)
     {
         if (!is_known_face<direction>(index_1, index_2, component))
-        return false;
+            return false;
 
         auto update_bc = [&](Dim i, Dim j, Dim k)
         {
@@ -387,11 +327,11 @@ public:
 
             // BoundaryFunctions::value is now thread-safe via thread_local parser
             if (component == 0)
-            solution.set(0, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t);
-        else if (component == 1)
-            solution.set(1, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t);
-        else if (component == 2)
-            solution.set(2, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t);
+                solution.set(0, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t);
+            else if (component == 1)
+                solution.set(1, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t);
+            else if (component == 2)
+                solution.set(2, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t);
         };
 
         if constexpr (direction == 0)
@@ -450,7 +390,7 @@ public:
                 for (Dim index_2 = 0; index_2 < Nz; ++index_2)
                 {
                     // on comp2 we have normal components
-                    rhs.set(direction, index_1, 0, index_2) = (u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t)) - ((u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t, dx)) + (u_boundary.first_derivative<2>(index_1 * dx,0, index_2 * dz, t, dz))) * dy * Real(0.5);
+                    rhs.set(direction, index_1, 0, index_2) = (u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t)) - ((u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t, dx)) + (u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t, dz))) * dy * Real(0.5);
                     rhs.set(direction, index_1, Ny - 1, index_2) = u_boundary.value<direction>(index_1 * dx, Ly, index_2 * dz, t);
 
                     // on comp1 we have tangent components
@@ -749,17 +689,17 @@ public:
             // Solve for each component
             if (!handle_known_face<direction>(solution, i1, i2, Comp1))
             {
-                solve_component(Comp1, true);  // Normal component
+                solve_component(Comp1, true); // Normal component
             }
 
             if (!handle_known_face<direction>(solution, i1, i2, Comp2))
             {
-                solve_component(Comp2, false);  // Tangent component
+                solve_component(Comp2, false); // Tangent component
             }
 
             if (!handle_known_face<direction>(solution, i1, i2, Comp3))
             {
-                solve_component(Comp3, false);  // Tangent component
+                solve_component(Comp3, false); // Tangent component
             }
         };
 

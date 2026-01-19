@@ -16,12 +16,14 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <chrono>
 
 std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
     Dim Nx_in, Dim Ny_in, Dim Nz_in, Real dt_in,
     Real dx_in, Real dy_in, Real dz_in, Real T_final,
     const std::string &u_boundary_file,
-    const std::string &p_boundary_file)
+    const std::string &p_boundary_file,
+    Real &time_out, bool openMP = false)
 {
     // 1) PARSER RETRIEVAL
     auto &parser = ParseInput::getInstance();
@@ -59,7 +61,8 @@ std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
     std::cout << "Solver initialized (nu=" << nu << ").\n";
 
     // 4) RUN SOLVER
-    nsb_solver.solve(mms);
+    Real time_out_auto = nsb_solver.solve(mms, openMP);
+    time_out = time_out_auto;
     std::cout << "\nSolver run completed.\n";
 
     // 5) COMPUTE ERRORS
@@ -67,7 +70,6 @@ std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
     T_final += Real(1.5);
 
     std::cout << "Computing Errors at T = " << T_final << "...\n";
-    
 
     auto errors = nsb_solver.compute_L2_errors(
         nsb_solver.u_0,
@@ -101,7 +103,7 @@ int run_multiple()
         ParseInput &parser = ParseInput::getInstance();
         // The path is relative to the execution directory. Using "./Input/Input.in"
         // assumes the Input folder is a direct subfolder of the execution directory.
-        
+
         parser.parse_input("./Input/Input.in");
         // Get initial values from the parser (used as base for refinement)
         int num_runs = parser.num_runs;
@@ -118,6 +120,8 @@ int run_multiple()
         std::vector<Real> errors_p;
         std::vector<Real> errors_rel_u;
         std::vector<Real> errors_rel_p;
+        std::vector<Real> time_values;
+        std::vector<Real> time_speedUps;
 
         for (int i = 0; i < num_runs; i++)
         {
@@ -127,12 +131,11 @@ int run_multiple()
             // =================================================================
             // GRID AND TIME CALCULATION: Starting point is correctly i=0 (factor 1)
             // =================================================================
-            Dim Nx_curr = N_initial_x *  refinement_factor;
-            Dim Ny_curr = N_initial_y *  refinement_factor;
-            Dim Nz_curr = N_initial_z *  refinement_factor;
+            Dim Nx_curr = N_initial_x * refinement_factor;
+            Dim Ny_curr = N_initial_y * refinement_factor;
+            Dim Nz_curr = N_initial_z * refinement_factor;
 
             Real dt_curr = dt_initial; //* refinement_factor;
-
 
             // dx/dy/dz must be scaled inversely to N_curr (halved when N_curr is doubled)
             Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
@@ -144,10 +147,13 @@ int run_multiple()
                       << dt_curr << "\n\n";
 
             // Call single_run with the explicitly computed values
+            Real time_curr = 0.0;
+            bool openMP = false;
             auto errors = single_run(
                 Nx_curr, Ny_curr, Nz_curr, dt_curr,
                 dx_curr, dy_curr, dz_curr, T_final,
-                parser.u_boundary_file, parser.p_boundary_file);
+                parser.u_boundary_file, parser.p_boundary_file,
+                time_curr, openMP);
 
             // We track the number of grid points (Nx) and the time step (dt) for plotting
             N_values.emplace_back(Nx_curr);
@@ -156,68 +162,70 @@ int run_multiple()
             errors_p.emplace_back(errors.second.first);
             errors_rel_u.emplace_back(errors.first.second);
             errors_rel_p.emplace_back(errors.second.second);
-        }
+            time_values.emplace_back(time_curr);
 
-        // ===============================================================
-        // WRITE VELOCITY ERROR FILE (NO N^-2 COLUMN)
-        // ===============================================================
-        std::ofstream file_u("velocity_error.dat");
-        file_u << "# N\tdt\tError_U\n";
-        for (size_t i = 0; i < dt_values.size(); i++)
-        {
-            file_u << N_values[i] << "\t"
-                   << dt_values[i] << "\t"
-                   << errors_u[i] << "\t"
-                   << parser.DimX << "\n";
+            openMP = true;
+            time_curr = 0.0;
+            errors = single_run(
+                Nx_curr, Ny_curr, Nz_curr, dt_curr,
+                dx_curr, dy_curr, dz_curr, T_final,
+                parser.u_boundary_file, parser.p_boundary_file,
+                time_curr, openMP);
+            auto time_speedUp = time_values.back() / time_curr;
+            time_speedUps.emplace_back(time_speedUp);
         }
-        file_u.close();
-
-        // ===============================================================
-        // WRITE PRESSURE ERROR FILE (NO N^-2 COLUMN)
-        // ===============================================================
-        std::ofstream file_p("pressure_error.dat");
-        file_p << "# N\tdt\tError_P\n";
-        for (size_t i = 0; i < dt_values.size(); i++)
-        {
-            file_p << N_values[i] << "\t"
-                   << dt_values[i] << "\t"
-                   << errors_p[i] << "\t"
-                   << parser.DimX << "\n";
-        }
-        file_p.close();
 
         std::cout << "\n=============================\n";
         std::cout << "   Convergence Analysis      \n";
         std::cout << "=============================\n";
-        std::cout << "Nx\t\tdx\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tRate_u\t\tRate_p\n";
+
+        // Open file for writing
+        auto now = std::chrono::system_clock::now();
+        auto time = std::chrono::system_clock::to_time_t(now);
+        std::stringstream ss;
+        ss << std::put_time(std::localtime(&time), "%Y-%m-%d_%H-%M-%S");
+        std::string filename = "OUTPUT/Convergence_Analysis_" + ss.str() + ".dat";
+        std::system("mkdir -p OUTPUT");
+        std::ofstream convergence_file(filename);
+
+        std::string header = "Nx\t\tdx\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTime\t\tTime_SpeedUp\t\tRate_u\t\tRate_p\n";
+        std::cout << header;
+        convergence_file << header;
 
         for (size_t i = 0; i < N_values.size(); ++i)
         {
             Real dx = parser.DimX / (Real)(N_values[i] - 0.5);
-            Real dx_prev = (i > 0) ? parser.DimX / (Real)(N_values[i-1] - 0.5) : 0.0;
+            Real dx_prev = (i > 0) ? parser.DimX / (Real)(N_values[i - 1] - 0.5) : 0.0;
             Dim nsteps = (Dim)(T_final / dt_values[i]);
-            
-            Real rate_u = (i > 0) ? std::log(errors_u[i-1] / errors_u[i]) / std::log(dx_prev / dx) : 0.0;
-            Real rate_p = (i > 0) ? std::log(errors_p[i-1] / errors_p[i]) / std::log(dx_prev / dx) : 0.0;
-            
-            std::cout << std::fixed << std::setprecision(0)
-              << N_values[i] << "\t" 
-              << std::scientific<<std::setprecision(6)
-              << dx << "\t" 
-              << dt_values[i] << "\t"
-              << nsteps << "\t\t" 
-              << errors_u[i] << "\t\t" 
-              << errors_p[i] << "\t\t"
-              << errors_rel_u[i] << "\t\t"
-              << errors_rel_p[i] << "\t\t"
-              << std::fixed << std::setprecision(2)
-              << rate_u << "\t\t" 
-              << rate_p << "\n";
+
+            Real rate_u = (i > 0) ? std::log(errors_u[i - 1] / errors_u[i]) / std::log(dx_prev / dx) : 0.0;
+            Real rate_p = (i > 0) ? std::log(errors_p[i - 1] / errors_p[i]) / std::log(dx_prev / dx) : 0.0;
+
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(0)
+                << N_values[i] << "\t"
+                << std::scientific << std::setprecision(6)
+                << dx << "\t"
+                << dt_values[i] << "\t"
+                << nsteps << "\t\t"
+                << errors_u[i] << "\t\t"
+                << errors_p[i] << "\t\t"
+                << errors_rel_u[i] << "\t\t"
+                << errors_rel_p[i] << "\t\t"
+                << time_values[i] << "\t\t"
+                << time_speedUps[i] << "\t\t"
+                << std::fixed << std::setprecision(2)
+                << rate_u << "\t\t"
+                << rate_p << "\n";
+
+            std::cout << oss.str();
+            convergence_file << oss.str();
         }
+
+        convergence_file.close();
         std::cout << std::defaultfloat;
         std::cout << "=============================\n";
-
-
+        std::cout << "Results saved to Convergence_Analysis_today_data.dat\n";
 
         // std::system("python ./utils/plot.py ./velocity_error.dat");
         // std::system("python ./utils/plot.py ./pressure_error.dat");
