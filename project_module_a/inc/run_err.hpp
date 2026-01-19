@@ -11,8 +11,12 @@
 #include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
 
-std::pair<Real, Real> single_run(Real N, Real dt);
-
+#ifdef USE_MPI
+#include "MPICommunicator.hpp"
+#include "MPITopology3D.hpp"
+int run_multiple_mpi(int argc, char** argv);
+#else
 int run_multiple();
+#endif
 
 #endif // MMS_TEST_RUNNER_HPP

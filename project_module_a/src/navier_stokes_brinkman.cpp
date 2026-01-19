@@ -393,6 +393,7 @@ static void build_rhs(VectorVariable &rhs,
                 }
 }
 
+#ifndef USE_MPI
 Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms, bool openMP)
 {
     Real t = Real(1.5);
@@ -483,6 +484,7 @@ Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms, bool openMP)
     std::chrono::duration<double> elapsed = end_time - start_time;
     return elapsed.count();
 }
+#endif
 
 void NavierStokesBrinkmann::write_velocity_vtk(const std::string &filename) const
 {
@@ -548,3 +550,292 @@ void NavierStokesBrinkmann::write_pressure_vtk(const std::string &filename) cons
 
     file.close();
 }
+
+#ifdef USE_MPI
+// Helper function to synchronize scalar field across all MPI ranks
+static void sync_scalar_field_full(ScalarVariable &field, Dim Nx, Dim Ny, Dim Nz,
+                                   const MPITopology3D &topo)
+{
+    MPI_Comm comm = topo.cart_comm();
+    int world_rank;
+    MPI_Comm_rank(comm, &world_rank);
+
+    const int total = Nx * Ny * Nz;
+
+    std::vector<Real> local_data(total);
+    for (Dim k = 0; k < Nz; ++k)
+        for (Dim j = 0; j < Ny; ++j)
+            for (Dim i = 0; i < Nx; ++i)
+            {
+                int idx = i + j * Nx + k * Nx * Ny;
+                local_data[idx] = field.get(i, j, k);
+            }
+
+    auto block_range = [](Dim Nglobal, int p, int P) -> std::pair<Dim, Dim>
+    {
+        const Dim q = Nglobal / Dim(P);
+        const Dim r = Nglobal % Dim(P);
+        Dim begin, end;
+        if (Dim(p) < r)
+        {
+            begin = Dim(p) * (q + 1);
+            end = begin + (q + 1);
+        }
+        else
+        {
+            begin = r * (q + 1) + (Dim(p) - r) * q;
+            end = begin + q;
+        }
+        return {begin, end};
+    };
+
+    if (world_rank == 0)
+    {
+        int world_size;
+        MPI_Comm_size(comm, &world_size);
+
+        for (int src = 1; src < world_size; ++src)
+        {
+            int src_coords[3];
+            MPI_Cart_coords(comm, src, 3, src_coords);
+
+            auto [i0, i1] = block_range(Nx, src_coords[2], topo.Px());
+            auto [j0, j1] = block_range(Ny, src_coords[1], topo.Py());
+            auto [k0, k1] = block_range(Nz, src_coords[0], topo.Pz());
+
+            Dim ni = i1 - i0;
+            Dim nj = j1 - j0;
+            Dim nk = k1 - k0;
+            int count = ni * nj * nk;
+
+            std::vector<Real> recv_buf(count);
+            MPI_Recv(recv_buf.data(), count, MPI_FLOAT, src, 0, comm, MPI_STATUS_IGNORE);
+
+            int idx = 0;
+            for (Dim kk = k0; kk < k1; ++kk)
+                for (Dim jj = j0; jj < j1; ++jj)
+                    for (Dim ii = i0; ii < i1; ++ii)
+                    {
+                        int gidx = ii + jj * Nx + kk * Nx * Ny;
+                        local_data[gidx] = recv_buf[idx++];
+                    }
+        }
+    }
+    else
+    {
+        int my_coords[3];
+        MPI_Cart_coords(comm, world_rank, 3, my_coords);
+
+        auto [i0, i1] = block_range(Nx, my_coords[2], topo.Px());
+        auto [j0, j1] = block_range(Ny, my_coords[1], topo.Py());
+        auto [k0, k1] = block_range(Nz, my_coords[0], topo.Pz());
+
+        Dim ni = i1 - i0;
+        Dim nj = j1 - j0;
+        Dim nk = k1 - k0;
+        int count = ni * nj * nk;
+
+        std::vector<Real> send_buf(count);
+        int idx = 0;
+        for (Dim kk = k0; kk < k1; ++kk)
+            for (Dim jj = j0; jj < j1; ++jj)
+                for (Dim ii = i0; ii < i1; ++ii)
+                    send_buf[idx++] = field.get(ii, jj, kk);
+
+        MPI_Send(send_buf.data(), count, MPI_FLOAT, 0, 0, comm);
+    }
+
+    MPI_Bcast(local_data.data(), total, MPI_FLOAT, 0, comm);
+
+    for (Dim k = 0; k < Nz; ++k)
+        for (Dim j = 0; j < Ny; ++j)
+            for (Dim i = 0; i < Nx; ++i)
+            {
+                int idx = i + j * Nx + k * Nx * Ny;
+                field.set(i, j, k) = local_data[idx];
+            }
+}
+
+// Helper function to synchronize vector field across all MPI ranks
+static void sync_vector_field_full(VectorVariable &field, Dim Nx, Dim Ny, Dim Nz,
+                                   const MPITopology3D &topo)
+{
+    MPI_Comm comm = topo.cart_comm();
+    int world_rank;
+    MPI_Comm_rank(comm, &world_rank);
+
+    const int total = Nx * Ny * Nz;
+
+    auto block_range = [](Dim Nglobal, int p, int P) -> std::pair<Dim, Dim>
+    {
+        const Dim q = Nglobal / Dim(P);
+        const Dim r = Nglobal % Dim(P);
+        Dim begin, end;
+        if (Dim(p) < r)
+        {
+            begin = Dim(p) * (q + 1);
+            end = begin + (q + 1);
+        }
+        else
+        {
+            begin = r * (q + 1) + (Dim(p) - r) * q;
+            end = begin + q;
+        }
+        return {begin, end};
+    };
+
+    for (int comp = 0; comp < 3; ++comp)
+    {
+        std::vector<Real> local_data(total);
+        for (Dim k = 0; k < Nz; ++k)
+            for (Dim j = 0; j < Ny; ++j)
+                for (Dim i = 0; i < Nx; ++i)
+                {
+                    int idx = i + j * Nx + k * Nx * Ny;
+                    local_data[idx] = field.value(comp, i, j, k);
+                }
+
+        if (world_rank == 0)
+        {
+            int world_size;
+            MPI_Comm_size(comm, &world_size);
+
+            for (int src = 1; src < world_size; ++src)
+            {
+                int src_coords[3];
+                MPI_Cart_coords(comm, src, 3, src_coords);
+
+                auto [i0, i1] = block_range(Nx, src_coords[2], topo.Px());
+                auto [j0, j1] = block_range(Ny, src_coords[1], topo.Py());
+                auto [k0, k1] = block_range(Nz, src_coords[0], topo.Pz());
+
+                Dim ni = i1 - i0;
+                Dim nj = j1 - j0;
+                Dim nk = k1 - k0;
+                int count = ni * nj * nk;
+
+                std::vector<Real> recv_buf(count);
+                MPI_Recv(recv_buf.data(), count, MPI_FLOAT, src, comp, comm, MPI_STATUS_IGNORE);
+
+                int idx = 0;
+                for (Dim kk = k0; kk < k1; ++kk)
+                    for (Dim jj = j0; jj < j1; ++jj)
+                        for (Dim ii = i0; ii < i1; ++ii)
+                        {
+                            int gidx = ii + jj * Nx + kk * Nx * Ny;
+                            local_data[gidx] = recv_buf[idx++];
+                        }
+            }
+        }
+        else
+        {
+            int my_coords[3];
+            MPI_Cart_coords(comm, world_rank, 3, my_coords);
+
+            auto [i0, i1] = block_range(Nx, my_coords[2], topo.Px());
+            auto [j0, j1] = block_range(Ny, my_coords[1], topo.Py());
+            auto [k0, k1] = block_range(Nz, my_coords[0], topo.Pz());
+
+            Dim ni = i1 - i0;
+            Dim nj = j1 - j0;
+            Dim nk = k1 - k0;
+            int count = ni * nj * nk;
+
+            std::vector<Real> send_buf(count);
+            int idx = 0;
+            for (Dim kk = k0; kk < k1; ++kk)
+                for (Dim jj = j0; jj < j1; ++jj)
+                    for (Dim ii = i0; ii < i1; ++ii)
+                        send_buf[idx++] = field.value(comp, ii, jj, kk);
+
+            MPI_Send(send_buf.data(), count, MPI_FLOAT, 0, comp, comm);
+        }
+
+        MPI_Bcast(local_data.data(), total, MPI_FLOAT, 0, comm);
+
+        for (Dim k = 0; k < Nz; ++k)
+            for (Dim j = 0; j < Ny; ++j)
+                for (Dim i = 0; i < Nx; ++i)
+                {
+                    int idx = i + j * Nx + k * Nx * Ny;
+                    field.set(comp, i, j, k) = local_data[idx];
+                }
+    }
+}
+
+Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo, bool use_omp)
+{
+    Real t = Real(1.5);
+
+    (void)mms;
+
+    VectorVariable f_half(Nx, Ny, Nz, dx, dy, dz);
+
+    // Initialize
+    velocity_solution.set_all(u_boundary, t);
+    pressure_solution.set_all(p_exact, t);
+
+    // Init intermediate vars
+    xi = eta = zeta = velocity_solution;
+    other_phi = phi = pressure_solution;
+
+    velocity_time_series.clear();
+    pressure_time_series.clear();
+    velocity_time_series.emplace_back(velocity_solution);
+    pressure_time_series.emplace_back(pressure_solution);
+
+    Dim nsteps = static_cast<Dim>(std::ceil(T / dt));
+
+    VectorVariable u_tmp(Nx, Ny, Nz, dx, dy, dz);
+    VectorVariable u_np1(Nx, Ny, Nz, dx, dy, dz);
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    for (int n = 0; n < nsteps; ++n)
+    {
+        const Real t_np1 = t + dt;
+        const Real t_half = t + dt / Real(2.0);
+
+        pressure_predictor = pressure_solution + other_phi;
+
+        velocity_solver.set_t(t_np1);
+
+        compute_forcing_analytic(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field);
+
+        build_rhs(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field);
+
+        // MPI ADI velocity solves with synchronization
+        velocity_solver.solve_x_only(xi, u_tmp, topo, use_omp);
+        sync_vector_field_full(u_tmp, Nx, Ny, Nz, topo);
+
+        velocity_solver.solve_y_only(u_tmp, u_np1, topo, use_omp);
+        sync_vector_field_full(u_np1, Nx, Ny, Nz, topo);
+
+        velocity_solver.solve_z_only(u_np1, velocity_solution, topo, use_omp);
+        sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
+
+        // Pressure correction
+        compute_rhs_pressure(t_np1);
+
+        pressure_solver.set_t(t_np1);
+
+        // MPI ADI pressure solves with synchronization
+        pressure_solver.solve_x_mpi(rhs, psi, topo);
+        sync_scalar_field_full(psi, Nx, Ny, Nz, topo);
+
+        pressure_solver.solve_y_mpi(psi, phi, topo);
+        sync_scalar_field_full(phi, Nx, Ny, Nz, topo);
+
+        pressure_solver.solve_z_mpi(phi, other_phi, topo);
+        sync_scalar_field_full(other_phi, Nx, Ny, Nz, topo);
+
+        pressure_solution += other_phi;
+
+        t = t_np1;
+    }
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end_time - start_time;
+    return elapsed.count();
+}
+#endif

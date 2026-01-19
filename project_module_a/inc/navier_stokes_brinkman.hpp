@@ -4,7 +4,12 @@
 #include <vector>
 #include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
+#ifdef USE_MPI
+#include "SolverCorrectMPI.hpp"
+#include "MPICommunicator.hpp"
+#else
 #include "Solver.hpp"
+#endif
 #include "manufactured_solution_technique.hpp"
 
 class NavierStokesBrinkmann
@@ -143,7 +148,11 @@ public:
 
     void compute_rhs_pressure(Real t);
     void update_pressure_and_velocity_fields();
+#ifdef USE_MPI
+    Real solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo, bool use_omp = false);
+#else
     Real solve(const ManufacturedSolution &mms, bool openMP = false);
+#endif
 
     /**
      * @brief Computes the L2 relative error between the numerical solution and the MMS exact solution.

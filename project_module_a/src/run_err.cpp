@@ -18,7 +18,13 @@
 #include <functional>
 #include <chrono>
 
-std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
+#ifdef USE_MPI
+#include "MPICommunicator.hpp"
+#include "MPITopology3D.hpp"
+#endif
+
+#ifndef USE_MPI
+static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
     Dim Nx_in, Dim Ny_in, Dim Nz_in, Real dt_in,
     Real dx_in, Real dy_in, Real dz_in, Real T_final,
     const std::string &u_boundary_file,
@@ -92,7 +98,238 @@ std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
 
     return std::make_pair(std::make_pair(err_u, rel_err_u), std::make_pair(err_p, rel_err_p));
 }
+#endif
 
+#ifdef USE_MPI
+// MPI version of single_run
+static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
+    Dim Nx_in, Dim Ny_in, Dim Nz_in, Real dt_in,
+    Real dx_in, Real dy_in, Real dz_in, Real T_final,
+    const std::string &u_boundary_file,
+    const std::string &p_boundary_file,
+    Real &time_out, const MPITopology3D &topo, bool use_omp = false)
+{
+    auto &parser = ParseInput::getInstance();
+    Real nu = parser.nu;
+
+    auto forcing_func = parser.get_forcing_function();
+    auto forcing_func_bf = parser.get_forcing_function_bf();
+    auto k_func = parser.get_k_function();
+    auto u_exact_func = parser.get_exact_velocity_function();
+    auto p_exact_func = parser.get_exact_pressure_function();
+    auto p_exact_bf = parser.get_exact_pressure_function_bf();
+
+    ManufacturedSolution mms(
+        u_exact_func, p_exact_func, k_func, forcing_func,
+        nu);
+
+    int rank;
+    MPI_Comm_rank(topo.cart_comm(), &rank);
+    if (rank == 0)
+        std::cout << "Manufactured solution initialized.\n";
+
+    NavierStokesBrinkmann nsb_solver(
+        Nx_in, Ny_in, Nz_in,
+        dt_in, T_final,
+        forcing_func_bf,
+        k_func,
+        u_boundary_file,
+        p_boundary_file,
+        p_exact_bf,
+        dx_in, dy_in, dz_in,
+        nu);
+
+    if (rank == 0)
+        std::cout << "Solver initialized (nu=" << nu << ").\n";
+
+    // Use MPI solve
+    Real time_out_auto = nsb_solver.solve_mpi(mms, topo, use_omp);
+    time_out = time_out_auto;
+    if (rank == 0)
+        std::cout << "\nSolver run completed.\n";
+
+    T_final += Real(1.5);
+
+    if (rank == 0)
+        std::cout << "Computing Errors at T = " << T_final << "...\n";
+
+    auto errors = nsb_solver.compute_L2_errors(
+        nsb_solver.u_0,
+        nsb_solver.p_0,
+        mms,
+        T_final);
+    Real err_u = errors.first.first;
+    Real err_p = errors.second.first;
+    Real rel_err_u = errors.first.second;
+    Real rel_err_p = errors.second.second;
+
+    if (rank == 0)
+    {
+        std::cout << "=============================\n";
+        std::cout << "   MMS Accuracy Results      \n";
+        std::cout << "=============================\n";
+        std::cout << "Velocity L2 absolute  = " << err_u << "\n";
+        std::cout << "Pressure L2 absolute  = " << err_p << "\n";
+        std::cout << "Velocity L2 relative  = " << rel_err_u << "\n";
+        std::cout << "Pressure L2 relative  = " << rel_err_p << "\n";
+        std::cout << "=============================\n";
+    }
+
+    return std::make_pair(std::make_pair(err_u, rel_err_u), std::make_pair(err_p, rel_err_p));
+}
+
+int run_multiple_mpi(int argc, char** argv)
+{
+    try
+    {
+        MPI_Init(&argc, &argv);
+
+        int world_rank, world_size;
+        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+        {  // Scoped block to ensure MPITopology3D is destroyed before MPI_Finalize
+        // Create 3D Cartesian topology
+        // Let MPI choose the best decomposition
+        int dims[3] = {0, 0, 0};
+        MPI_Dims_create(world_size, 3, dims);
+        int periods[3] = {0, 0, 0};  // non-periodic
+        MPI_Comm cart_comm;
+        MPI_Cart_create(MPI_COMM_WORLD, 3, dims, periods, 1, &cart_comm);
+
+        MPITopology3D topo(cart_comm, dims[0], dims[1], dims[2]);
+
+        if (world_rank == 0)
+        {
+            std::cout << "MPI initialized with " << world_size << " processes\n";
+            std::cout << "Topology: " << dims[0] << " x " << dims[1] << " x " << dims[2] << "\n";
+        }
+
+        ParseInput &parser = ParseInput::getInstance();
+        parser.parse_input("./Input/Input.in");
+
+        int num_runs = parser.num_runs;
+        Dim N_initial_x = parser.Nx;
+        Dim N_initial_y = parser.Ny;
+        Dim N_initial_z = parser.Nz;
+        Real dt_initial = parser.dt;
+        Real T_final = parser.T;
+
+        std::vector<Real> N_values;
+        std::vector<Real> dt_values;
+        std::vector<Real> errors_u;
+        std::vector<Real> errors_p;
+        std::vector<Real> errors_rel_u;
+        std::vector<Real> errors_rel_p;
+        std::vector<Real> time_values;
+        std::vector<Real> time_speedUps;
+
+        for (int i = 0; i < num_runs; i++)
+        {
+            Real refinement_factor = std::pow(2, i);
+
+            Dim Nx_curr = N_initial_x * refinement_factor;
+            Dim Ny_curr = N_initial_y * refinement_factor;
+            Dim Nz_curr = N_initial_z * refinement_factor;
+
+            Real dt_curr = dt_initial;
+
+            Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
+            Real dy_curr = parser.DimY / (Real)(Ny_curr - 0.5);
+            Real dz_curr = parser.DimZ / (Real)(Nz_curr - 0.5);
+
+            if (world_rank == 0)
+            {
+                std::cout << "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
+                std::cout << "Running MPI simulation with (Nx, Ny, Nz) = ("
+                          << Nx_curr << ", " << Ny_curr << ", " << Nz_curr << ") and dt = "
+                          << dt_curr << "\n\n";
+            }
+
+            Real time_curr = 0.0;
+            auto errors = single_run_mpi(
+                Nx_curr, Ny_curr, Nz_curr, dt_curr,
+                dx_curr, dy_curr, dz_curr, T_final,
+                parser.u_boundary_file, parser.p_boundary_file,
+                time_curr, topo, false);
+
+            N_values.emplace_back(Nx_curr);
+            dt_values.emplace_back(dt_curr);
+            errors_u.emplace_back(errors.first.first);
+            errors_p.emplace_back(errors.second.first);
+            errors_rel_u.emplace_back(errors.first.second);
+            errors_rel_p.emplace_back(errors.second.second);
+            time_values.emplace_back(time_curr);
+            time_speedUps.emplace_back(1.0);  // No serial comparison in MPI mode
+        }
+
+        if (world_rank == 0)
+        {
+            std::cout << "\n=============================\n";
+            std::cout << "   Convergence Analysis (MPI)\n";
+            std::cout << "=============================\n";
+
+            auto now = std::chrono::system_clock::now();
+            auto time = std::chrono::system_clock::to_time_t(now);
+            std::stringstream ss;
+            ss << std::put_time(std::localtime(&time), "%Y-%m-%d_%H-%M-%S");
+            std::string filename = "OUTPUT/Convergence_Analysis_MPI_" + ss.str() + ".dat";
+            std::system("mkdir -p OUTPUT");
+            std::ofstream convergence_file(filename);
+
+            std::string header = "Nx\t\tdx\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTime\t\tProcs\t\tRate_u\t\tRate_p\n";
+            std::cout << header;
+            convergence_file << header;
+
+            for (size_t i = 0; i < N_values.size(); ++i)
+            {
+                Real dx = parser.DimX / (Real)(N_values[i] - 0.5);
+                Real dx_prev = (i > 0) ? parser.DimX / (Real)(N_values[i - 1] - 0.5) : 0.0;
+                Dim nsteps = (Dim)(T_final / dt_values[i]);
+
+                Real rate_u = (i > 0) ? std::log(errors_u[i - 1] / errors_u[i]) / std::log(dx_prev / dx) : 0.0;
+                Real rate_p = (i > 0) ? std::log(errors_p[i - 1] / errors_p[i]) / std::log(dx_prev / dx) : 0.0;
+
+                std::ostringstream oss;
+                oss << std::fixed << std::setprecision(0)
+                    << N_values[i] << "\t"
+                    << std::scientific << std::setprecision(6)
+                    << dx << "\t"
+                    << dt_values[i] << "\t"
+                    << nsteps << "\t\t"
+                    << errors_u[i] << "\t\t"
+                    << errors_p[i] << "\t\t"
+                    << errors_rel_u[i] << "\t\t"
+                    << errors_rel_p[i] << "\t\t"
+                    << time_values[i] << "\t\t"
+                    << world_size << "\t\t"
+                    << std::fixed << std::setprecision(2)
+                    << rate_u << "\t\t"
+                    << rate_p << "\n";
+
+                std::cout << oss.str();
+                convergence_file << oss.str();
+            }
+
+            convergence_file.close();
+            std::cout << std::defaultfloat;
+            std::cout << "=============================\n";
+            std::cout << "Results saved to " << filename << "\n";
+        }
+
+        }  // End scoped block - MPITopology3D destructor called here
+
+        MPI_Finalize();
+        return 0;
+    }
+    catch (const std::runtime_error &e)
+    {
+        std::cerr << "FATAL ERROR in run_multiple_mpi: " << e.what() << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, 1);
+        return 1;
+    }
+}
+#else
 int run_multiple()
 {
     try
@@ -237,4 +474,5 @@ int run_multiple()
         std::cerr << "FATAL ERROR in run_multiple: " << e.what() << std::endl;
         return 1;
     }
-};
+}
+#endif
