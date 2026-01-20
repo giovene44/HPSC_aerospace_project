@@ -352,7 +352,7 @@ int run_multiple_mpi(int argc, char **argv)
 }
 
 #else
-int run_multiple()
+int run_multiple(bool use_openMP)
 {
     try
     {
@@ -422,16 +422,22 @@ int run_multiple()
             errors_rel_u.emplace_back(errors.first.second);
             errors_rel_p.emplace_back(errors.second.second);
             time_values.emplace_back(time_curr);
-
-            openMP = true;
-            time_curr = 0.0;
-            errors = single_run(
-                Nx_curr, Ny_curr, Nz_curr, dt_curr,
-                dx_curr, dy_curr, dz_curr, T_final,
-                parser.u_boundary_file, parser.p_boundary_file,
-                time_curr, openMP);
-            auto time_speedUp = time_values.back() / time_curr;
-            time_speedUps.emplace_back(time_speedUp);
+            if (use_openMP)
+            {
+                openMP = true;
+                time_curr = 0.0;
+                errors = single_run(
+                    Nx_curr, Ny_curr, Nz_curr, dt_curr,
+                    dx_curr, dy_curr, dz_curr, T_final,
+                    parser.u_boundary_file, parser.p_boundary_file,
+                    time_curr, openMP);
+                auto time_speedUp = time_values.back() / time_curr;
+                time_speedUps.emplace_back(time_speedUp);
+            }
+            else
+            {
+                time_speedUps.emplace_back(0.0);
+            }
         }
 
         std::cout << "\n=============================\n";

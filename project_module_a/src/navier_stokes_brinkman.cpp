@@ -808,15 +808,15 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
         // MPI ADI velocity solves with synchronization
         vector_rhs = xi - eta.A_operator(0, 0, gamma_field);
         velocity_solver.solve_x_only(vector_rhs, eta, topo, x_vector_handler, use_omp);
-        sync_vector_field_full(eta, Nx, Ny, Nz, topo);
+        // sync_vector_field_full(eta, Nx, Ny, Nz, topo);
 
         vector_rhs = eta - zeta.A_operator(1, 1, gamma_field);
         velocity_solver.solve_y_only(vector_rhs, zeta, topo, y_vector_handler, use_omp);
-        sync_vector_field_full(zeta, Nx, Ny, Nz, topo);
+        // sync_vector_field_full(zeta, Nx, Ny, Nz, topo);
 
         vector_rhs = zeta - velocity_solution.A_operator(2, 2, gamma_field);
         velocity_solver.solve_z_only(vector_rhs, velocity_solution, topo, z_vector_handler, use_omp);
-        sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
+        // sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
 
         // Pressure correction
         compute_rhs_pressure(t_np1);

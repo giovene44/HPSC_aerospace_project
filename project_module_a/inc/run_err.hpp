@@ -14,9 +14,9 @@
 #ifdef USE_MPI
 #include "MPICommunicator.hpp"
 #include "MPITopology3D.hpp"
-int run_multiple_mpi(int argc, char** argv);
+int run_multiple_mpi(int argc, char **argv);
 #else
-int run_multiple();
+int run_multiple(bool use_openMP = false);
 #endif
 
 #endif // MMS_TEST_RUNNER_HPP
