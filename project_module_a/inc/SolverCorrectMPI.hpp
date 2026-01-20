@@ -690,19 +690,25 @@ public:
     // =============================================================
     // X-DIRECTION ONLY SOLVE (direction splitting validation)
     // Solves: (I - gamma * dxx) u = rhs   along x
+    //
+    // FAST VERSION:
+    // - does NOT call apply_bc<0>(rhs)
+    // - instead builds RHS *locally* per line (only local_N entries)
+    // - boundary closure matches apply_bc<0> (analytic derivatives)
+    // - known lines handled exactly like the correct solver
     // =============================================================
-
     void solve_x_only(VectorVariable &rhs,
                       VectorVariable &solution,
                       const MPITopology3D &topo,
                       const DimensionsHandlerVector &dim_handler,
                       bool use_omp = false)
     {
-        // EXACT SAME as correct solver
-        apply_bc<0>(rhs);
-
         const Dim N = Nx;
         const Real h = dx;
+        const Real h2 = h * h;
+
+        // Domain length in x, consistent with your code
+        const Real Lx = dx * (Nx - Real(0.5));
 
         // communicator along X
         MPI_Comm comm_x_raw = topo.comm_x();
@@ -718,11 +724,9 @@ public:
 
         // constant gamma -> coefficients independent of (j,k)
         const Real gamma0 = gamma_field.get(0, 0, 0);
-        const Real coeff = gamma0 / (h * h);
+        const Real coeff0 = gamma0 / h2;
 
-        // Two Schur solvers only:
-        // - one for Dirichlet-Dirichlet (normal component)
-        // - one for Dirichlet + ghost-elimination (tangentials)
+        // Two Schur solvers only (same as correct)
         SchurComplementSolver schur_dir(N, size_x, rank_x, comm_x);
         SchurComplementSolver schur_gho(N, size_x, rank_x, comm_x);
 
@@ -738,15 +742,16 @@ public:
         // internal rows (same for both matrices)
         for (Dim i = 1; i < N - 1; ++i)
         {
-            a_dir[i] = -coeff;
-            b_dir[i] = Real(1.0) + Real(2.0) * coeff;
-            c_dir[i] = -coeff;
-            a_gho[i] = -coeff;
-            b_gho[i] = Real(1.0) + Real(2.0) * coeff;
-            c_gho[i] = -coeff;
+            a_dir[i] = -coeff0;
+            b_dir[i] = Real(1.0) + Real(2.0) * coeff0;
+            c_dir[i] = -coeff0;
+
+            a_gho[i] = -coeff0;
+            b_gho[i] = Real(1.0) + Real(2.0) * coeff0;
+            c_gho[i] = -coeff0;
         }
 
-        // left boundary row: identity for both (matches correct solver)
+        // left boundary row: identity for both
         a_dir[0] = a_gho[0] = Real(0.0);
         b_dir[0] = b_gho[0] = Real(1.0);
         c_dir[0] = c_gho[0] = Real(0.0);
@@ -758,8 +763,8 @@ public:
         c_dir[N - 1] = Real(0.0);
 
         // - Ghost elimination (tangentials): a=-coeff, b=1+3*coeff, c=0
-        a_gho[N - 1] = -coeff;
-        b_gho[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff);
+        a_gho[N - 1] = -coeff0;
+        b_gho[N - 1] = (Real(1.0) + Real(2.0) * coeff0) - (-coeff0); // 1 + 3*coeff
         c_gho[N - 1] = Real(0.0);
 
         // ------------------------------------------------------------
@@ -798,6 +803,7 @@ public:
 
         auto lid_of = [&](Dim j, Dim k) -> int
         { return int((k - k0) * nJ + (j - j0)); };
+
         auto jk_of_lid = [&](int lid, Dim &j, Dim &k)
         {
             k = k0 + Dim(lid / nJ);
@@ -808,19 +814,93 @@ public:
         const int i0_local = (rank_x == 0) ? 0 : 1;
 
         // ------------------------------------------------------------
-        // Build rhs_local straight from rhs (BC already in rhs!)
+        // Build RHS only for local_N entries (FAST)
+        // Boundary closure matches apply_bc<0>(rhs):
+        //  - comp==direction (normal): u(0) - (dv/dy + dw/dz)*dx/2
+        //  - comp tangential at left: pure Dirichlet
+        //  - at right:
+        //      normal: pure Dirichlet
+        //      tangential: rhs(N-1) + 2*gamma/dx^2 * u_ex
         // ------------------------------------------------------------
         auto build_rhs_local = [&](Dim j, Dim k, Dim comp, Real *out)
         {
             for (int il = 0; il < local_N; ++il)
             {
                 const int ig = global_start + il;
+
                 if (ig < 0 || ig >= int(N))
                 {
                     out[il] = Real(0.0);
                     continue;
                 }
-                out[il] = rhs.value(comp, ig, j, k);
+
+                // interior
+                if (ig >= 1 && ig <= int(N) - 2)
+                {
+                    out[il] = rhs.value(comp, ig, j, k);
+                    continue;
+                }
+
+                // boundary coordinates (match your apply_bc sampling)
+                const Real y_u = Real(j) * dy;
+                const Real y_v = (Real(j) + Real(0.5)) * dy;
+
+                const Real z_u = Real(k) * dz;
+                const Real z_w = (Real(k) + Real(0.5)) * dz;
+
+                // ---------- left boundary ig==0 ----------
+                if (ig == 0)
+                {
+                    if (comp == Comp1)
+                    {
+                        // NORMAL component: u(0,y,z) - (dv/dy + dw/dz)*dx/2
+                        // use analytic derivatives (same as apply_bc)
+                        const Real u0 = u_boundary.value<0>(Real(0.0), y_u, z_u, t);
+
+                        // NOTE: these match apply_bc<0> calls:
+                        // first_derivative<1> for dy, first_derivative<2> for dz
+                        const Real dv_dy = u_boundary.first_derivative<1>(Real(0.0), y_u, z_u, t, dy);
+                        const Real dw_dz = u_boundary.first_derivative<2>(Real(0.0), y_u, z_u, t, dz);
+
+                        out[il] = u0 - (dv_dy + dw_dz) * (dx * Real(0.5));
+                    }
+                    else if (comp == Comp2)
+                    {
+                        // tangential v at x=0 : value at (0, y_v, z_u)
+                        out[il] = u_boundary.value<1>(Real(0.0), y_v, z_u, t);
+                    }
+                    else // comp == Comp3
+                    {
+                        // tangential w at x=0 : value at (0, y_u, z_w)
+                        out[il] = u_boundary.value<2>(Real(0.0), y_u, z_w, t);
+                    }
+                    continue;
+                }
+
+                // ---------- right boundary ig==N-1 ----------
+                if (ig == int(N) - 1)
+                {
+                    if (comp == Comp1)
+                    {
+                        // NORMAL: Dirichlet at x=Lx, (Lx, y_u, z_u)
+                        out[il] = u_boundary.value<0>(Lx, y_u, z_u, t);
+                    }
+                    else
+                    {
+                        // TANGENTIAL: rhs(N-1) + 2*gamma/dx^2 * u_ex
+                        Real u_ex = Real(0.0);
+                        if (comp == Comp2)
+                            u_ex = u_boundary.value<1>(Lx, y_v, z_u, t);
+                        else
+                            u_ex = u_boundary.value<2>(Lx, y_u, z_w, t);
+
+                        const Real gammaN = gamma_field.get(N - 1, j, k);
+                        const Real coeffN = gammaN / h2;
+
+                        out[il] = rhs.value(comp, N - 1, j, k) + Real(2.0) * coeffN * u_ex;
+                    }
+                    continue;
+                }
             }
         };
 
@@ -880,6 +960,12 @@ public:
     // =============================================================
     // Y-DIRECTION ONLY SOLVE (direction splitting validation)
     // Solves: (I - gamma * dyy) u = rhs   along y
+    //
+    // FAST VERSION:
+    // - does NOT call apply_bc<1>(rhs)
+    // - builds RHS locally per line (only local_N entries)
+    // - boundary closure matches apply_bc<1> (analytic derivatives)
+    // - known lines handled exactly like the correct solver
     // =============================================================
     void solve_y_only(VectorVariable &rhs,
                       VectorVariable &solution,
@@ -887,55 +973,70 @@ public:
                       const DimensionsHandlerVector &dim_handler,
                       bool use_omp = false)
     {
-        apply_bc<1>(rhs);
-
         const Dim N = Ny;
         const Real h = dy;
+        const Real h2 = h * h;
 
+        // Domain length in y
+        const Real Ly = dy * (Ny - Real(0.5));
+
+        // communicator along Y
         MPI_Comm comm_y_raw = topo.comm_y();
         int rank_y = 0, size_y = 1;
         MPI_Comm_rank(comm_y_raw, &rank_y);
         MPI_Comm_size(comm_y_raw, &size_y);
         MPICommunicator comm_y(comm_y_raw, false);
 
-        const Dim Comp1 = dim_handler.Comp1;
-        const Dim Comp2 = dim_handler.Comp2;
-        const Dim Comp3 = dim_handler.Comp3;
+        // component roles (normal/tangential) for Y-sweep
+        const Dim Comp1 = dim_handler.Comp1; // normal (direction==1)
+        const Dim Comp2 = dim_handler.Comp2; // tangent
+        const Dim Comp3 = dim_handler.Comp3; // tangent
 
+        // constant gamma
         const Real gamma0 = gamma_field.get(0, 0, 0);
-        const Real coeff = gamma0 / (h * h);
+        const Real coeff0 = gamma0 / h2;
 
+        // Two Schur solvers:
         SchurComplementSolver schur_dir(N, size_y, rank_y, comm_y);
         SchurComplementSolver schur_gho(N, size_y, rank_y, comm_y);
 
         const int local_N = schur_dir.get_local_N();
         const int global_start = schur_dir.get_global_start();
 
+        // ------------------------------------------------------------
+        // Build global (a,b,c) ONCE for Dirichlet-Dirichlet and Ghost
+        // ------------------------------------------------------------
         std::vector<Real> a_dir(N, 0.0), b_dir(N, 0.0), c_dir(N, 0.0);
         std::vector<Real> a_gho(N, 0.0), b_gho(N, 0.0), c_gho(N, 0.0);
 
         for (Dim j = 1; j < N - 1; ++j)
         {
-            a_dir[j] = -coeff;
-            b_dir[j] = Real(1.0) + Real(2.0) * coeff;
-            c_dir[j] = -coeff;
-            a_gho[j] = -coeff;
-            b_gho[j] = Real(1.0) + Real(2.0) * coeff;
-            c_gho[j] = -coeff;
+            a_dir[j] = -coeff0;
+            b_dir[j] = Real(1.0) + Real(2.0) * coeff0;
+            c_dir[j] = -coeff0;
+
+            a_gho[j] = -coeff0;
+            b_gho[j] = Real(1.0) + Real(2.0) * coeff0;
+            c_gho[j] = -coeff0;
         }
 
+        // left boundary row: identity for both
         a_dir[0] = a_gho[0] = Real(0.0);
         b_dir[0] = b_gho[0] = Real(1.0);
         c_dir[0] = c_gho[0] = Real(0.0);
 
+        // right boundary:
+        // - Dirichlet (normal)
         a_dir[N - 1] = Real(0.0);
         b_dir[N - 1] = Real(1.0);
         c_dir[N - 1] = Real(0.0);
 
-        a_gho[N - 1] = -coeff;
-        b_gho[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff);
+        // - Ghost elimination (tangentials): a=-coeff, b=1+3*coeff, c=0
+        a_gho[N - 1] = -coeff0;
+        b_gho[N - 1] = (Real(1.0) + Real(2.0) * coeff0) - (-coeff0); // 1 + 3*coeff
         c_gho[N - 1] = Real(0.0);
 
+        // preprocess once
         auto preprocess = [&](SchurComplementSolver &schur,
                               const std::vector<Real> &a_full,
                               const std::vector<Real> &b_full,
@@ -957,6 +1058,9 @@ public:
         preprocess(schur_dir, a_dir, b_dir, c_dir);
         preprocess(schur_gho, a_gho, b_gho, c_gho);
 
+        // ------------------------------------------------------------
+        // Local (i,k) range
+        // ------------------------------------------------------------
         Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
         Dim k0 = topo.local_k0(Nz), k1 = topo.local_k1(Nz);
 
@@ -966,25 +1070,101 @@ public:
 
         auto lid_of = [&](Dim i, Dim k) -> int
         { return int((k - k0) * nI + (i - i0)); };
+
         auto ik_of_lid = [&](int lid, Dim &i, Dim &k)
         {
             k = k0 + Dim(lid / nI);
             i = i0 + Dim(lid - int(k - k0) * nI);
         };
 
+        // write-back: avoid duplicate left interface in Y
         const int j0_local = (rank_y == 0) ? 0 : 1;
 
+        // ------------------------------------------------------------
+        // Build RHS only for local_N entries (FAST)
+        // Boundary closure matches apply_bc<1>(rhs):
+        //  - comp==direction (normal): v(x,0,z) - (du/dx + dw/dz)*dy/2
+        //  - tangential at left: pure Dirichlet
+        //  - at right:
+        //      normal: pure Dirichlet
+        //      tangential: rhs(N-1) + 2*gamma/dy^2 * u_ex
+        // ------------------------------------------------------------
         auto build_rhs_local = [&](Dim i, Dim k, Dim comp, Real *out)
         {
             for (int il = 0; il < local_N; ++il)
             {
                 const int jg = global_start + il;
+
                 if (jg < 0 || jg >= int(N))
                 {
                     out[il] = Real(0.0);
                     continue;
                 }
-                out[il] = rhs.value(comp, i, jg, k);
+
+                // interior
+                if (jg >= 1 && jg <= int(N) - 2)
+                {
+                    out[il] = rhs.value(comp, i, jg, k);
+                    continue;
+                }
+
+                // coordinates (match apply_bc sampling)
+                const Real x_v = Real(i) * dx;
+                const Real x_u = (Real(i) + Real(0.5)) * dx;
+
+                const Real z_v = Real(k) * dz;
+                const Real z_w = (Real(k) + Real(0.5)) * dz;
+
+                // ---------- left boundary jg==0 ----------
+                if (jg == 0)
+                {
+                    if (comp == Comp1)
+                    {
+                        // NORMAL component (direction==1): v(x,0,z) - (du/dx + dw/dz)*dy/2
+                        const Real v0 = u_boundary.value<1>(x_v, Real(0.0), z_v, t);
+
+                        const Real du_dx = u_boundary.first_derivative<0>(x_v, Real(0.0), z_v, t, dx);
+                        const Real dw_dz = u_boundary.first_derivative<2>(x_v, Real(0.0), z_v, t, dz);
+
+                        out[il] = v0 - (du_dx + dw_dz) * (dy * Real(0.5));
+                    }
+                    else if (comp == Comp2)
+                    {
+                        // tangential u at y=0 : value at (x_u, 0, z_v)
+                        out[il] = u_boundary.value<0>(x_u, Real(0.0), z_v, t);
+                    }
+                    else // comp == Comp3
+                    {
+                        // tangential w at y=0 : value at (x_v, 0, z_w)
+                        out[il] = u_boundary.value<2>(x_v, Real(0.0), z_w, t);
+                    }
+                    continue;
+                }
+
+                // ---------- right boundary jg==N-1 ----------
+                if (jg == int(N) - 1)
+                {
+                    if (comp == Comp1)
+                    {
+                        // NORMAL: Dirichlet at y=Ly, value at (x_v, Ly, z_v)
+                        out[il] = u_boundary.value<1>(x_v, Ly, z_v, t);
+                    }
+                    else
+                    {
+                        // TANGENTIAL: rhs(N-1) + 2*gamma/dy^2 * u_ex
+                        Real u_ex = Real(0.0);
+                        if (comp == Comp2)
+                            u_ex = u_boundary.value<0>(x_u, Ly, z_v, t);
+                        else
+                            u_ex = u_boundary.value<2>(x_v, Ly, z_w, t);
+
+                        const Real gammaN = gamma_field.get(i, N - 1, k);
+                        const Real coeffN = gammaN / h2;
+
+                        out[il] = rhs.value(comp, i, N - 1, k) + Real(2.0) * coeffN * u_ex;
+                    }
+                    continue;
+                }
             }
         };
 
@@ -1034,6 +1214,7 @@ public:
             }
         };
 
+        // normal uses Dirichlet matrix, tangentials use ghost matrix
         solve_component_batched(Comp1, schur_dir);
         solve_component_batched(Comp2, schur_gho);
         solve_component_batched(Comp3, schur_gho);
@@ -1042,6 +1223,12 @@ public:
     // =============================================================
     // Z-DIRECTION ONLY SOLVE (direction splitting validation)
     // Solves: (I - gamma * dzz) u = rhs   along z
+    //
+    // FAST VERSION:
+    // - does NOT call apply_bc<2>(rhs)
+    // - builds RHS locally per line (only local_N entries)
+    // - boundary closure matches apply_bc<2> (analytic derivatives)
+    // - known lines handled exactly like the correct solver
     // =============================================================
     void solve_z_only(VectorVariable &rhs,
                       VectorVariable &solution,
@@ -1049,55 +1236,70 @@ public:
                       const DimensionsHandlerVector &dim_handler,
                       bool use_omp = false)
     {
-        apply_bc<2>(rhs);
-
         const Dim N = Nz;
         const Real h = dz;
+        const Real h2 = h * h;
 
+        // Domain length in z
+        const Real Lz = dz * (Nz - Real(0.5));
+
+        // communicator along Z
         MPI_Comm comm_z_raw = topo.comm_z();
         int rank_z = 0, size_z = 1;
         MPI_Comm_rank(comm_z_raw, &rank_z);
         MPI_Comm_size(comm_z_raw, &size_z);
         MPICommunicator comm_z(comm_z_raw, false);
 
-        const Dim Comp1 = dim_handler.Comp1;
-        const Dim Comp2 = dim_handler.Comp2;
-        const Dim Comp3 = dim_handler.Comp3;
+        // component roles (normal/tangential) for Z-sweep
+        const Dim Comp1 = dim_handler.Comp1; // normal (direction==2)
+        const Dim Comp2 = dim_handler.Comp2; // tangent
+        const Dim Comp3 = dim_handler.Comp3; // tangent
 
+        // constant gamma
         const Real gamma0 = gamma_field.get(0, 0, 0);
-        const Real coeff = gamma0 / (h * h);
+        const Real coeff0 = gamma0 / h2;
 
+        // Two Schur solvers
         SchurComplementSolver schur_dir(N, size_z, rank_z, comm_z);
         SchurComplementSolver schur_gho(N, size_z, rank_z, comm_z);
 
         const int local_N = schur_dir.get_local_N();
         const int global_start = schur_dir.get_global_start();
 
+        // ------------------------------------------------------------
+        // Build global (a,b,c) ONCE for Dirichlet-Dirichlet and Ghost
+        // ------------------------------------------------------------
         std::vector<Real> a_dir(N, 0.0), b_dir(N, 0.0), c_dir(N, 0.0);
         std::vector<Real> a_gho(N, 0.0), b_gho(N, 0.0), c_gho(N, 0.0);
 
         for (Dim k = 1; k < N - 1; ++k)
         {
-            a_dir[k] = -coeff;
-            b_dir[k] = Real(1.0) + Real(2.0) * coeff;
-            c_dir[k] = -coeff;
-            a_gho[k] = -coeff;
-            b_gho[k] = Real(1.0) + Real(2.0) * coeff;
-            c_gho[k] = -coeff;
+            a_dir[k] = -coeff0;
+            b_dir[k] = Real(1.0) + Real(2.0) * coeff0;
+            c_dir[k] = -coeff0;
+
+            a_gho[k] = -coeff0;
+            b_gho[k] = Real(1.0) + Real(2.0) * coeff0;
+            c_gho[k] = -coeff0;
         }
 
+        // left boundary row: identity for both
         a_dir[0] = a_gho[0] = Real(0.0);
         b_dir[0] = b_gho[0] = Real(1.0);
         c_dir[0] = c_gho[0] = Real(0.0);
 
+        // right boundary:
+        // - Dirichlet (normal)
         a_dir[N - 1] = Real(0.0);
         b_dir[N - 1] = Real(1.0);
         c_dir[N - 1] = Real(0.0);
 
-        a_gho[N - 1] = -coeff;
-        b_gho[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff);
+        // - Ghost elimination (tangentials): a=-coeff, b=1+3*coeff, c=0
+        a_gho[N - 1] = -coeff0;
+        b_gho[N - 1] = (Real(1.0) + Real(2.0) * coeff0) - (-coeff0); // 1 + 3*coeff
         c_gho[N - 1] = Real(0.0);
 
+        // preprocess once
         auto preprocess = [&](SchurComplementSolver &schur,
                               const std::vector<Real> &a_full,
                               const std::vector<Real> &b_full,
@@ -1119,6 +1321,9 @@ public:
         preprocess(schur_dir, a_dir, b_dir, c_dir);
         preprocess(schur_gho, a_gho, b_gho, c_gho);
 
+        // ------------------------------------------------------------
+        // Local (i,j) range
+        // ------------------------------------------------------------
         Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
         Dim j0 = topo.local_j0(Ny), j1 = topo.local_j1(Ny);
 
@@ -1128,25 +1333,101 @@ public:
 
         auto lid_of = [&](Dim i, Dim j) -> int
         { return int((j - j0) * nI + (i - i0)); };
+
         auto ij_of_lid = [&](int lid, Dim &i, Dim &j)
         {
             j = j0 + Dim(lid / nI);
             i = i0 + Dim(lid - int(j - j0) * nI);
         };
 
+        // write-back: avoid duplicate left interface in Z
         const int k0_local = (rank_z == 0) ? 0 : 1;
 
+        // ------------------------------------------------------------
+        // Build RHS only for local_N entries (FAST)
+        // Boundary closure matches apply_bc<2>(rhs):
+        //  - comp==direction (normal): w(x,y,0) - (du/dx + dv/dy)*dz/2
+        //  - tangential at left: pure Dirichlet
+        //  - at right:
+        //      normal: pure Dirichlet
+        //      tangential: rhs(N-1) + 2*gamma/dz^2 * u_ex
+        // ------------------------------------------------------------
         auto build_rhs_local = [&](Dim i, Dim j, Dim comp, Real *out)
         {
             for (int il = 0; il < local_N; ++il)
             {
                 const int kg = global_start + il;
+
                 if (kg < 0 || kg >= int(N))
                 {
                     out[il] = Real(0.0);
                     continue;
                 }
-                out[il] = rhs.value(comp, i, j, kg);
+
+                // interior
+                if (kg >= 1 && kg <= int(N) - 2)
+                {
+                    out[il] = rhs.value(comp, i, j, kg);
+                    continue;
+                }
+
+                // coordinates (match apply_bc sampling)
+                const Real x_w = Real(i) * dx;
+                const Real x_u = (Real(i) + Real(0.5)) * dx;
+
+                const Real y_w = Real(j) * dy;
+                const Real y_v = (Real(j) + Real(0.5)) * dy;
+
+                // ---------- left boundary kg==0 ----------
+                if (kg == 0)
+                {
+                    if (comp == Comp1)
+                    {
+                        // NORMAL component (direction==2): w(x,y,0) - (du/dx + dv/dy)*dz/2
+                        const Real w0 = u_boundary.value<2>(x_w, y_w, Real(0.0), t);
+
+                        const Real du_dx = u_boundary.first_derivative<0>(x_w, y_w, Real(0.0), t, dx);
+                        const Real dv_dy = u_boundary.first_derivative<1>(x_w, y_w, Real(0.0), t, dy);
+
+                        out[il] = w0 - (du_dx + dv_dy) * (dz * Real(0.5));
+                    }
+                    else if (comp == Comp2)
+                    {
+                        // tangential u at z=0 : value at (x_u, y_w, 0)
+                        out[il] = u_boundary.value<0>(x_u, y_w, Real(0.0), t);
+                    }
+                    else // comp == Comp3
+                    {
+                        // tangential v at z=0 : value at (x_w, y_v, 0)
+                        out[il] = u_boundary.value<1>(x_w, y_v, Real(0.0), t);
+                    }
+                    continue;
+                }
+
+                // ---------- right boundary kg==N-1 ----------
+                if (kg == int(N) - 1)
+                {
+                    if (comp == Comp1)
+                    {
+                        // NORMAL: Dirichlet at z=Lz, value at (x_w, y_w, Lz)
+                        out[il] = u_boundary.value<2>(x_w, y_w, Lz, t);
+                    }
+                    else
+                    {
+                        // TANGENTIAL: rhs(N-1) + 2*gamma/dz^2 * u_ex
+                        Real u_ex = Real(0.0);
+                        if (comp == Comp2)
+                            u_ex = u_boundary.value<0>(x_u, y_w, Lz, t);
+                        else
+                            u_ex = u_boundary.value<1>(x_w, y_v, Lz, t);
+
+                        const Real gammaN = gamma_field.get(i, j, N - 1);
+                        const Real coeffN = gammaN / h2;
+
+                        out[il] = rhs.value(comp, i, j, N - 1) + Real(2.0) * coeffN * u_ex;
+                    }
+                    continue;
+                }
             }
         };
 
@@ -1196,6 +1477,7 @@ public:
             }
         };
 
+        // normal uses Dirichlet matrix, tangentials use ghost matrix
         solve_component_batched(Comp1, schur_dir);
         solve_component_batched(Comp2, schur_gho);
         solve_component_batched(Comp3, schur_gho);
