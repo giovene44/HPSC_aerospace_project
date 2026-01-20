@@ -545,6 +545,147 @@ public:
 
     void set_gamma(ScalarVariable &g) { gamma_field = g; }
     BoundaryFunctions &set_u_boundary() { return u_boundary; }
+    template <Dim direction>
+    bool is_known_face(Dim index_1, Dim index_2, Dim component) const
+    {
+        if constexpr (direction == 0)
+        {
+            if (component == 0)
+                return (index_1 == 0 || index_2 == 0);
+            if (component == 1)
+                return (index_1 == Ny - 1 || index_2 == 0);
+            if (component == 2)
+                return (index_1 == 0 || index_2 == Nz - 1);
+        }
+        else if constexpr (direction == 1) // Sweep Y-direction
+        {
+            if (component == 0)
+                return (index_1 == Nx - 1 || index_2 == 0);
+            if (component == 1)
+                return (index_1 == 0 || index_2 == 0);
+            if (component == 2)
+                return (index_1 == 0 || index_2 == Nz - 1);
+        }
+        else
+        { // direction == 2
+            if (component == 0)
+                return (index_1 == Nx - 1 || index_2 == 0);
+            if (component == 1)
+                return (index_1 == 0 || index_2 == Ny - 1);
+            if (component == 2)
+                return (index_1 == 0 || index_2 == 0);
+        }
+        return false;
+    }
+    template <Dim direction>
+    bool handle_known_face(VectorVariable &solution, Dim index_1, Dim index_2, Dim component)
+    {
+        if (!is_known_face<direction>(index_1, index_2, component))
+            return false;
+
+        auto update_bc = [&](Dim i, Dim j, Dim k)
+        {
+            Real x = i * dx, y = j * dy, z = k * dz;
+
+            // BoundaryFunctions::value is now thread-safe via thread_local parser
+            if (component == 0)
+                solution.set(0, i, j, k) = u_boundary.value<0>(x + dx / Real(2.0), y, z, t);
+            else if (component == 1)
+                solution.set(1, i, j, k) = u_boundary.value<1>(x, y + dy / Real(2.0), z, t);
+            else if (component == 2)
+                solution.set(2, i, j, k) = u_boundary.value<2>(x, y, z + dz / Real(2.0), t);
+        };
+
+        if constexpr (direction == 0)
+        {
+            for (Dim i = 0; i < Nx; ++i)
+            {
+                update_bc(i, index_1, index_2);
+            }
+        }
+        else if constexpr (direction == 1)
+        {
+            for (Dim j = 0; j < Ny; ++j)
+                update_bc(index_1, j, index_2);
+        }
+        else
+        {
+            for (Dim k = 0; k < Nz; ++k)
+                update_bc(index_1, index_2, k);
+        }
+
+        return true;
+    }
+
+    template <Dim direction>
+    void apply_bc(VectorVariable &rhs)
+    {
+        // Domain lengths:
+        Real Lx = dx * (Nx - Real(0.5));
+        Real Ly = dy * (Ny - Real(0.5));
+        Real Lz = dz * (Nz - Real(0.5));
+
+        if constexpr (direction == 0)
+        {
+            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
+                {
+                    // on comp1 we have normal components
+                    rhs.set(direction, 0, index_1, index_2) = (u_boundary.value<direction>(0, index_1 * dy, index_2 * dz, t)) - ((u_boundary.first_derivative<1>(0, index_1 * dy, index_2 * dz, t, dy)) + (u_boundary.first_derivative<2>(0, index_1 * dy, index_2 * dz, t, dz))) * dx * Real(0.5);
+                    rhs.set(direction, Nx - 1, index_1, index_2) = u_boundary.value<direction>(Lx, index_1 * dy, index_2 * dz, t);
+
+                    // on comp2 we have tangent components
+                    rhs.set(1, 0, index_1, index_2) = u_boundary.value<1>(0, 0.5 * dy + index_1 * dy, index_2 * dz, t);
+                    rhs.set(1, Nx - 1, index_1, index_2) = rhs.value(1, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx) * (u_boundary.value<1>(Lx, 0.5 * dy + index_1 * dy, index_2 * dz, t));
+
+                    // on comp3 we have tangent components
+                    rhs.set(2, 0, index_1, index_2) = u_boundary.value<2>(0, index_1 * dy, 0.5 * dz + index_2 * dz, t);
+                    rhs.set(2, Nx - 1, index_1, index_2) = rhs.value(2, Nx - 1, index_1, index_2) + Real(2.0) * gamma_field.get(Nx - 1, index_1, index_2) / (dx * dx) * (u_boundary.value<2>(Lx, index_1 * dy, 0.5 * dz + index_2 * dz, t));
+                }
+            }
+        }
+
+        else if constexpr (direction == 1)
+        {
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
+                {
+                    // on comp2 we have normal components
+                    rhs.set(direction, index_1, 0, index_2) = (u_boundary.value<direction>(index_1 * dx, 0, index_2 * dz, t)) - ((u_boundary.first_derivative<0>(index_1 * dx, 0, index_2 * dz, t, dx)) + (u_boundary.first_derivative<2>(index_1 * dx, 0, index_2 * dz, t, dz))) * dy * Real(0.5);
+                    rhs.set(direction, index_1, Ny - 1, index_2) = u_boundary.value<direction>(index_1 * dx, Ly, index_2 * dz, t);
+
+                    // on comp1 we have tangent components
+                    rhs.set(0, index_1, 0, index_2) = u_boundary.value<0>(0.5 * dx + index_1 * dx, 0, index_2 * dz, t);
+                    rhs.set(0, index_1, Ny - 1, index_2) = rhs.value(0, index_1, Ny - 1, index_2) + Real(2.0) * gamma_field.get(index_1, Ny - 1, index_2) / (dy * dy) * (u_boundary.value<0>(0.5 * dx + index_1 * dx, Ly, index_2 * dz, t));
+                    // on comp3 we have tangent components
+                    rhs.set(2, index_1, 0, index_2) = u_boundary.value<2>(index_1 * dx, 0, 0.5 * dz + index_2 * dz, t);
+                    rhs.set(2, index_1, Ny - 1, index_2) = rhs.value(2, index_1, Ny - 1, index_2) + Real(2.0) * gamma_field.get(index_1, Ny - 1, index_2) / (dy * dy) * (u_boundary.value<2>(index_1 * dx, Ly, 0.5 * dz + index_2 * dz, t));
+                }
+            }
+        }
+        else if constexpr (direction == 2)
+        {
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Ny; ++index_2)
+                {
+                    // on comp3 we have normal components
+                    rhs.set(direction, index_1, index_2, 0) = (u_boundary.value<direction>(index_1 * dx, index_2 * dy, 0, t)) - (((u_boundary.first_derivative<0>(index_1 * dx, index_2 * dy, 0, t, dx))) + (u_boundary.first_derivative<1>(index_1 * dx, index_2 * dy, 0, t, dy))) * dz * Real(0.5);
+                    rhs.set(direction, index_1, index_2, Nz - 1) = u_boundary.value<direction>(index_1 * dx, index_2 * dy, Lz, t);
+
+                    // on comp1 we have tangent components
+                    rhs.set(0, index_1, index_2, 0) = (u_boundary.value<0>(0.5 * dx + index_1 * dx, index_2 * dy, 0, t));
+                    rhs.set(0, index_1, index_2, Nz - 1) = rhs.value(0, index_1, index_2, Nz - 1) + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) * (u_boundary.value<0>(0.5 * dx + index_1 * dx, index_2 * dy, Lz, t));
+
+                    // on comp2 we have tangent components
+                    rhs.set(1, index_1, index_2, 0) = (u_boundary.value<1>(index_1 * dx, 0.5 * dy + index_2 * dy, 0, t));
+                    rhs.set(1, index_1, index_2, Nz - 1) = rhs.value(1, index_1, index_2, Nz - 1) + Real(2.0) * gamma_field.get(index_1, index_2, Nz - 1) / (dz * dz) * (u_boundary.value<1>(index_1 * dx, 0.5 * dy + index_2 * dy, Lz, t));
+                }
+            }
+        }
+    };
 
     // =============================================================
     // X-DIRECTION ONLY SOLVE (direction splitting validation)
@@ -552,128 +693,88 @@ public:
     // =============================================================
 
     void solve_x_only(VectorVariable &rhs,
-                      VectorVariable &solution, const MPITopology3D &topo, bool use_omp = false)
+                      VectorVariable &solution,
+                      const MPITopology3D &topo,
+                      const DimensionsHandlerVector &dim_handler,
+                      bool use_omp = false)
     {
+        // EXACT SAME as correct solver
+        apply_bc<0>(rhs);
+
         const Dim N = Nx;
         const Real h = dx;
-        const Real h2 = h * h;
-        const Real Lx = dx * (Nx - Real(0.5));
 
-        // ============================================================
-        // 0) Communicator in X e rank/size
-        // ============================================================
+        // communicator along X
         MPI_Comm comm_x_raw = topo.comm_x();
-
         int rank_x = 0, size_x = 1;
         MPI_Comm_rank(comm_x_raw, &rank_x);
         MPI_Comm_size(comm_x_raw, &size_x);
-
-        // Create an MPICommunicator view wrapper around the MPI_Comm
-        // duplicate=false means we don't own the communicator lifecycle
         MPICommunicator comm_x(comm_x_raw, false);
 
-        // ============================================================
-        // 1) Costruisci (a,b,c) UNA VOLTA per componente (u,v,w)
-        //    (nel test gamma è costante e non dipende da j,k)
-        // ============================================================
-        auto build_abc_for_comp = [&](int comp,
-                                      std::vector<Real> &a,
-                                      std::vector<Real> &b,
-                                      std::vector<Real> &c)
+        // component roles (normal/tangential) for X-sweep
+        const Dim Comp1 = dim_handler.Comp1; // normal
+        const Dim Comp2 = dim_handler.Comp2; // tangent
+        const Dim Comp3 = dim_handler.Comp3; // tangent
+
+        // constant gamma -> coefficients independent of (j,k)
+        const Real gamma0 = gamma_field.get(0, 0, 0);
+        const Real coeff = gamma0 / (h * h);
+
+        // Two Schur solvers only:
+        // - one for Dirichlet-Dirichlet (normal component)
+        // - one for Dirichlet + ghost-elimination (tangentials)
+        SchurComplementSolver schur_dir(N, size_x, rank_x, comm_x);
+        SchurComplementSolver schur_gho(N, size_x, rank_x, comm_x);
+
+        const int local_N = schur_dir.get_local_N();
+        const int global_start = schur_dir.get_global_start();
+
+        // ------------------------------------------------------------
+        // Build global (a,b,c) ONCE for Dirichlet-Dirichlet and Ghost
+        // ------------------------------------------------------------
+        std::vector<Real> a_dir(N, 0.0), b_dir(N, 0.0), c_dir(N, 0.0);
+        std::vector<Real> a_gho(N, 0.0), b_gho(N, 0.0), c_gho(N, 0.0);
+
+        // internal rows (same for both matrices)
+        for (Dim i = 1; i < N - 1; ++i)
         {
-            a.assign(N, 0.0);
-            b.assign(N, 0.0);
-            c.assign(N, 0.0);
+            a_dir[i] = -coeff;
+            b_dir[i] = Real(1.0) + Real(2.0) * coeff;
+            c_dir[i] = -coeff;
+            a_gho[i] = -coeff;
+            b_gho[i] = Real(1.0) + Real(2.0) * coeff;
+            c_gho[i] = -coeff;
+        }
 
-            // interni
-            for (Dim i = 1; i < N - 1; ++i)
-            {
-                const Real gamma_val = gamma_field.get(i, 0, 0); // test: costante in (j,k)
-                const Real coeff = gamma_val / h2;
-                a[i] = -coeff;
-                b[i] = Real(1.0) + Real(2.0) * coeff;
-                c[i] = -coeff;
-            }
+        // left boundary row: identity for both (matches correct solver)
+        a_dir[0] = a_gho[0] = Real(0.0);
+        b_dir[0] = b_gho[0] = Real(1.0);
+        c_dir[0] = c_gho[0] = Real(0.0);
 
-            // sinistra: riga Dirichlet fissa (come nel tuo codice)
-            a[0] = 0.0;
-            b[0] = 1.0;
-            c[0] = 0.0;
+        // right boundary:
+        // - Dirichlet (normal)
+        a_dir[N - 1] = Real(0.0);
+        b_dir[N - 1] = Real(1.0);
+        c_dir[N - 1] = Real(0.0);
 
-            // destra
-            if (comp == 0)
-            {
-                // u: Dirichlet
-                a[N - 1] = 0.0;
-                b[N - 1] = 1.0;
-                c[N - 1] = 0.0;
-            }
-            else
-            {
-                // v,w: ghost elimination
-                const Real gammaN = gamma_field.get(N - 1, 0, 0);
-                const Real coeff = gammaN / h2;
-                a[N - 1] = -coeff;
-                b[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff); // 1 + 3*coeff
-                c[N - 1] = 0.0;
-            }
-        };
+        // - Ghost elimination (tangentials): a=-coeff, b=1+3*coeff, c=0
+        a_gho[N - 1] = -coeff;
+        b_gho[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff);
+        c_gho[N - 1] = Real(0.0);
 
-        // ============================================================
-        // 2) BC note per alcune linee (come nel tuo codice)
-        // ============================================================
-        auto is_known_face_x = [&](Dim j, Dim k, int comp) -> bool
+        // ------------------------------------------------------------
+        // Preprocess ONCE per matrix
+        // ------------------------------------------------------------
+        auto preprocess = [&](SchurComplementSolver &schur,
+                              const std::vector<Real> &a_full,
+                              const std::vector<Real> &b_full,
+                              const std::vector<Real> &c_full)
         {
-            if (comp == 0)
-                return (j == 0 || k == 0);
-            if (comp == 1)
-                return (j == Ny - 1 || k == 0);
-            return (j == 0 || k == Nz - 1);
-        };
-
-        auto fill_known_face_x = [&](Dim j, Dim k, int comp)
-        {
-            const Real y_u = Real(j) * dy;
-            const Real y_v = (Real(j) + Real(0.5)) * dy;
-
-            const Real z_w = (Real(k) + Real(0.5)) * dz;
-            const Real z_u = Real(k) * dz;
-
-            for (Dim i = 0; i < Nx; ++i)
-            {
-                const Real x_u = (Real(i) + Real(0.5)) * dx;
-                const Real x_vw = Real(i) * dx;
-
-                if (comp == 0)
-                    solution.set(0, i, j, k) = u_boundary.value<0>(x_u, y_u, z_u, t);
-                else if (comp == 1)
-                    solution.set(1, i, j, k) = u_boundary.value<1>(x_vw, y_v, z_u, t);
-                else
-                    solution.set(2, i, j, k) = u_boundary.value<2>(x_vw, y_u, z_w, t);
-            }
-        };
-
-        // ============================================================
-        // 3) Crea 3 solver Schur (uno per componente) e preprocess UNA VOLTA
-        // ============================================================
-        SchurComplementSolver schur_u(N, size_x, rank_x, comm_x);
-        SchurComplementSolver schur_v(N, size_x, rank_x, comm_x);
-        SchurComplementSolver schur_w(N, size_x, rank_x, comm_x);
-
-        const int local_N = schur_u.get_local_N();
-        const int global_start = schur_u.get_global_start();
-
-        std::vector<Real> a_full, b_full, c_full;
-
-        auto preprocess_solver = [&](SchurComplementSolver &schur, int comp)
-        {
-            build_abc_for_comp(comp, a_full, b_full, c_full);
-
             std::vector<Real> a_local(local_N, 0.0), b_local(local_N, 0.0), c_local(local_N, 0.0);
             for (int il = 0; il < local_N; ++il)
             {
-                int ig = global_start + il;
-                if (ig < 0 || ig >= N)
+                const int ig = global_start + il;
+                if (ig < 0 || ig >= int(N))
                     continue;
                 a_local[il] = a_full[ig];
                 b_local[il] = b_full[ig];
@@ -682,259 +783,76 @@ public:
             schur.preprocess(a_local, b_local, c_local);
         };
 
-        preprocess_solver(schur_u, 0);
-        preprocess_solver(schur_v, 1);
-        preprocess_solver(schur_w, 2);
+        preprocess(schur_dir, a_dir, b_dir, c_dir);
+        preprocess(schur_gho, a_gho, b_gho, c_gho);
 
-        // ============================================================
-        // 4) Solve per linea: costruisci SOLO d (RHS globale della linea)
-        //    poi estrai rhs_local, solve, e scrivi SOLO owned part
-        // ============================================================
-        auto solve_line_for_component =
-            [&](Dim j, Dim k, int comp, SchurComplementSolver &schur)
-        {
-            if (is_known_face_x(j, k, comp))
-            {
-                fill_known_face_x(j, k, comp);
-                return;
-            }
-
-            // d = RHS globale della linea
-            std::vector<Real> d(N, 0.0);
-
-            // -------------------------
-            // interni
-            // -------------------------
-            for (Dim i = 1; i < N - 1; ++i)
-                d[i] = rhs.value(comp, i, j, k);
-
-            // -------------------------
-            // bordo sinistro i=0
-            // (qui metti ESATTAMENTE la tua logica)
-            // -------------------------
-            {
-                const Real y = j * dy;
-                const Real z = k * dz;
-
-                if (comp == 0)
-                {
-                    const Real u0_wall = u_boundary.value<0>(Real(0.0), y, z, t);
-
-                    const Real v_plus = u_boundary.value<1>(Real(0.0), (Real(j) + Real(0.5)) * dy, z, t);
-                    const Real v_minus = u_boundary.value<1>(Real(0.0), (Real(j) - Real(0.5)) * dy, z, t);
-                    const Real dv_dy = (v_plus - v_minus) / dy;
-
-                    const Real w_plus = u_boundary.value<2>(Real(0.0), y, (Real(k) + Real(0.5)) * dz, t);
-                    const Real w_minus = u_boundary.value<2>(Real(0.0), y, (Real(k) - Real(0.5)) * dz, t);
-                    const Real dw_dz = (w_plus - w_minus) / dz;
-
-                    const Real dudx0 = -(dv_dy + dw_dz);
-                    const Real u_half = u0_wall + dudx0 * (dx * Real(0.5));
-                    d[0] = u_half;
-                }
-                else if (comp == 1)
-                {
-                    d[0] = u_boundary.value<1>(Real(0.0), (Real(j) + Real(0.5)) * dy, z, t);
-                }
-                else
-                {
-                    d[0] = u_boundary.value<2>(Real(0.0), y, (Real(k) + Real(0.5)) * dz, t);
-                }
-            }
-
-            // -------------------------
-            // bordo destro i=N-1
-            // (anche qui la tua logica)
-            // -------------------------
-            if (comp == 0)
-            {
-                const Real y = j * dy;
-                const Real z = k * dz;
-                d[N - 1] = u_boundary.value<0>(Lx, y, z, t);
-            }
-            else
-            {
-                const Real y = j * dy;
-                const Real z = k * dz;
-
-                Real u_ex = 0.0;
-                if (comp == 1)
-                    u_ex = u_boundary.value<1>(Lx, (Real(j) + Real(0.5)) * dy, z, t);
-                else
-                    u_ex = u_boundary.value<2>(Lx, y, (Real(k) + Real(0.5)) * dz, t);
-
-                // Nota: il termine +2*coeff*u_ex era già nel tuo schema per i=N-1
-                const Real gammaN = gamma_field.get(N - 1, j, k);
-                const Real coeff = gammaN / h2;
-                d[N - 1] = rhs.value(comp, N - 1, j, k) + Real(2.0) * coeff * u_ex;
-            }
-
-            // ------------------------------------------------------------
-            // RHS locale per Schur
-            // ------------------------------------------------------------
-            std::vector<Real> rhs_local(local_N, 0.0);
-            for (int il = 0; il < local_N; ++il)
-            {
-                int ig = global_start + il;
-                if (ig < 0 || ig >= N)
-                    continue;
-                rhs_local[il] = d[ig];
-            }
-
-            // solve locale (Schur fa comunicazione solo in comm_x)
-            std::vector<Real> x_local;
-            schur.solve(rhs_local, x_local);
-
-            // write-back: SOLO porzione owned (evita duplicato interfaccia sinistra)
-            int i0_local = (rank_x == 0) ? 0 : 1;
-            for (int il = i0_local; il < local_N; ++il)
-            {
-                int ig = global_start + il;
-                if (ig < 0 || ig >= N)
-                    continue;
-                solution.set(comp, ig, j, k) = x_local[il];
-            }
-        };
-
-        // ============================================================
-        // 5) Loop locale su (j,k) del process (Py,Pz)
-        // ============================================================
-        Dim j0 = topo.local_j0(Ny);
-        Dim j1 = topo.local_j1(Ny);
-        Dim k0 = topo.local_k0(Nz);
-        Dim k1 = topo.local_k1(Nz);
+        // ------------------------------------------------------------
+        // Local (j,k) range
+        // ------------------------------------------------------------
+        Dim j0 = topo.local_j0(Ny), j1 = topo.local_j1(Ny);
+        Dim k0 = topo.local_k0(Nz), k1 = topo.local_k1(Nz);
 
         const int nJ = int(j1 - j0);
         const int nK = int(k1 - k0);
         const int nLinesLocal = nJ * nK;
 
         auto lid_of = [&](Dim j, Dim k) -> int
-        {
-            return int((k - k0) * nJ + (j - j0));
-        };
-
+        { return int((k - k0) * nJ + (j - j0)); };
         auto jk_of_lid = [&](int lid, Dim &j, Dim &k)
         {
             k = k0 + Dim(lid / nJ);
             j = j0 + Dim(lid - int(k - k0) * nJ);
         };
 
-        // Fill rhs_local (only local_N entries) for a given (j,k,comp)
-        auto build_rhs_local = [&](Dim j, Dim k, int comp, Real *out_local)
+        // write-back: avoid duplicate left interface
+        const int i0_local = (rank_x == 0) ? 0 : 1;
+
+        // ------------------------------------------------------------
+        // Build rhs_local straight from rhs (BC already in rhs!)
+        // ------------------------------------------------------------
+        auto build_rhs_local = [&](Dim j, Dim k, Dim comp, Real *out)
         {
             for (int il = 0; il < local_N; ++il)
             {
                 const int ig = global_start + il;
-                Real val = 0.0;
-
-                // internal points
-                if (ig >= 1 && ig <= int(N) - 2)
+                if (ig < 0 || ig >= int(N))
                 {
-                    val = rhs.value(comp, ig, j, k);
+                    out[il] = Real(0.0);
+                    continue;
                 }
-
-                // left boundary ig==0
-                if (ig == 0)
-                {
-                    const Real y = j * dy;
-                    const Real z = k * dz;
-
-                    if (comp == 0)
-                    {
-                        const Real u0_wall = u_boundary.value<0>(Real(0.0), y, z, t);
-
-                        const Real v_plus = u_boundary.value<1>(Real(0.0), (Real(j) + Real(0.5)) * dy, z, t);
-                        const Real v_minus = u_boundary.value<1>(Real(0.0), (Real(j) - Real(0.5)) * dy, z, t);
-                        const Real dv_dy = (v_plus - v_minus) / dy;
-
-                        const Real w_plus = u_boundary.value<2>(Real(0.0), y, (Real(k) + Real(0.5)) * dz, t);
-                        const Real w_minus = u_boundary.value<2>(Real(0.0), y, (Real(k) - Real(0.5)) * dz, t);
-                        const Real dw_dz = (w_plus - w_minus) / dz;
-
-                        const Real dudx0 = -(dv_dy + dw_dz);
-                        const Real u_half = u0_wall + dudx0 * (dx * Real(0.5));
-                        val = u_half;
-                    }
-                    else if (comp == 1)
-                    {
-                        val = u_boundary.value<1>(Real(0.0), (Real(j) + Real(0.5)) * dy, z, t);
-                    }
-                    else
-                    {
-                        val = u_boundary.value<2>(Real(0.0), y, (Real(k) + Real(0.5)) * dz, t);
-                    }
-                }
-
-                // right boundary ig==N-1
-                if (ig == int(N) - 1)
-                {
-                    const Real y = j * dy;
-                    const Real z = k * dz;
-
-                    if (comp == 0)
-                    {
-                        val = u_boundary.value<0>(Lx, y, z, t);
-                    }
-                    else
-                    {
-                        Real u_ex = 0.0;
-                        if (comp == 1)
-                            u_ex = u_boundary.value<1>(Lx, (Real(j) + Real(0.5)) * dy, z, t);
-                        else
-                            u_ex = u_boundary.value<2>(Lx, y, (Real(k) + Real(0.5)) * dz, t);
-
-                        const Real gammaN = gamma_field.get(N - 1, j, k);
-                        const Real coeff = gammaN / h2;
-                        val = rhs.value(comp, N - 1, j, k) + Real(2.0) * coeff * u_ex;
-                    }
-                }
-
-                out_local[il] = val;
+                out[il] = rhs.value(comp, ig, j, k);
             }
         };
 
-        auto solve_component_batched = [&](int comp, SchurComplementSolver &schur)
+        auto solve_component_batched = [&](Dim comp, SchurComplementSolver &schur)
         {
-            // 1) build list of active (unknown) lines for this component
             std::vector<int> active_lids;
             active_lids.reserve(nLinesLocal);
 
+            // known-face exactly like correct solver
             for (Dim k = k0; k < k1; ++k)
                 for (Dim j = j0; j < j1; ++j)
-                    if (!is_known_face_x(j, k, comp))
+                    if (!is_known_face<0>(j, k, comp))
                         active_lids.push_back(lid_of(j, k));
-
-            // 2) fill known lines immediately (no solve)
-            for (Dim k = k0; k < k1; ++k)
-                for (Dim j = j0; j < j1; ++j)
-                    if (is_known_face_x(j, k, comp))
-                        fill_known_face_x(j, k, comp);
+                    else
+                        handle_known_face<0>(solution, j, k, comp);
 
             const int nActive = int(active_lids.size());
             if (nActive == 0)
                 return;
 
-            // 3) allocate flat buffers for batch
             std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
             std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
 
-// 4) build rhs_flat in parallel (OpenMP)
 #pragma omp parallel for schedule(static) if (use_omp)
             for (int p = 0; p < nActive; ++p)
             {
                 Dim j, k;
                 jk_of_lid(active_lids[p], j, k);
-
-                Real *out = rhs_flat.data() + size_t(p) * size_t(local_N);
-                build_rhs_local(j, k, comp, out);
+                build_rhs_local(j, k, comp, rhs_flat.data() + size_t(p) * size_t(local_N));
             }
 
-            // 5) batched solve: internally does
-            //    phase1-2 (omp), one allreduce, phase4-5 (omp)
             schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
-
-            // 6) write-back owned part (parallel)
-            const int i0_local = (rank_x == 0) ? 0 : 1;
 
 #pragma omp parallel for schedule(static) if (use_omp)
             for (int p = 0; p < nActive; ++p)
@@ -942,21 +860,21 @@ public:
                 Dim j, k;
                 jk_of_lid(active_lids[p], j, k);
 
-                const Real *x_local = sol_flat.data() + size_t(p) * size_t(local_N);
-
+                const Real *x = sol_flat.data() + size_t(p) * size_t(local_N);
                 for (int il = i0_local; il < local_N; ++il)
                 {
                     const int ig = global_start + il;
                     if (ig < 0 || ig >= int(N))
                         continue;
-                    solution.set(comp, ig, j, k) = x_local[il];
+                    solution.set(comp, ig, j, k) = x[il];
                 }
             }
         };
 
-        solve_component_batched(0, schur_u);
-        solve_component_batched(1, schur_v);
-        solve_component_batched(2, schur_w);
+        // normal uses Dirichlet matrix, tangentials use ghost matrix
+        solve_component_batched(Comp1, schur_dir);
+        solve_component_batched(Comp2, schur_gho);
+        solve_component_batched(Comp3, schur_gho);
     }
 
     // =============================================================
@@ -966,419 +884,138 @@ public:
     void solve_y_only(VectorVariable &rhs,
                       VectorVariable &solution,
                       const MPITopology3D &topo,
+                      const DimensionsHandlerVector &dim_handler,
                       bool use_omp = false)
     {
+        apply_bc<1>(rhs);
+
         const Dim N = Ny;
         const Real h = dy;
-        const Real h2 = h * h;
 
-        const Real Ly = dy * (Ny - Real(0.5));
-
-        // ============================================================
-        // 0) Communicator in Y e rank/size
-        // ============================================================
         MPI_Comm comm_y_raw = topo.comm_y();
         int rank_y = 0, size_y = 1;
         MPI_Comm_rank(comm_y_raw, &rank_y);
         MPI_Comm_size(comm_y_raw, &size_y);
-
-        // Create an MPICommunicator view wrapper around the MPI_Comm
         MPICommunicator comm_y(comm_y_raw, false);
 
-        auto build_abc_for_comp = [&](int comp,
-                                      std::vector<Real> &a,
-                                      std::vector<Real> &b,
-                                      std::vector<Real> &c)
+        const Dim Comp1 = dim_handler.Comp1;
+        const Dim Comp2 = dim_handler.Comp2;
+        const Dim Comp3 = dim_handler.Comp3;
+
+        const Real gamma0 = gamma_field.get(0, 0, 0);
+        const Real coeff = gamma0 / (h * h);
+
+        SchurComplementSolver schur_dir(N, size_y, rank_y, comm_y);
+        SchurComplementSolver schur_gho(N, size_y, rank_y, comm_y);
+
+        const int local_N = schur_dir.get_local_N();
+        const int global_start = schur_dir.get_global_start();
+
+        std::vector<Real> a_dir(N, 0.0), b_dir(N, 0.0), c_dir(N, 0.0);
+        std::vector<Real> a_gho(N, 0.0), b_gho(N, 0.0), c_gho(N, 0.0);
+
+        for (Dim j = 1; j < N - 1; ++j)
         {
-            a.assign(N, 0.0);
-            b.assign(N, 0.0);
-            c.assign(N, 0.0);
+            a_dir[j] = -coeff;
+            b_dir[j] = Real(1.0) + Real(2.0) * coeff;
+            c_dir[j] = -coeff;
+            a_gho[j] = -coeff;
+            b_gho[j] = Real(1.0) + Real(2.0) * coeff;
+            c_gho[j] = -coeff;
+        }
 
-            // Intern
-            for (Dim j = 1; j < N - 1; ++j)
-            {
-                const Real gamma_val = gamma_field.get(0, j, 0); // test: costante in (i,k)
-                const Real coeff = gamma_val / h2;
-                a[j] = -coeff;
-                b[j] = Real(1.0) + Real(2.0) * coeff;
-                c[j] = -coeff;
-            }
+        a_dir[0] = a_gho[0] = Real(0.0);
+        b_dir[0] = b_gho[0] = Real(1.0);
+        c_dir[0] = c_gho[0] = Real(0.0);
 
-            // Left boundary: Dirichlet fixed row (as in your code)
-            {
-                a[0] = 0.0;
-                b[0] = 1.0;
-                c[0] = 0.0;
-            }
-            // Right boundary
-            {
-                if (comp == 1)
-                {
-                    // v: Dirichlet
-                    a[N - 1] = 0.0;
-                    b[N - 1] = 1.0;
-                    c[N - 1] = 0.0;
-                }
-                else
-                {
-                    // u,w: ghost elimination
-                    const Real gammaN = gamma_field.get(0, N - 1, 0);
-                    const Real coeff = gammaN / h2;
-                    a[N - 1] = -coeff;
-                    b[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff); // 1 + 3*coeff
-                    c[N - 1] = 0.0;
-                }
-            }
-        };
+        a_dir[N - 1] = Real(0.0);
+        b_dir[N - 1] = Real(1.0);
+        c_dir[N - 1] = Real(0.0);
 
-        // ---- Known face logic for direction = 1 (matches your earlier is_known_face<1>) ----
-        auto is_known_face_y = [&](Dim i, Dim k, int comp) -> bool
+        a_gho[N - 1] = -coeff;
+        b_gho[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff);
+        c_gho[N - 1] = Real(0.0);
+
+        auto preprocess = [&](SchurComplementSolver &schur,
+                              const std::vector<Real> &a_full,
+                              const std::vector<Real> &b_full,
+                              const std::vector<Real> &c_full)
         {
-            if (comp == 0)
-                return (i == Nx - 1 || k == 0);
-            if (comp == 1)
-                return (i == 0 || k == 0);
-            // comp == 2
-            return (i == 0 || k == Nz - 1);
-        };
-
-        // Fill ONLY the requested component along the whole y-line at (i,k)
-        auto fill_known_face_y = [&](Dim i, Dim k, int comp)
-        {
-            const Real x_u = (Real(i) + Real(0.5)) * dx; // u location in x
-            const Real x_vw = Real(i) * dx;              // v,w location in x
-
-            const Real z_u = Real(k) * dz;
-            const Real z_w = (Real(k) + Real(0.5)) * dz;
-
-            for (Dim j = 0; j < Ny; ++j)
-            {
-                const Real y_u = Real(j) * dy;               // u,w location in y
-                const Real y_v = (Real(j) + Real(0.5)) * dy; // v location in y
-
-                if (comp == 0)
-                {
-                    // u at (x+dx/2, y, z)
-                    solution.set(0, i, j, k) = u_boundary.value<0>(x_u, y_u, z_u, t);
-                }
-                else if (comp == 1)
-                {
-                    // v at (x, y+dy/2, z)
-                    solution.set(1, i, j, k) = u_boundary.value<1>(x_vw, y_v, z_u, t);
-                }
-                else
-                {
-                    // w at (x, y, z+dz/2)
-                    solution.set(2, i, j, k) = u_boundary.value<2>(x_vw, y_u, z_w, t);
-                }
-            }
-        };
-
-        // ============================================================
-        // 3) Crea 3 solver Schur (uno per componente) e preprocess UNA VOLTA
-        // ============================================================
-        SchurComplementSolver schur_u(N, size_y, rank_y, comm_y);
-        SchurComplementSolver schur_v(N, size_y, rank_y, comm_y);
-        SchurComplementSolver schur_w(N, size_y, rank_y, comm_y);
-
-        const int local_N = schur_u.get_local_N();
-        const int global_start = schur_u.get_global_start();
-        std::vector<Real> a_full, b_full, c_full;
-
-        auto preprocess_solver = [&](SchurComplementSolver &schur, int comp)
-        {
-            build_abc_for_comp(comp, a_full, b_full, c_full);
-
             std::vector<Real> a_local(local_N, 0.0), b_local(local_N, 0.0), c_local(local_N, 0.0);
             for (int il = 0; il < local_N; ++il)
             {
-                int ig = global_start + il;
-                if (ig < 0 || ig >= N)
+                const int jg = global_start + il;
+                if (jg < 0 || jg >= int(N))
                     continue;
-                a_local[il] = a_full[ig];
-                b_local[il] = b_full[ig];
-                c_local[il] = c_full[ig];
+                a_local[il] = a_full[jg];
+                b_local[il] = b_full[jg];
+                c_local[il] = c_full[jg];
             }
             schur.preprocess(a_local, b_local, c_local);
         };
 
-        preprocess_solver(schur_u, 0);
-        preprocess_solver(schur_v, 1);
-        preprocess_solver(schur_w, 2);
+        preprocess(schur_dir, a_dir, b_dir, c_dir);
+        preprocess(schur_gho, a_gho, b_gho, c_gho);
 
-        std::vector<Real> d(N, 0.0);
-        auto solve_line_for_component = [&](Dim i, Dim k, int comp, SchurComplementSolver &schur)
-        {
-            // Known face: skip TDMA
-            if (is_known_face_y(i, k, comp))
-            {
-                fill_known_face_y(i, k, comp);
-                return;
-            }
-
-            // -------------------------
-            // Interior coefficients
-            // -------------------------
-            for (Dim j = 1; j < N - 1; ++j)
-                d[j] = rhs.value(comp, i, j, k);
-
-            // =========================================================
-            // LEFT boundary (y=0): lecture BCs
-            // Normal comp=1 (v): incompressibility reconstruction
-            // Tangentials (u,w): Dirichlet
-            // =========================================================
-            {
-
-                const Real x_u = (Real(i) + Real(0.5)) * dx;
-                const Real x_vw = Real(i) * dx;
-                const Real z_u = Real(k) * dz;
-                const Real z_w = (Real(k) + Real(0.5)) * dz;
-
-                if (comp == 1)
-                {
-                    // v is stored at y = dy/2 -> that's v_{1/2}
-                    // v_{1/2} = v(0) + (dv/dy)|0 * dy/2
-                    // (dv/dy)|0 = -(du/dx)|0 - (dw/dz)|0
-                    const Real v0_wall = u_boundary.value<1>(x_vw, Real(0.0), z_u, t);
-
-                    const Real u_plus = u_boundary.value<0>(x_u + Real(0.5) * dx, Real(0.0), z_u, t);
-                    const Real u_minus = u_boundary.value<0>(x_u - Real(0.5) * dx, Real(0.0), z_u, t);
-                    const Real du_dx = (u_plus - u_minus) / dx;
-
-                    const Real w_plus = u_boundary.value<2>(x_vw, Real(0.0), z_w + Real(0.5) * dz, t);
-                    const Real w_minus = u_boundary.value<2>(x_vw, Real(0.0), z_w - Real(0.5) * dz, t);
-                    const Real dw_dz = (w_plus - w_minus) / dz;
-
-                    const Real dvdy0 = -(du_dx + dw_dz);
-
-                    const Real v_half = v0_wall + dvdy0 * (dy * Real(0.5));
-                    d[0] = v_half;
-                }
-                else if (comp == 0)
-                {
-                    // u at y=0 is on boundary
-                    d[0] = u_boundary.value<0>(x_u, Real(0.0), z_u, t);
-                }
-                else // comp == 2
-                {
-                    // w at y=0 is on boundary
-                    d[0] = u_boundary.value<2>(x_vw, Real(0.0), z_w, t);
-                }
-            }
-
-            // =========================================================
-            // RIGHT boundary (y=Ly): lecture BCs
-            // Normal comp=1 (v): Dirichlet at j=N-1 (v located at y=Ly)
-            // Tangentials (u,w): ghost elimination at j=N-1
-            // =========================================================
-            if (comp == 1)
-            {
-
-                const Real x_vw = Real(i) * dx;
-                const Real z_u = Real(k) * dz;
-                d[N - 1] = u_boundary.value<1>(x_vw, Ly, z_u, t);
-            }
-            else
-            {
-                // ghost elimination on last row:
-                // a u_{N-2} + (b - c) u_{N-1} = rhs + 2*coeff*u_ex
-                const Real gammaN = gamma_field.get(i, N - 1, k);
-                const Real coeff = gammaN / h2;
-
-                const Real x_u = (Real(i) + Real(0.5)) * dx;
-                const Real x_vw = Real(i) * dx;
-                const Real z_u = Real(k) * dz;
-                const Real z_w = (Real(k) + Real(0.5)) * dz;
-
-                Real u_ex = 0.0;
-                if (comp == 0)
-                    u_ex = u_boundary.value<0>(x_u, Ly, z_u, t);
-                else
-                    u_ex = u_boundary.value<2>(x_vw, Ly, z_w, t);
-
-                d[N - 1] = rhs.value(comp, i, N - 1, k) + Real(2.0) * coeff * u_ex;
-            }
-
-            // ------------------------------------------------------------
-            // RHS locale per Schur
-            // ------------------------------------------------------------
-            std::vector<Real> rhs_local(local_N, 0.0);
-            for (int il = 0; il < local_N; ++il)
-            {
-                int ig = global_start + il;
-                if (ig < 0 || ig >= N)
-                    continue;
-                rhs_local[il] = d[ig];
-            }
-
-            // solve locale (Schur fa comunicazione solo in comm_y)
-            std::vector<Real> x_local;
-            schur.solve(rhs_local, x_local);
-
-            // Write back solo porzione owned (evita duplicato interfaccia sinistra)
-            int j0_local = (rank_y == 0) ? 0 : 1;
-            for (int il = j0_local; il < local_N; ++il)
-            {
-                int ig = global_start + il;
-                if (ig < 0 || ig >= N)
-                    continue;
-                solution.set(comp, i, ig, k) = x_local[il];
-            }
-        };
-
-        // ============================================================
-        // 5) Loop locale su (i,k) del process (Px,Pz)  + BATCHED SOLVE
-        // ============================================================
-        Dim i0 = topo.local_i0(Nx);
-        Dim i1 = topo.local_i1(Nx);
-        Dim k0 = topo.local_k0(Nz);
-        Dim k1 = topo.local_k1(Nz);
+        Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
+        Dim k0 = topo.local_k0(Nz), k1 = topo.local_k1(Nz);
 
         const int nI = int(i1 - i0);
         const int nK = int(k1 - k0);
         const int nLinesLocal = nI * nK;
 
         auto lid_of = [&](Dim i, Dim k) -> int
-        {
-            return int((k - k0) * nI + (i - i0));
-        };
-
+        { return int((k - k0) * nI + (i - i0)); };
         auto ik_of_lid = [&](int lid, Dim &i, Dim &k)
         {
             k = k0 + Dim(lid / nI);
             i = i0 + Dim(lid - int(k - k0) * nI);
         };
 
-        // Fill rhs_local (only local_N entries) for a given (i,k,comp)
-        auto build_rhs_local = [&](Dim i, Dim k, int comp, Real *out_local)
+        const int j0_local = (rank_y == 0) ? 0 : 1;
+
+        auto build_rhs_local = [&](Dim i, Dim k, Dim comp, Real *out)
         {
             for (int il = 0; il < local_N; ++il)
             {
                 const int jg = global_start + il;
-                Real val = 0.0;
-
-                // -------------------------
-                // interior 1..N-2
-                // -------------------------
-                if (jg >= 1 && jg <= int(N) - 2)
+                if (jg < 0 || jg >= int(N))
                 {
-                    val = rhs.value(comp, i, jg, k);
+                    out[il] = Real(0.0);
+                    continue;
                 }
-
-                // =========================================================
-                // LEFT boundary j=0 (y=0)
-                // comp==1: incompressibility reconstruction
-                // comp==0,2: Dirichlet
-                // =========================================================
-                if (jg == 0)
-                {
-                    const Real x_u = (Real(i) + Real(0.5)) * dx;
-                    const Real x_vw = Real(i) * dx;
-                    const Real z_u = Real(k) * dz;
-                    const Real z_w = (Real(k) + Real(0.5)) * dz;
-
-                    if (comp == 1)
-                    {
-                        const Real v0_wall = u_boundary.value<1>(x_vw, Real(0.0), z_u, t);
-
-                        const Real u_plus = u_boundary.value<0>(x_u + Real(0.5) * dx, Real(0.0), z_u, t);
-                        const Real u_minus = u_boundary.value<0>(x_u - Real(0.5) * dx, Real(0.0), z_u, t);
-                        const Real du_dx = (u_plus - u_minus) / dx;
-
-                        const Real w_plus = u_boundary.value<2>(x_vw, Real(0.0), z_w + Real(0.5) * dz, t);
-                        const Real w_minus = u_boundary.value<2>(x_vw, Real(0.0), z_w - Real(0.5) * dz, t);
-                        const Real dw_dz = (w_plus - w_minus) / dz;
-
-                        const Real dvdy0 = -(du_dx + dw_dz);
-                        const Real v_half = v0_wall + dvdy0 * (dy * Real(0.5));
-                        val = v_half;
-                    }
-                    else if (comp == 0)
-                    {
-                        val = u_boundary.value<0>(x_u, Real(0.0), z_u, t);
-                    }
-                    else
-                    {
-                        val = u_boundary.value<2>(x_vw, Real(0.0), z_w, t);
-                    }
-                }
-
-                // =========================================================
-                // RIGHT boundary j=N-1 (y=Ly)
-                // comp==1: Dirichlet
-                // comp==0,2: ghost elimination + 2*coeff*u_ex
-                // =========================================================
-                if (jg == int(N) - 1)
-                {
-                    const Real x_u = (Real(i) + Real(0.5)) * dx;
-                    const Real x_vw = Real(i) * dx;
-                    const Real z_u = Real(k) * dz;
-                    const Real z_w = (Real(k) + Real(0.5)) * dz;
-
-                    if (comp == 1)
-                    {
-                        val = u_boundary.value<1>(x_vw, Ly, z_u, t);
-                    }
-                    else
-                    {
-                        const Real gammaN = gamma_field.get(i, N - 1, k);
-                        const Real coeff = gammaN / h2;
-
-                        Real u_ex = 0.0;
-                        if (comp == 0)
-                            u_ex = u_boundary.value<0>(x_u, Ly, z_u, t);
-                        else
-                            u_ex = u_boundary.value<2>(x_vw, Ly, z_w, t);
-
-                        val = rhs.value(comp, i, N - 1, k) + Real(2.0) * coeff * u_ex;
-                    }
-                }
-
-                out_local[il] = val;
+                out[il] = rhs.value(comp, i, jg, k);
             }
         };
 
-        auto solve_component_batched = [&](int comp, SchurComplementSolver &schur)
+        auto solve_component_batched = [&](Dim comp, SchurComplementSolver &schur)
         {
-            // 1) build list of active (unknown) lines for this component
             std::vector<int> active_lids;
             active_lids.reserve(nLinesLocal);
 
             for (Dim k = k0; k < k1; ++k)
                 for (Dim i = i0; i < i1; ++i)
-                    if (!is_known_face_y(i, k, comp))
+                    if (!is_known_face<1>(i, k, comp))
                         active_lids.push_back(lid_of(i, k));
-
-            // 2) fill known lines immediately (no solve)
-            for (Dim k = k0; k < k1; ++k)
-                for (Dim i = i0; i < i1; ++i)
-                    if (is_known_face_y(i, k, comp))
-                        fill_known_face_y(i, k, comp);
+                    else
+                        handle_known_face<1>(solution, i, k, comp);
 
             const int nActive = int(active_lids.size());
             if (nActive == 0)
                 return;
 
-            // 3) allocate flat buffers for batch
             std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
             std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
 
-            // 4) build rhs_flat in parallel (OpenMP)
 #pragma omp parallel for schedule(static) if (use_omp)
             for (int p = 0; p < nActive; ++p)
             {
                 Dim i, k;
                 ik_of_lid(active_lids[p], i, k);
-
-                Real *out = rhs_flat.data() + size_t(p) * size_t(local_N);
-                build_rhs_local(i, k, comp, out);
+                build_rhs_local(i, k, comp, rhs_flat.data() + size_t(p) * size_t(local_N));
             }
 
-            // 5) batched solve
             schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
-
-            // 6) write-back owned part (avoid duplicate left interface)
-            const int j0_local = (rank_y == 0) ? 0 : 1;
 
 #pragma omp parallel for schedule(static) if (use_omp)
             for (int p = 0; p < nActive; ++p)
@@ -1386,21 +1023,20 @@ public:
                 Dim i, k;
                 ik_of_lid(active_lids[p], i, k);
 
-                const Real *x_local = sol_flat.data() + size_t(p) * size_t(local_N);
-
+                const Real *x = sol_flat.data() + size_t(p) * size_t(local_N);
                 for (int il = j0_local; il < local_N; ++il)
                 {
                     const int jg = global_start + il;
                     if (jg < 0 || jg >= int(N))
                         continue;
-                    solution.set(comp, i, jg, k) = x_local[il];
+                    solution.set(comp, i, jg, k) = x[il];
                 }
             }
         };
 
-        solve_component_batched(0, schur_u);
-        solve_component_batched(1, schur_v);
-        solve_component_batched(2, schur_w);
+        solve_component_batched(Comp1, schur_dir);
+        solve_component_batched(Comp2, schur_gho);
+        solve_component_batched(Comp3, schur_gho);
     }
 
     // =============================================================
@@ -1410,423 +1046,138 @@ public:
     void solve_z_only(VectorVariable &rhs,
                       VectorVariable &solution,
                       const MPITopology3D &topo,
+                      const DimensionsHandlerVector &dim_handler,
                       bool use_omp = false)
     {
+        apply_bc<2>(rhs);
+
         const Dim N = Nz;
         const Real h = dz;
-        const Real h2 = h * h;
 
-        const Real Lz = dz * (Nz - Real(0.5));
-
-        // ============================================================
-        // 0) Communicator in Z e rank/size
-        // ============================================================
         MPI_Comm comm_z_raw = topo.comm_z();
         int rank_z = 0, size_z = 1;
         MPI_Comm_rank(comm_z_raw, &rank_z);
         MPI_Comm_size(comm_z_raw, &size_z);
-
-        // Create an MPICommunicator view wrapper around the MPI_Comm
         MPICommunicator comm_z(comm_z_raw, false);
 
-        auto build_abc_for_comp = [&](int comp,
-                                      std::vector<Real> &a,
-                                      std::vector<Real> &b,
-                                      std::vector<Real> &c)
+        const Dim Comp1 = dim_handler.Comp1;
+        const Dim Comp2 = dim_handler.Comp2;
+        const Dim Comp3 = dim_handler.Comp3;
+
+        const Real gamma0 = gamma_field.get(0, 0, 0);
+        const Real coeff = gamma0 / (h * h);
+
+        SchurComplementSolver schur_dir(N, size_z, rank_z, comm_z);
+        SchurComplementSolver schur_gho(N, size_z, rank_z, comm_z);
+
+        const int local_N = schur_dir.get_local_N();
+        const int global_start = schur_dir.get_global_start();
+
+        std::vector<Real> a_dir(N, 0.0), b_dir(N, 0.0), c_dir(N, 0.0);
+        std::vector<Real> a_gho(N, 0.0), b_gho(N, 0.0), c_gho(N, 0.0);
+
+        for (Dim k = 1; k < N - 1; ++k)
         {
-            a.assign(N, 0.0);
-            b.assign(N, 0.0);
-            c.assign(N, 0.0);
+            a_dir[k] = -coeff;
+            b_dir[k] = Real(1.0) + Real(2.0) * coeff;
+            c_dir[k] = -coeff;
+            a_gho[k] = -coeff;
+            b_gho[k] = Real(1.0) + Real(2.0) * coeff;
+            c_gho[k] = -coeff;
+        }
 
-            // Intern
-            for (Dim k = 1; k < N - 1; ++k)
-            {
-                const Real gamma_val = gamma_field.get(0, 0, k); // test: costante in (i,j)
-                const Real coeff = gamma_val / h2;
-                a[k] = -coeff;
-                b[k] = Real(1.0) + Real(2.0) * coeff;
-                c[k] = -coeff;
-            }
+        a_dir[0] = a_gho[0] = Real(0.0);
+        b_dir[0] = b_gho[0] = Real(1.0);
+        c_dir[0] = c_gho[0] = Real(0.0);
 
-            // Left boundary: Dirichlet fixed row (as in your code)
-            {
-                a[0] = 0.0;
-                b[0] = 1.0;
-                c[0] = 0.0;
-            }
-            // Right boundary
-            {
-                if (comp == 2)
-                {
-                    // w: Dirichlet
-                    a[N - 1] = 0.0;
-                    b[N - 1] = 1.0;
-                    c[N - 1] = 0.0;
-                }
-                else
-                {
-                    // u,v: ghost elimination
-                    const Real gammaN = gamma_field.get(0, 0, N - 1);
-                    const Real coeff = gammaN / h2;
-                    a[N - 1] = -coeff;
-                    b[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff); // 1 + 3*coeff
-                    c[N - 1] = 0.0;
-                }
-            }
-        };
+        a_dir[N - 1] = Real(0.0);
+        b_dir[N - 1] = Real(1.0);
+        c_dir[N - 1] = Real(0.0);
 
-        // ---- Known face logic for direction = 2 (matches your earlier is_known_face<2>) ----
-        // Here index_1 = i, index_2 = j
-        auto is_known_face_z = [&](Dim i, Dim j, int comp) -> bool
+        a_gho[N - 1] = -coeff;
+        b_gho[N - 1] = (Real(1.0) + Real(2.0) * coeff) - (-coeff);
+        c_gho[N - 1] = Real(0.0);
+
+        auto preprocess = [&](SchurComplementSolver &schur,
+                              const std::vector<Real> &a_full,
+                              const std::vector<Real> &b_full,
+                              const std::vector<Real> &c_full)
         {
-            if (comp == 0)
-                return (i == Nx - 1 || j == 0);
-            if (comp == 1)
-                return (i == 0 || j == Ny - 1);
-            // comp == 2
-            return (i == 0 || j == 0);
-        };
-
-        // Fill ONLY the requested component along the whole z-line at (i,j)
-        auto fill_known_face_z = [&](Dim i, Dim j, int comp)
-        {
-            const Real x_u = (Real(i) + Real(0.5)) * dx; // u location in x
-            const Real x_vw = Real(i) * dx;              // v,w location in x
-
-            const Real y_u = Real(j) * dy;               // u,w location in y
-            const Real y_v = (Real(j) + Real(0.5)) * dy; // v location in y
-
-            for (Dim k = 0; k < Nz; ++k)
-            {
-                const Real z_u = Real(k) * dz;               // u,v location in z
-                const Real z_w = (Real(k) + Real(0.5)) * dz; // w location in z
-
-                if (comp == 0)
-                {
-                    // u at (x+dx/2, y, z)
-                    solution.set(0, i, j, k) = u_boundary.value<0>(x_u, y_u, z_u, t);
-                }
-                else if (comp == 1)
-                {
-                    // v at (x, y+dy/2, z)
-                    solution.set(1, i, j, k) = u_boundary.value<1>(x_vw, y_v, z_u, t);
-                }
-                else
-                {
-                    // w at (x, y, z+dz/2)
-                    solution.set(2, i, j, k) = u_boundary.value<2>(x_vw, y_u, z_w, t);
-                }
-            }
-        };
-
-        // ============================================================
-        // 3) Crea 3 solver Schur (uno per componente) e preprocess
-        // ============================================================
-        SchurComplementSolver schur_u(N, size_z, rank_z, comm_z);
-        SchurComplementSolver schur_v(N, size_z, rank_z, comm_z);
-        SchurComplementSolver schur_w(N, size_z, rank_z, comm_z);
-        const int local_N = schur_u.get_local_N();
-        const int global_start = schur_u.get_global_start();
-        std::vector<Real> a_full, b_full, c_full;
-
-        auto preprocess_solver = [&](SchurComplementSolver &schur, int comp)
-        {
-            build_abc_for_comp(comp, a_full, b_full, c_full);
-
             std::vector<Real> a_local(local_N, 0.0), b_local(local_N, 0.0), c_local(local_N, 0.0);
             for (int il = 0; il < local_N; ++il)
             {
-                int ig = global_start + il;
-                if (ig < 0 || ig >= N)
+                const int kg = global_start + il;
+                if (kg < 0 || kg >= int(N))
                     continue;
-                a_local[il] = a_full[ig];
-                b_local[il] = b_full[ig];
-                c_local[il] = c_full[ig];
+                a_local[il] = a_full[kg];
+                b_local[il] = b_full[kg];
+                c_local[il] = c_full[kg];
             }
             schur.preprocess(a_local, b_local, c_local);
         };
 
-        preprocess_solver(schur_u, 0);
-        preprocess_solver(schur_v, 1);
-        preprocess_solver(schur_w, 2);
-        std::vector<Real> d(N, 0.0);
+        preprocess(schur_dir, a_dir, b_dir, c_dir);
+        preprocess(schur_gho, a_gho, b_gho, c_gho);
 
-        auto solve_line_for_component = [&](Dim i, Dim j, int comp, SchurComplementSolver &schur)
-        {
-            // Known face: skip TDMA
-            if (is_known_face_z(i, j, comp))
-            {
-                fill_known_face_z(i, j, comp);
-                return;
-            }
-
-            // -------------------------
-            // Interior coefficients
-            // -------------------------
-            for (Dim k = 1; k < N - 1; ++k)
-            {
-                const Real gamma_val = gamma_field.get(i, j, k);
-                const Real coeff = gamma_val / h2;
-
-                d[k] = rhs.value(comp, i, j, k);
-            }
-
-            // =========================================================
-            // LEFT boundary (z=0): lecture BCs
-            // Normal comp=2 (w): incompressibility reconstruction
-            // Tangentials (u,v): Dirichlet
-            // =========================================================
-            {
-
-                const Real x_u = (Real(i) + Real(0.5)) * dx;
-                const Real x_vw = Real(i) * dx;
-
-                const Real y_u = Real(j) * dy;
-                const Real y_v = (Real(j) + Real(0.5)) * dy;
-
-                if (comp == 2)
-                {
-                    // w is stored at z = dz/2 -> that's w_{1/2}
-                    // w_{1/2} = w(0) + (dw/dz)|0 * dz/2
-                    // (dw/dz)|0 = -(du/dx)|0 - (dv/dy)|0
-                    const Real w0_wall = u_boundary.value<2>(x_vw, y_u, Real(0.0), t);
-
-                    const Real u_plus = u_boundary.value<0>(x_u + Real(0.5) * dx, y_u, Real(0.0), t);
-                    const Real u_minus = u_boundary.value<0>(x_u - Real(0.5) * dx, y_u, Real(0.0), t);
-                    const Real du_dx = (u_plus - u_minus) / dx;
-
-                    const Real v_plus = u_boundary.value<1>(x_vw, y_v + Real(0.5) * dy, Real(0.0), t);
-                    const Real v_minus = u_boundary.value<1>(x_vw, y_v - Real(0.5) * dy, Real(0.0), t);
-                    const Real dv_dy = (v_plus - v_minus) / dy;
-
-                    const Real dwdz0 = -(du_dx + dv_dy);
-
-                    const Real w_half = w0_wall + dwdz0 * (dz * Real(0.5));
-                    d[0] = w_half;
-                }
-                else if (comp == 0)
-                {
-                    // u at z=0 is on boundary
-                    d[0] = u_boundary.value<0>(x_u, y_u, Real(0.0), t);
-                }
-                else // comp == 1
-                {
-                    // v at z=0 is on boundary
-                    d[0] = u_boundary.value<1>(x_vw, y_v, Real(0.0), t);
-                }
-            }
-
-            // =========================================================
-            // RIGHT boundary (z=Lz): lecture BCs
-            // Normal comp=2 (w): Dirichlet at k=N-1 (w located at z=Lz)
-            // Tangentials (u,v): ghost elimination at k=N-1
-            // =========================================================
-            if (comp == 2)
-            {
-                const Real x_vw = Real(i) * dx;
-                const Real y_u = Real(j) * dy;
-                d[N - 1] = u_boundary.value<2>(x_vw, y_u, Lz, t);
-            }
-            else
-            {
-                const Real gammaN = gamma_field.get(i, j, N - 1);
-                const Real coeff = gammaN / h2;
-
-                const Real x_u = (Real(i) + Real(0.5)) * dx;
-                const Real x_vw = Real(i) * dx;
-
-                const Real y_u = Real(j) * dy;
-                const Real y_v = (Real(j) + Real(0.5)) * dy;
-
-                Real u_ex = 0.0;
-                if (comp == 0)
-                    u_ex = u_boundary.value<0>(x_u, y_u, Lz, t);
-                else
-                    u_ex = u_boundary.value<1>(x_vw, y_v, Lz, t);
-
-                d[N - 1] = rhs.value(comp, i, j, N - 1) + Real(2.0) * coeff * u_ex;
-            }
-
-            // ------------------------------------------------------------
-            // RHS locale per Schur
-            // ------------------------------------------------------------
-            std::vector<Real> rhs_local(local_N, 0.0);
-            for (int il = 0; il < local_N; ++il)
-            {
-                int ig = global_start + il;
-                if (ig < 0 || ig >= N)
-                    continue;
-                rhs_local[il] = d[ig];
-            }
-
-            // solve locale (Schur fa comunicazione solo in comm_z)
-            std::vector<Real> x_local;
-            schur.solve(rhs_local, x_local);
-
-            // Write back solo porzione owned (evita duplicato interfaccia sinistra)
-            int k0_local = (rank_z == 0) ? 0 : 1;
-            for (int il = k0_local; il < local_N; ++il)
-            {
-                int ig = global_start + il;
-                if (ig < 0 || ig >= N)
-                    continue;
-                solution.set(comp, i, j, ig) = x_local[il];
-            }
-        };
-
-        // ============================================================
-        // 5) Loop locale su (i,j) del process (Px,Py)  + BATCHED SOLVE
-        // ============================================================
-        Dim i0 = topo.local_i0(Nx);
-        Dim i1 = topo.local_i1(Nx);
-        Dim j0 = topo.local_j0(Ny);
-        Dim j1 = topo.local_j1(Ny);
+        Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
+        Dim j0 = topo.local_j0(Ny), j1 = topo.local_j1(Ny);
 
         const int nI = int(i1 - i0);
         const int nJ = int(j1 - j0);
         const int nLinesLocal = nI * nJ;
 
         auto lid_of = [&](Dim i, Dim j) -> int
-        {
-            return int((j - j0) * nI + (i - i0));
-        };
-
+        { return int((j - j0) * nI + (i - i0)); };
         auto ij_of_lid = [&](int lid, Dim &i, Dim &j)
         {
             j = j0 + Dim(lid / nI);
             i = i0 + Dim(lid - int(j - j0) * nI);
         };
 
-        // Fill rhs_local (only local_N entries) for a given (i,j,comp)
-        auto build_rhs_local = [&](Dim i, Dim j, int comp, Real *out_local)
+        const int k0_local = (rank_z == 0) ? 0 : 1;
+
+        auto build_rhs_local = [&](Dim i, Dim j, Dim comp, Real *out)
         {
             for (int il = 0; il < local_N; ++il)
             {
                 const int kg = global_start + il;
-                Real val = 0.0;
-
-                // -------------------------
-                // interior 1..N-2
-                // -------------------------
-                if (kg >= 1 && kg <= int(N) - 2)
+                if (kg < 0 || kg >= int(N))
                 {
-                    val = rhs.value(comp, i, j, kg);
+                    out[il] = Real(0.0);
+                    continue;
                 }
-
-                // =========================================================
-                // LEFT boundary k=0 (z=0)
-                // comp==2: incompressibility reconstruction
-                // comp==0,1: Dirichlet
-                // =========================================================
-                if (kg == 0)
-                {
-                    const Real x_u = (Real(i) + Real(0.5)) * dx;
-                    const Real x_vw = Real(i) * dx;
-                    const Real y_u = Real(j) * dy;
-                    const Real y_v = (Real(j) + Real(0.5)) * dy;
-
-                    if (comp == 2)
-                    {
-                        const Real w0_wall = u_boundary.value<2>(x_vw, y_u, Real(0.0), t);
-
-                        const Real u_plus = u_boundary.value<0>(x_u + Real(0.5) * dx, y_u, Real(0.0), t);
-                        const Real u_minus = u_boundary.value<0>(x_u - Real(0.5) * dx, y_u, Real(0.0), t);
-                        const Real du_dx = (u_plus - u_minus) / dx;
-
-                        const Real v_plus = u_boundary.value<1>(x_vw, y_v + Real(0.5) * dy, Real(0.0), t);
-                        const Real v_minus = u_boundary.value<1>(x_vw, y_v - Real(0.5) * dy, Real(0.0), t);
-                        const Real dv_dy = (v_plus - v_minus) / dy;
-
-                        const Real dwdz0 = -(du_dx + dv_dy);
-                        const Real w_half = w0_wall + dwdz0 * (dz * Real(0.5));
-                        val = w_half;
-                    }
-                    else if (comp == 0)
-                    {
-                        val = u_boundary.value<0>(x_u, y_u, Real(0.0), t);
-                    }
-                    else
-                    {
-                        val = u_boundary.value<1>(x_vw, y_v, Real(0.0), t);
-                    }
-                }
-
-                // =========================================================
-                // RIGHT boundary k=N-1 (z=Lz)
-                // comp==2: Dirichlet
-                // comp==0,1: ghost elimination + 2*coeff*u_ex
-                // =========================================================
-                if (kg == int(N) - 1)
-                {
-                    const Real x_u = (Real(i) + Real(0.5)) * dx;
-                    const Real x_vw = Real(i) * dx;
-                    const Real y_u = Real(j) * dy;
-                    const Real y_v = (Real(j) + Real(0.5)) * dy;
-
-                    if (comp == 2)
-                    {
-                        val = u_boundary.value<2>(x_vw, y_u, Lz, t);
-                    }
-                    else
-                    {
-                        const Real gammaN = gamma_field.get(i, j, N - 1);
-                        const Real coeff = gammaN / h2;
-
-                        Real u_ex = 0.0;
-                        if (comp == 0)
-                            u_ex = u_boundary.value<0>(x_u, y_u, Lz, t);
-                        else
-                            u_ex = u_boundary.value<1>(x_vw, y_v, Lz, t);
-
-                        val = rhs.value(comp, i, j, N - 1) + Real(2.0) * coeff * u_ex;
-                    }
-                }
-
-                out_local[il] = val;
+                out[il] = rhs.value(comp, i, j, kg);
             }
         };
 
-        auto solve_component_batched = [&](int comp, SchurComplementSolver &schur)
+        auto solve_component_batched = [&](Dim comp, SchurComplementSolver &schur)
         {
-            // 1) build list of active (unknown) lines for this component
             std::vector<int> active_lids;
             active_lids.reserve(nLinesLocal);
 
             for (Dim j = j0; j < j1; ++j)
                 for (Dim i = i0; i < i1; ++i)
-                    if (!is_known_face_z(i, j, comp))
+                    if (!is_known_face<2>(i, j, comp))
                         active_lids.push_back(lid_of(i, j));
-
-            // 2) fill known lines immediately (no solve)
-            for (Dim j = j0; j < j1; ++j)
-                for (Dim i = i0; i < i1; ++i)
-                    if (is_known_face_z(i, j, comp))
-                        fill_known_face_z(i, j, comp);
+                    else
+                        handle_known_face<2>(solution, i, j, comp);
 
             const int nActive = int(active_lids.size());
             if (nActive == 0)
                 return;
 
-            // 3) allocate flat buffers for batch
             std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
             std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
 
-            // 4) build rhs_flat in parallel (OpenMP)
 #pragma omp parallel for schedule(static) if (use_omp)
             for (int p = 0; p < nActive; ++p)
             {
                 Dim i, j;
                 ij_of_lid(active_lids[p], i, j);
-
-                Real *out = rhs_flat.data() + size_t(p) * size_t(local_N);
-                build_rhs_local(i, j, comp, out);
+                build_rhs_local(i, j, comp, rhs_flat.data() + size_t(p) * size_t(local_N));
             }
 
-            // 5) batched solve
             schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
-
-            // 6) write-back owned part (avoid duplicate left interface)
-            const int k0_local = (rank_z == 0) ? 0 : 1;
 
 #pragma omp parallel for schedule(static) if (use_omp)
             for (int p = 0; p < nActive; ++p)
@@ -1834,21 +1185,20 @@ public:
                 Dim i, j;
                 ij_of_lid(active_lids[p], i, j);
 
-                const Real *x_local = sol_flat.data() + size_t(p) * size_t(local_N);
-
+                const Real *x = sol_flat.data() + size_t(p) * size_t(local_N);
                 for (int il = k0_local; il < local_N; ++il)
                 {
                     const int kg = global_start + il;
                     if (kg < 0 || kg >= int(N))
                         continue;
-                    solution.set(comp, i, j, kg) = x_local[il];
+                    solution.set(comp, i, j, kg) = x[il];
                 }
             }
         };
 
-        solve_component_batched(0, schur_u);
-        solve_component_batched(1, schur_v);
-        solve_component_batched(2, schur_w);
+        solve_component_batched(Comp1, schur_dir);
+        solve_component_batched(Comp2, schur_gho);
+        solve_component_batched(Comp3, schur_gho);
     }
 };
 #endif // SOLVER_HPP

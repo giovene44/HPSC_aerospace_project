@@ -452,13 +452,10 @@ Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms, bool openMP)
 
         vector_rhs = xi - eta.A_operator(0, 0, gamma_field);
         velocity_solver.solve<0>(vector_rhs, eta, x_vector_handler, openMP);
-
         vector_rhs = eta - zeta.A_operator(1, 1, gamma_field);
         velocity_solver.solve<1>(vector_rhs, zeta, y_vector_handler, openMP);
-
         vector_rhs = zeta - velocity_solution.A_operator(2, 2, gamma_field);
         velocity_solver.solve<2>(vector_rhs, velocity_solution, z_vector_handler, openMP);
-
         // ---- Pressure correction (space-factored operator A)
 
         compute_rhs_pressure(t_np1);
@@ -769,6 +766,10 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
 
     (void)mms;
 
+    DimensionsHandlerVector x_vector_handler(Nx, Ny, Nz, 0, 1, 2, dx);
+    DimensionsHandlerVector y_vector_handler(Ny, Nx, Nz, 1, 0, 2, dy);
+    DimensionsHandlerVector z_vector_handler(Nz, Nx, Ny, 2, 0, 1, dz);
+
     VectorVariable f_half(Nx, Ny, Nz, dx, dy, dz);
 
     // Initialize
@@ -805,13 +806,16 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
         build_rhs(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field);
 
         // MPI ADI velocity solves with synchronization
-        velocity_solver.solve_x_only(xi, u_tmp, topo, use_omp);
-        sync_vector_field_full(u_tmp, Nx, Ny, Nz, topo);
+        vector_rhs = xi - eta.A_operator(0, 0, gamma_field);
+        velocity_solver.solve_x_only(vector_rhs, eta, topo, x_vector_handler, use_omp);
+        sync_vector_field_full(eta, Nx, Ny, Nz, topo);
 
-        velocity_solver.solve_y_only(u_tmp, u_np1, topo, use_omp);
-        sync_vector_field_full(u_np1, Nx, Ny, Nz, topo);
+        vector_rhs = eta - zeta.A_operator(1, 1, gamma_field);
+        velocity_solver.solve_y_only(vector_rhs, zeta, topo, y_vector_handler, use_omp);
+        sync_vector_field_full(zeta, Nx, Ny, Nz, topo);
 
-        velocity_solver.solve_z_only(u_np1, velocity_solution, topo, use_omp);
+        vector_rhs = zeta - velocity_solution.A_operator(2, 2, gamma_field);
+        velocity_solver.solve_z_only(vector_rhs, velocity_solution, topo, z_vector_handler, use_omp);
         sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
 
         // Pressure correction

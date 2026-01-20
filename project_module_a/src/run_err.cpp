@@ -124,9 +124,6 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         nu);
 
     int rank;
-    MPI_Comm_rank(topo.cart_comm(), &rank);
-    if (rank == 0)
-        std::cout << "Manufactured solution initialized.\n";
 
     NavierStokesBrinkmann nsb_solver(
         Nx_in, Ny_in, Nz_in,
@@ -178,32 +175,58 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
     return std::make_pair(std::make_pair(err_u, rel_err_u), std::make_pair(err_p, rel_err_p));
 }
 
-int run_multiple_mpi(int argc, char** argv)
+int run_multiple_mpi(int argc, char **argv)
 {
     try
     {
-        MPI_Init(&argc, &argv);
+        MPICommunicator comm;
+        comm.init(&argc, &argv); // MPI_Init inside
 
-        int world_rank, world_size;
-        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+        int world_rank = comm.get_rank();
+        int world_size = comm.get_size();
 
-        {  // Scoped block to ensure MPITopology3D is destroyed before MPI_Finalize
-        // Create 3D Cartesian topology
-        // Let MPI choose the best decomposition
-        int dims[3] = {0, 0, 0};
-        MPI_Dims_create(world_size, 3, dims);
-        int periods[3] = {0, 0, 0};  // non-periodic
-        MPI_Comm cart_comm;
-        MPI_Cart_create(MPI_COMM_WORLD, 3, dims, periods, 1, &cart_comm);
-
-        MPITopology3D topo(cart_comm, dims[0], dims[1], dims[2]);
+        // Supporta sia 1 processo (seriale) che 8 processi (2x2x2)
+        int Px, Py, Pz;
+        if (world_size == 1)
+        {
+            Px = 1;
+            Py = 1;
+            Pz = 1;
+        }
+        else if (world_size == 2)
+        {
+            Px = 2;
+            Py = 1;
+            Pz = 1;
+        }
+        else if (world_size == 4)
+        {
+            Px = 2;
+            Py = 2;
+            Pz = 1;
+        }
+        else if (world_size == 8)
+        {
+            Px = 2;
+            Py = 2;
+            Pz = 2;
+        }
+        else
+        {
+            if (world_rank == 0)
+                std::cerr << "MPI size must be 1 (serial) or 8 (2x2x2 parallel)\n";
+            comm.finalize();
+            return 1;
+        }
 
         if (world_rank == 0)
         {
             std::cout << "MPI initialized with " << world_size << " processes\n";
-            std::cout << "Topology: " << dims[0] << " x " << dims[1] << " x " << dims[2] << "\n";
+            std::cout << "Topology: " << Px << " x " << Py << " x " << Pz << "\n";
         }
+
+        // 1) Create 3D Cartesian topology
+        MPITopology3D topo(MPI_COMM_WORLD, Pz, Py, Px);
 
         ParseInput &parser = ParseInput::getInstance();
         parser.parse_input("./Input/Input.in");
@@ -260,7 +283,7 @@ int run_multiple_mpi(int argc, char** argv)
             errors_rel_u.emplace_back(errors.first.second);
             errors_rel_p.emplace_back(errors.second.second);
             time_values.emplace_back(time_curr);
-            time_speedUps.emplace_back(1.0);  // No serial comparison in MPI mode
+            time_speedUps.emplace_back(1.0); // No serial comparison in MPI mode
         }
 
         if (world_rank == 0)
@@ -317,18 +340,17 @@ int run_multiple_mpi(int argc, char** argv)
             std::cout << "Results saved to " << filename << "\n";
         }
 
-        }  // End scoped block - MPITopology3D destructor called here
-
-        MPI_Finalize();
-        return 0;
+        comm.finalize(); // MPI_Finalize inside
     }
-    catch (const std::runtime_error &e)
+    catch (const std::exception &e)
     {
-        std::cerr << "FATAL ERROR in run_multiple_mpi: " << e.what() << std::endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
+        std::cerr << "Exception: " << e.what() << "\n";
         return 1;
     }
+
+    return 0;
 }
+
 #else
 int run_multiple()
 {
