@@ -6,7 +6,7 @@
 #include <fstream>
 #include "ScalarVariable.hpp"
 #include "VectorVariable.hpp"
-#include "SolverCorrectSequential.hpp"
+#include "Solver.hpp"
 
 // ===============================================================
 // 1. Setup Grid Parameters
@@ -64,7 +64,7 @@ static inline void uvw_true_at(Real x, Real y, Real z, Real t,
                                Real &u, Real &v, Real &w)
 {
     const Real A = A_of_t(t);
-    
+
     // Precompute trig to avoid redundancy
     const Real sx = std::sin(x), cx = std::cos(x);
     const Real sy = std::sin(y), cy = std::cos(y);
@@ -143,7 +143,7 @@ static void fill_p_true(ScalarVariable &p_true, const Grid &g, Real t)
                 const Real x = Real(i) * g.dx;
                 const Real y = Real(j) * g.dy;
                 const Real z = Real(k) * g.dz;
-                
+
                 p_true.set(i, j, k) = A * std::cos(x) * std::cos(y) * std::cos(z);
             }
 }
@@ -153,7 +153,7 @@ static void fill_p_true(ScalarVariable &p_true, const Grid &g, Real t)
 // PDE: u_t - nu Δu + (nu/k) u + ∇p = f
 //
 // For this specific exact solution (products of sin/cos),
-// Δu = -3u, Δv = -3v, Δw = -3w. 
+// Δu = -3u, Δv = -3v, Δw = -3w.
 // This simplifies the logic significantly.
 // ===============================================================
 static void compute_forcing_analytic(VectorVariable &f,
@@ -249,7 +249,7 @@ static void compute_forcing_analytic(VectorVariable &f,
 // ===============================================================
 static void build_rhs(VectorVariable &rhs,
                       const VectorVariable &u_n,
-                      const ScalarVariable &p_star, 
+                      const ScalarVariable &p_star,
                       const VectorVariable &f_half,
                       const Grid &g,
                       Real nu,
@@ -407,7 +407,6 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
     // Grid with placeholder dt; then adjust dt to hit Tfinal exactly
     Grid g = setup_grid(2 * pi, 2 * pi, 2 * pi, Nx, Ny, Nz, dt_try);
 
-
     int nsteps = int(std::round((Tfinal - t0) / g.dt));
     if (nsteps < 1)
         nsteps = 1;
@@ -416,9 +415,9 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
     // BC consistent with NEW manufactured velocity field
     BoundaryFunctions u_boundary;
     std::vector<std::string> bc = {
-        "sin(t)*sin(x)*sin(y)*sin(z)",              // u
-        "sin(t)*cos(x)*cos(y)*cos(z)",              // v
-        "sin(t)*cos(x)*sin(y)*(cos(z)+sin(z))"      // w
+        "sin(t)*sin(x)*sin(y)*sin(z)",         // u
+        "sin(t)*cos(x)*cos(y)*cos(z)",         // v
+        "sin(t)*cos(x)*sin(y)*(cos(z)+sin(z))" // w
     };
     u_boundary.set_string_expression(bc);
 
@@ -461,10 +460,10 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
     ScalarVariable rhs_p(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     ScalarVariable psi(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
     ScalarVariable phi(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
-    ScalarVariable corr_prev(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz); 
-    ScalarVariable corr_new(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);  
+    ScalarVariable corr_prev(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
+    ScalarVariable corr_new(g.Nx, g.Ny, g.Nz, g.dx, g.dy, g.dz);
 
-    corr_prev.set_all(Real(0.0)); 
+    corr_prev.set_all(Real(0.0));
 
     // Initial condition for velocity
     fill_u_true(u_n, g, t0);
@@ -474,6 +473,10 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
 
     // Time loop
     Real t = t0;
+
+    DimensionsHandlerVector x_vector_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx);
+    DimensionsHandlerVector y_vector_handler(g.Ny, g.Nx, g.Nz, 1, 0, 2, g.dy);
+    DimensionsHandlerVector z_vector_handler(g.Nz, g.Nx, g.Ny, 2, 0, 1, g.dz);
     for (int n = 0; n < nsteps; ++n)
     {
         const Real t_np1 = t + g.dt;
@@ -492,11 +495,11 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
 
         build_rhs(rhs, u_n, p_star, f_half, g, nu, k);
 
-        solver.solve_x_only(rhs, u_tmp, false);
-        solver.solve_y_only(u_tmp, u_np1, false);
-        solver.solve_z_only(u_np1, u_tmp, false);
+        solver.block_solver<0>(rhs, u_tmp, x_vector_handler, false);
+        solver.block_solver<1>(u_tmp, u_np1, y_vector_handler, false);
+        solver.block_solver<2>(u_np1, u_tmp, z_vector_handler, false);
 
-        u_n = u_tmp; 
+        u_n = u_tmp;
 
         // ---- Pressure correction
         compute_divergence_cell_center(u_n, div_u, g);
@@ -552,7 +555,6 @@ static void run_sweep_and_print(const std::string &title,
     // std::cout << "Domain: [0,2pi]^3\n";
     // std::cout << "=================================================\n\n";
 
-
     std::cout << "Grid    dx            dt            nsteps   L2_error_u(Tfinal)   L2_error_p(Tfinal)   rate_u   rate_p\n";
     std::cout << "--------------------------------------------------------------------------------------------------\n";
 
@@ -571,25 +573,25 @@ static void run_sweep_and_print(const std::string &title,
         X.push_back(x);
         E_p.push_back(r.L2_p);
         E_u.push_back(r.L2_u);
-        
+
         Real rate_p = 0.0;
         Real rate_u = 0.0;
-        if (idx > 0){
+        if (idx > 0)
+        {
             rate_p = std::log(E_p[idx - 1] / E_p[idx]) / std::log(X[idx - 1] / X[idx]);
             rate_u = std::log(E_u[idx - 1] / E_u[idx]) / std::log(X[idx - 1] / X[idx]);
         }
         std::cout
-              << std::scientific << std::setprecision(9)
-              << std::setw(5) << N << "  "
-              << std::setw(12) << r.dx << "  "
-              << std::setw(12) << r.dt << "  "
-              << std::setw(6) << r.nsteps << "  "
-              << std::setw(16) << r.L2_u << "  "
-              << std::setw(16) << r.L2_p << "  "
-              << std::fixed << std::setprecision(2)
-              << std::setw(7) << rate_u << "  "
-              << std::setw(7) << rate_p << 
-              "\n";
+            << std::scientific << std::setprecision(9)
+            << std::setw(5) << N << "  "
+            << std::setw(12) << r.dx << "  "
+            << std::setw(12) << r.dt << "  "
+            << std::setw(6) << r.nsteps << "  "
+            << std::setw(16) << r.L2_u << "  "
+            << std::setw(16) << r.L2_p << "  "
+            << std::fixed << std::setprecision(2)
+            << std::setw(7) << rate_u << "  "
+            << std::setw(7) << rate_p << "\n";
     }
 
     std::cout << "--------------------------------------------------------------------------------------------------\n";
@@ -639,7 +641,7 @@ void test_refine_dt(Real nu, Real k, Real t0, Real Tfinal)
     Real dt_try = dt0;
     for (int i = 0; i < steps; ++i)
     {
-        dt_try *= refinement; 
+        dt_try *= refinement;
         cases.push_back({N, dt_try});
     }
 

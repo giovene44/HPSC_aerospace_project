@@ -20,8 +20,6 @@ int main()
     std::vector<Real> phi_errors;
     std::vector<Real> p_errors;
 
-    
-
     for (const auto &N : Ns)
     {
         Real dx = Lx / (N - 0.5); // Staggered correction se necessaria, o standard
@@ -93,15 +91,14 @@ int main()
 
         // Step 1: Risolve lungo X -> ottiene psi
         // Equation: (I - dxx) psi = RHS
-        solver.solve_pressure<0>(rhs_for_solver, temp_psi, dim_handler);
+        solver.solve_x(rhs_for_solver, temp_psi);
 
         // Step 2: Risolve lungo Y -> ottiene varphi
         // Equation: (I - dyy) varphi = psi
-        solver.solve_pressure<1>(temp_psi, temp_varphi, dim_handler);
-
+        solver.solve_y(temp_psi, temp_varphi);
         // Step 3: Risolve lungo Z -> ottiene phi (correzione finale)
         // Equation: (I - dzz) phi = varphi
-        solver.solve_pressure<2>(temp_varphi, phi_numeric, dim_handler);
+        solver.solve_z(temp_varphi, phi_numeric);
 
         // 4. AGGIORNAMENTO PRESSIONE
         // p_new = p_old + phi
@@ -145,12 +142,14 @@ int main()
     }
 
     // Compute convergence rates
-    if (phi_errors.size() >= 2) {
+    if (phi_errors.size() >= 2)
+    {
         std::cout << "--- Convergence Rates ---" << std::endl;
-        for (size_t i = 1; i < phi_errors.size(); ++i) {
-            Real rate_phi = std::log(phi_errors[i-1] / phi_errors[i]) / std::log(2.0);
-            Real rate_p = std::log(p_errors[i-1] / p_errors[i]) / std::log(2.0);
-            std::cout << "Refinement " << i << " (N=" << Ns[i-1] << " -> " << Ns[i] << ")" << std::endl;
+        for (size_t i = 1; i < phi_errors.size(); ++i)
+        {
+            Real rate_phi = std::log(phi_errors[i - 1] / phi_errors[i]) / std::log(2.0);
+            Real rate_p = std::log(p_errors[i - 1] / p_errors[i]) / std::log(2.0);
+            std::cout << "Refinement " << i << " (N=" << Ns[i - 1] << " -> " << Ns[i] << ")" << std::endl;
             std::cout << "  Phi convergence rate: " << rate_phi << std::endl;
             std::cout << "  Pressure convergence rate: " << rate_p << std::endl;
         }

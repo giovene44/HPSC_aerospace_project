@@ -760,6 +760,174 @@ static void sync_vector_field_full(VectorVariable &field, Dim Nx, Dim Ny, Dim Nz
     }
 }
 
+static void compute_forcing_analytic_mpi(VectorVariable &f,
+                                         Real dx, Real dy, Real dz,
+                                         Dim Nx, Dim Ny, Dim Nz,
+                                         Real t,
+                                         Real nu,
+                                         ScalarVariable k, const MPITopology3D &topo)
+{
+    Dim k0, k1, j0, j1, i0, i1;
+    k0 = topo.local_k0(Nz);
+    k1 = topo.local_k1(Nz);
+    j0 = topo.local_j0(Ny);
+    j1 = topo.local_j1(Ny);
+    i0 = topo.local_i0(Nx);
+    i1 = topo.local_i1(Nx);
+
+    const Real A = std::sin(t);
+    const Real Ap = std::cos(t);
+
+    for (Dim kk = k0; kk < k1; ++kk)
+        for (Dim jj = j0; jj < j1; ++jj)
+            for (Dim ii = i0; ii < i1; ++ii)
+            {
+                // --------------------------------------------------
+                // Component 0: u at (x+dx/2, y, z)
+                // u = sin(t)*sin(x)*sin(y)*sin(z)
+                // --------------------------------------------------
+                {
+                    const Real x = (Real(ii) + Real(0.5)) * dx;
+                    const Real y = Real(jj) * dy;
+                    const Real z = Real(kk) * dz;
+
+                    const Real sx = std::sin(x), cx = std::cos(x);
+                    const Real sy = std::sin(y), cy = std::cos(y);
+                    const Real sz = std::sin(z), cz = std::cos(z);
+
+                    const Real u = A * sx * sy * sz;
+                    const Real ut = Ap * sx * sy * sz;
+
+                    // Laplacian: d²u/dx² + d²u/dy² + d²u/dz²
+                    const Real lap_u = -A * sx * sy * sz - A * sx * sy * sz - A * sx * sy * sz;
+
+                    // Pressure gradient: dp/dx for p = sin(t)*cos(x)*cos(y)*cos(z)
+                    Real dp_dx = -std::sin(t) * std::sin(x) * std::cos(y) * std::cos(z);
+                    dp_dx = 0.0; // Temporarily disable pressure gradient for MPI testing
+                    f.set(0, ii, jj, kk) = ut - nu * lap_u + (nu / k.get(ii, jj, kk)) * u + dp_dx;
+                }
+
+                // --------------------------------------------------
+                // Component 1: v at (x, y+dy/2, z)
+                // v = sin(t)*cos(x)*cos(y)*cos(z)
+                // --------------------------------------------------
+                {
+                    const Real x = Real(ii) * dx;
+                    const Real y = (Real(jj) + Real(0.5)) * dy;
+                    const Real z = Real(kk) * dz;
+
+                    const Real sx = std::sin(x), cx = std::cos(x);
+                    const Real sy = std::sin(y), cy = std::cos(y);
+                    const Real sz = std::sin(z), cz = std::cos(z);
+
+                    const Real v = A * cx * cy * cz;
+                    const Real vt = Ap * cx * cy * cz;
+
+                    // Laplacian
+                    const Real lap_v = -A * cx * cy * cz - A * cx * cy * cz - A * cx * cy * cz;
+
+                    // dp/dy = -sin(t)*cos(x)*sin(y)*cos(z)
+                    Real dp_dy = -std::sin(t) * std::cos(x) * std::sin(y) * std::cos(z);
+                    dp_dy = 0.0; // Temporarily disable pressure gradient for MPI testing
+                    f.set(1, ii, jj, kk) = vt - nu * lap_v + (nu / k.get(ii, jj, kk)) * v + dp_dy;
+                }
+
+                // --------------------------------------------------
+                // Component 2: w at (x, y, z+dz/2)
+                // w = sin(t)*cos(x)*sin(y)*(cos(z)+sin(z))
+                // --------------------------------------------------
+                {
+                    const Real x = Real(ii) * dx;
+                    const Real y = Real(jj) * dy;
+                    const Real z = (Real(kk) + Real(0.5)) * dz;
+
+                    const Real sx = std::sin(x), cx = std::cos(x);
+                    const Real sy = std::sin(y), cy = std::cos(y);
+                    const Real sz = std::sin(z), cz = std::cos(z);
+
+                    const Real w = A * cx * sy * (cz + sz);
+                    const Real wt = Ap * cx * sy * (cz + sz);
+
+                    // Laplacian
+                    const Real lap_w = -A * cx * sy * (cz + sz) - A * cx * sy * (cz + sz) - A * cx * sy * (cz + sz);
+
+                    // dp/dz = -sin(t)*cos(x)*cos(y)*sin(z)
+                    Real dp_dz = -std::sin(t) * std::cos(x) * std::cos(y) * std::sin(z);
+                    dp_dz = 0.0; // Temporarily disable pressure gradient for MPI testing
+                    f.set(2, ii, jj, kk) = wt - nu * lap_w + (nu / k.get(ii, jj, kk)) * w + dp_dz;
+                }
+            }
+}
+
+static void build_rhs_mpi(VectorVariable &rhs,
+                          const VectorVariable &velocity_solution,
+                          const ScalarVariable &p_star, // predictor pressure at cell centers
+                          const VectorVariable &f_half,
+                          Real dx, Real dy, Real dz,
+                          Dim Nx, Dim Ny, Dim Nz,
+                          Real dt,
+                          Real nu,
+                          const ScalarVariable &k, const MPITopology3D &topo)
+{
+
+    Dim k0, k1, j0, j1, i0, i1;
+    k0 = topo.local_k0(Nz);
+    k1 = topo.local_k1(Nz);
+    j0 = topo.local_j0(Ny);
+    j1 = topo.local_j1(Ny);
+    i0 = topo.local_i0(Nx);
+    i1 = topo.local_i1(Nx);
+    for (int c = 0; c < 3; ++c)
+        for (Dim kk = k0; kk < k1; ++kk)
+            for (Dim jj = j0; jj < j1; ++jj)
+                for (Dim ii = i0; ii < i1; ++ii)
+                {
+                    const Real beta = (nu * dt) / (Real(2.0) * k.get(ii, jj, kk));
+                    const Real scale = Real(1.0) / (Real(1.0) + beta);
+                    const Real diff = (nu * dt) / Real(2.0);
+
+                    Real val = velocity_solution.value(c, ii, jj, kk) + dt * f_half.value(c, ii, jj, kk) - beta * velocity_solution.value(c, ii, jj, kk);
+
+                    const bool interior =
+                        (ii > 0 && ii < Nx - 1 &&
+                         jj > 0 && jj < Ny - 1 &&
+                         kk > 0 && kk < Nz - 1);
+                    if (interior)
+                    {
+                        // Explicit CN half diffusion: + (nu dt/2) Lap(u^n)
+                        const Real u0 = velocity_solution.value(c, ii, jj, kk);
+
+                        const Real uxx =
+                            (velocity_solution.value(c, ii + 1, jj, kk) - Real(2.0) * u0 + velocity_solution.value(c, ii - 1, jj, kk)) / (dx * dx);
+                        const Real uyy =
+                            (velocity_solution.value(c, ii, jj + 1, kk) - Real(2.0) * u0 + velocity_solution.value(c, ii, jj - 1, kk)) / (dy * dy);
+                        const Real uzz =
+                            (velocity_solution.value(c, ii, jj, kk + 1) - Real(2.0) * u0 + velocity_solution.value(c, ii, jj, kk - 1)) / (dz * dz);
+
+                        val += diff * (uxx + uyy + uzz);
+
+                        // Predictor pressure gradient at staggered locations (MAC-consistent one-sided):
+                        // u-face: dp/dx ≈ (p(i+1)-p(i))/dx
+                        // v-face: dp/dy ≈ (p(j+1)-p(j))/dy
+                        // w-face: dp/dz ≈ (p(k+1)-p(k))/dz
+                        Real dp_dx = (p_star.get(ii + 1, jj, kk) - p_star.get(ii, jj, kk)) / dx;
+                        Real dp_dy = (p_star.get(ii, jj + 1, kk) - p_star.get(ii, jj, kk)) / dy;
+                        Real dp_dz = (p_star.get(ii, jj, kk + 1) - p_star.get(ii, jj, kk)) / dz;
+                        dp_dx = 0.0; // Temporarily disable pressure gradient for MPI testing
+                        dp_dy = 0.0;
+                        dp_dz = 0.0;
+                        if (c == 0)
+                            val -= dt * dp_dx;
+                        else if (c == 1)
+                            val -= dt * dp_dy;
+                        else
+                            val -= dt * dp_dz;
+                    }
+
+                    rhs.set(c, ii, jj, kk) = val * scale;
+                }
+}
+
 Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo, bool use_omp)
 {
     Real t = Real(1.5);
@@ -791,22 +959,41 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
     VectorVariable u_np1(Nx, Ny, Nz, dx, dy, dz);
 
     auto start_time = std::chrono::high_resolution_clock::now();
-
+    Dim k0, k1, j0, j1, i0, i1;
+    k0 = topo.local_k0(Nz);
+    k1 = topo.local_k1(Nz);
+    j0 = topo.local_j0(Ny);
+    j1 = topo.local_j1(Ny);
+    i0 = topo.local_i0(Nx);
+    i1 = topo.local_i1(Nx);
     for (int n = 0; n < nsteps; ++n)
     {
         const Real t_np1 = t + dt;
         const Real t_half = t + dt / Real(2.0);
 
-        pressure_predictor = pressure_solution + other_phi;
+        // pressure_predictor = pressure_solution + other_phi;
 
         velocity_solver.set_t(t_np1);
 
-        compute_forcing_analytic(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field);
+        compute_forcing_analytic_mpi(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field, topo);
 
-        build_rhs(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field);
+        build_rhs_mpi(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field, topo);
 
         // MPI ADI velocity solves with synchronization
+        // MPI ADI velocity solves with synchronization
         vector_rhs = xi - eta.A_operator(0, 0, gamma_field);
+        /*
+          for (int kk = k0; kk < k1; ++kk)
+            for (int jj = j0; jj < j1; ++jj)
+                for (int ii = i0; ii < i1; ++ii)
+                {
+                    if ((ii > 0 && ii < Nx - 1 &&
+                         jj > 0 && jj < Ny - 1 &&
+                         kk > 0 && kk < Nz - 1))
+                        vector_rhs.set(0, ii, jj, kk) = xi.value(0, ii, jj, kk) - gamma_field.get(ii, jj, kk) * eta.second_derivative(0, 0, ii, jj, kk);
+                }
+        */
+
         velocity_solver.solve_x_only(vector_rhs, eta, topo, x_vector_handler, use_omp);
         // sync_vector_field_full(eta, Nx, Ny, Nz, topo);
 
@@ -818,7 +1005,8 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
         velocity_solver.solve_z_only(vector_rhs, velocity_solution, topo, z_vector_handler, use_omp);
         // sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
 
-        // Pressure correction
+        /*
+         // Pressure correction
         compute_rhs_pressure(t_np1);
 
         pressure_solver.set_t(t_np1);
@@ -834,6 +1022,8 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
         sync_scalar_field_full(other_phi, Nx, Ny, Nz, topo);
 
         pressure_solution += other_phi;
+
+        */
 
         t = t_np1;
     }

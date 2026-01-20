@@ -550,6 +550,10 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
     // Time loop
     Real t = t0;
     auto start_time = std::chrono::high_resolution_clock::now();
+
+    DimensionsHandlerVector x_vector_handler(g.Nx, g.Ny, g.Nz, 0, 1, 2, g.dx);
+    DimensionsHandlerVector y_vector_handler(g.Ny, g.Nx, g.Nz, 1, 0, 2, g.dy);
+    DimensionsHandlerVector z_vector_handler(g.Nz, g.Nx, g.Ny, 2, 0, 1, g.dz);
     for (int n = 0; n < nsteps; ++n)
     {
         const Real t_np1 = t + g.dt;
@@ -564,9 +568,9 @@ static RunResult run_mms_velocity_case(Dim Nx, Dim Ny, Dim Nz,
         // RHS uses (f_half - ∇p_star) in an Auteri-consistent way
         build_rhs(rhs, u_n, p_star, f_half, g, nu, k, topo);
 
-        solver.solve_x_only(rhs, u_tmp, topo, false);
-        solver.solve_y_only(u_tmp, u_np1, topo, false);
-        solver.solve_z_only(u_np1, u_tmp, topo, false);
+        solver.solve_x_only(rhs, u_tmp, topo, x_vector_handler, false);
+        solver.solve_y_only(u_tmp, u_np1, topo, y_vector_handler, false);
+        solver.solve_z_only(u_np1, u_tmp, topo, z_vector_handler, false);
 
         u_n = u_tmp; // now u_n is u^{n+1}
 
@@ -810,9 +814,9 @@ int main(int argc, char **argv)
     const Real t0 = Real(0.15);
     const Real Tfinal = Real(0.151);
 
-    // test_refine_dx(nu, k, t0, Tfinal, topo);
+    test_refine_dx(nu, k, t0, Tfinal, topo);
     //  test_refine_dt(nu, k, t0, Tfinal);
-    test_strong_scalability(nu, k, t0, Tfinal, topo);
+    // test_strong_scalability(nu, k, t0, Tfinal, topo);
     comm.finalize(); // MPI_Finalize inside
     return 0;
 }

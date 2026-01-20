@@ -101,6 +101,85 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
 #endif
 
 #ifdef USE_MPI
+
+static Real allreduce_sum_real(Real local, MPI_Comm comm)
+{
+#ifdef USE_MPI
+    Real global = 0;
+    MPI_Allreduce(&local, &global, 1, MPI_FLOAT, MPI_SUM, comm);
+    return global;
+#else
+    return local;
+#endif
+}
+
+static Real compute_err2_velocity_local(auto u_exact_func, const VectorVariable &u_num,
+                                        Dim Nx, Dim Ny, Dim Nz,
+                                        Real dx, Real dy, Real dz,
+                                        Real t,
+                                        const MPITopology3D &topo)
+{
+
+    Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
+    Dim j0 = topo.local_j0(Ny), j1 = topo.local_j1(Ny);
+    Dim k0 = topo.local_k0(Nz), k1 = topo.local_k1(Nz);
+
+    Real err2_local = Real(0);
+    Real x, y, z;
+    for (int comp = 0; comp < 3; ++comp)
+        for (Dim k = k0; k < k1; ++k)
+            for (Dim j = j0; j < j1; ++j)
+                for (Dim i = i0; i < i1; ++i)
+                {
+                    if (comp == 0)
+                    {
+                        x = i * dx + dx / Real(2.0);
+                        y = j * dy;
+                        z = k * dz;
+                    }
+                    else if (comp == 1)
+                    {
+                        x = i * dx;
+                        y = j * dy + dy / Real(2.0);
+                        z = k * dz;
+                    }
+                    else // comp == 2
+                    {
+                        x = i * dx;
+                        y = j * dy;
+                        z = k * dz + dz / Real(2.0);
+                    }
+                    const Real diff = u_num.value(comp, i, j, k) - u_exact_func(x, y, z, t)[comp];
+                    err2_local += diff * diff;
+                }
+
+    return err2_local;
+}
+
+static Real compute_err2_pressure_local(auto p_exact_func, const ScalarVariable &p_num,
+                                        Dim Nx, Dim Ny, Dim Nz,
+                                        Real dx, Real dy, Real dz,
+                                        Real t,
+                                        const MPITopology3D &topo)
+{
+
+    Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
+    Dim j0 = topo.local_j0(Ny), j1 = topo.local_j1(Ny);
+    Dim k0 = topo.local_k0(Nz), k1 = topo.local_k1(Nz);
+
+    Real err2_local = Real(0);
+
+    for (Dim k = k0; k < k1; ++k)
+        for (Dim j = j0; j < j1; ++j)
+            for (Dim i = i0; i < i1; ++i)
+            {
+                const Real diff = p_num.get(i, j, k) - p_exact_func(i * dx, j * dy, k * dz, t);
+                err2_local += diff * diff;
+            }
+
+    return err2_local;
+}
+
 // MPI version of single_run
 static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
     Dim Nx_in, Dim Ny_in, Dim Nz_in, Real dt_in,
@@ -123,7 +202,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         u_exact_func, p_exact_func, k_func, forcing_func,
         nu);
 
-    int rank;
+    int rank = topo.cart_rank();
 
     NavierStokesBrinkmann nsb_solver(
         Nx_in, Ny_in, Nz_in,
@@ -150,15 +229,21 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
     if (rank == 0)
         std::cout << "Computing Errors at T = " << T_final << "...\n";
 
-    auto errors = nsb_solver.compute_L2_errors(
-        nsb_solver.u_0,
-        nsb_solver.p_0,
-        mms,
-        T_final);
-    Real err_u = errors.first.first;
-    Real err_p = errors.second.first;
-    Real rel_err_u = errors.first.second;
-    Real rel_err_p = errors.second.second;
+    const Real L2_u_local = compute_err2_velocity_local(u_exact_func, nsb_solver.velocity_solution, Nx_in, Ny_in, Nz_in, dx_in, dy_in, dz_in, T_final, topo);
+
+    // pressure is stored at half-step; compare to true pressure at same time
+    const Real L2_p_local = compute_err2_pressure_local(p_exact_func, nsb_solver.pressure_solution, Nx_in, Ny_in, Nz_in, dx_in, dy_in, dz_in, T_final, topo);
+
+    Real err2_u_global = allreduce_sum_real(L2_u_local, topo.cart_comm());
+    Real L2_u_global = std::sqrt(err2_u_global * dx_in * dy_in * dz_in);
+
+    Real err2_p_global = allreduce_sum_real(L2_p_local, topo.cart_comm());
+    Real L2_p_global = std::sqrt(err2_p_global * dx_in * dy_in * dz_in);
+
+    Real err_u = L2_u_global;
+    Real err_p = L2_p_global;
+    Real rel_err_u = 0;
+    Real rel_err_p = 0;
 
     if (rank == 0)
     {
