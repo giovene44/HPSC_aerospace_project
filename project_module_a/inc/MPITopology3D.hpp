@@ -181,6 +181,8 @@ public:
     int size_y() const { return size_y_; } // should equal Py
     int size_z() const { return size_z_; } // should equal Pz
 
+    int size_total() const { return dims_[0] * dims_[1] * dims_[2]; }
+
     // --- Neighbor ranks in the 3D cart (MPI_PROC_NULL on boundaries if non-periodic) ---
     // Direction: 0=z, 1=y, 2=x (consistent with coords order here)
     int neighbor_minus_x() const { return neighbor_cart_(2, -1); }

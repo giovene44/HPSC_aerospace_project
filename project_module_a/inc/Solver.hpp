@@ -85,7 +85,7 @@ inline Solver::~Solver() {}
 class PressureSolver : public Solver
 {
 public:
-    void solve_x(ScalarVariable &rhs, ScalarVariable &solution, bool openMP = false)
+    void solve_x(ScalarVariable &rhs, ScalarVariable &solution)
     {
         const Real alpha = Real(1.0) / (dx * dx); // α = 1/dx^2
 
@@ -125,23 +125,13 @@ public:
                 solution.set(i, j, k) = x[i];
         };
 
-#ifdef _OPENMP
-        if (openMP)
-        {
 #pragma omp parallel for collapse(2) default(none) shared(a, b, c, worker)
-            for (Dim k = 0; k < Nz; ++k)
-                for (Dim j = 0; j < Ny; ++j)
-                    worker(j, k);
-            return;
-        }
-#endif
-
         for (Dim k = 0; k < Nz; ++k)
             for (Dim j = 0; j < Ny; ++j)
                 worker(j, k);
     }
 
-    void solve_y(ScalarVariable &rhs, ScalarVariable &solution, bool openMP = false)
+    void solve_y(ScalarVariable &rhs, ScalarVariable &solution)
     {
         const Real alpha = Real(1.0) / (dy * dy);
 
@@ -175,23 +165,14 @@ public:
                 solution.set(i, j, k) = x[j];
         };
 
-#ifdef _OPENMP
-        if (openMP)
-        {
 #pragma omp parallel for collapse(2) default(none) shared(a, b, c, worker)
-            for (Dim k = 0; k < Nz; ++k)
-                for (Dim i = 0; i < Nx; ++i)
-                    worker(i, k);
-            return;
-        }
-#endif
 
         for (Dim k = 0; k < Nz; ++k)
             for (Dim i = 0; i < Nx; ++i)
                 worker(i, k);
     }
 
-    void solve_z(ScalarVariable &rhs, ScalarVariable &solution, bool openMP = false)
+    void solve_z(ScalarVariable &rhs, ScalarVariable &solution)
     {
         const Real alpha = Real(1.0) / (dz * dz);
 
@@ -225,21 +206,105 @@ public:
                 solution.set(i, j, k) = x[k];
         };
 
-#ifdef _OPENMP
-        if (openMP)
-        {
 #pragma omp parallel for collapse(2) default(none) shared(a, b, c, worker)
-            for (Dim j = 0; j < Ny; ++j)
-                for (Dim i = 0; i < Nx; ++i)
-                    worker(i, j);
-            return;
-        }
-#endif
-
         for (Dim j = 0; j < Ny; ++j)
             for (Dim i = 0; i < Nx; ++i)
                 worker(i, j);
     }
+
+    template <Dim direction>
+    void apply_bc(ScalarVariable &rhs)
+    {
+        if constexpr (direction == 0) // X direction
+        {
+            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
+                {
+                    rhs.set(0, index_1, index_2) = rhs.get(0, index_1, index_2);           // + Real(2.0) * dx * (-Real(1.0) / (dx * dx)) * p_boundary.value<0>(Real(0.0), index_1 * dy, index_2 * dz, t);
+                    rhs.set(Nx - 1, index_1, index_2) = rhs.get(Nx - 1, index_1, index_2); //- dx * (-Real(1.0) / (dx * dx)) * p_boundary.value<0>((Nx - 0.5) * dx, index_1 * dy, index_2 * dz, t);
+                }
+            }
+        }
+        else if constexpr (direction == 1) // Y direction
+        {
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Nz; ++index_2)
+                {
+                    rhs.set(index_1, 0, index_2) = rhs.get(index_1, 0, index_2);           // - Real(2.0) / dy * p_boundary.value<1>(index_1 * dx, Real(0.0), index_2 * dz, t);
+                    rhs.set(index_1, Ny - 1, index_2) = rhs.get(index_1, Ny - 1, index_2); // + Real(1.0) / dy * p_boundary.value<1>(index_1 * dx, (Ny - 0.5) * dy, index_2 * dz, t);
+                }
+            }
+        }
+        else if constexpr (direction == 2) // Z direction
+        {
+            for (Dim index_1 = 0; index_1 < Nx; ++index_1)
+            {
+                for (Dim index_2 = 0; index_2 < Ny; ++index_2)
+                {
+                    rhs.set(index_1, index_2, 0) = rhs.get(index_1, index_2, 0);           // + Real(2.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, Real(0.0), t);
+                    rhs.set(index_1, index_2, Nz - 1) = rhs.get(index_1, index_2, Nz - 1); // + Real(1.0) / dz * p_boundary.value<2>(index_1 * dx, index_2 * dy, (Nz - 0.5) * dz, t);
+                }
+            }
+        }
+    };
+
+    template <Dim direction>
+    void block_solver(const ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar &dim_handler)
+    {
+        std::vector<Real> a(dim_handler.N1, Real(-1.0) / (dim_handler.dN1 * dim_handler.dN1));
+        std::vector<Real> b(dim_handler.N1, Real(1.0) + (Real(2.0) / (dim_handler.dN1 * dim_handler.dN1)));
+        std::vector<Real> c(dim_handler.N1, Real(-1.0) / (dim_handler.dN1 * dim_handler.dN1));
+
+        a[0] = Real(0.0);
+        c[0] = Real(-2.0) / (dim_handler.dN1 * dim_handler.dN1);
+        b[dim_handler.N1 - 1] = Real(1.0) + Real(1.0) / (dim_handler.dN1 * dim_handler.dN1);
+        c[dim_handler.N1 - 1] = Real(0.0);
+
+        auto worker = [&](Dim index_1, Dim index_2)
+        {
+            std::vector<Real> d(dim_handler.N1);
+            std::vector<Real> x(dim_handler.N1);
+
+            if constexpr (direction == 0)
+            {
+                for (Dim index_0 = 0; index_0 < Nx; ++index_0)
+                    d[index_0] = rhs.get(index_0, index_1, index_2);
+                thomas_algorithm(a, b, c, d, x);
+                for (Dim index_0 = 0; index_0 < Nx; ++index_0)
+                    solution.set(index_0, index_1, index_2) = x[index_0];
+            }
+            else if constexpr (direction == 1)
+            {
+                for (Dim index_0 = 0; index_0 < Ny; ++index_0)
+                    d[index_0] = rhs.get(index_1, index_0, index_2);
+                thomas_algorithm(a, b, c, d, x);
+                for (Dim index_0 = 0; index_0 < Ny; ++index_0)
+                    solution.set(index_1, index_0, index_2) = x[index_0];
+            }
+            else if constexpr (direction == 2)
+            {
+                for (Dim index_0 = 0; index_0 < Nz; ++index_0)
+                    d[index_0] = rhs.get(index_1, index_2, index_0);
+                thomas_algorithm(a, b, c, d, x);
+                for (Dim index_0 = 0; index_0 < Nz; ++index_0)
+                    solution.set(index_1, index_2, index_0) = x[index_0];
+            }
+        };
+
+#pragma omp parallel for collapse(2) default(none) shared(a, b, c, worker)
+        for (Dim index_2 = 0; index_2 < Nz; ++index_2)
+            for (Dim index_1 = 0; index_1 < Ny; ++index_1)
+                worker(index_1, index_2);
+    }
+
+    template <Dim direction>
+    void solve_pressure(ScalarVariable &rhs, ScalarVariable &solution, const DimensionsHandlerScalar &dim_handler)
+    {
+        apply_bc<direction>(rhs);
+        block_solver<direction>(rhs, solution, dim_handler);
+    };
 
     BoundaryFunctions &p_boundary;
 
@@ -424,7 +489,7 @@ public:
         }
     };
     template <Dim direction>
-    void block_solver(const VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector &dim_handler, bool use_omp = false)
+    void block_solver(const VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector &dim_handler)
     {
         Dim N = (direction == 0) ? Nx : ((direction == 1) ? Ny : Nz);
         Real h = (direction == 0) ? dx : ((direction == 1) ? dy : dz);
@@ -530,23 +595,7 @@ public:
             }
         };
 
-#ifdef _OPENMP
-        if (use_omp)
-        {
-            if (DEBUG_BLOCK)
-            {
-                int max_threads = omp_get_max_threads();
-                printf("[OMP] block_solver<%d>: using up to %d threads\n", int(direction), max_threads);
-            }
 #pragma omp parallel for collapse(2) default(none) shared(Outer1, Outer2, worker)
-            for (Dim i2 = 0; i2 < Outer2; ++i2)
-                for (Dim i1 = 0; i1 < Outer1; ++i1)
-                    worker(i1, i2);
-            return;
-        }
-
-#endif
-
         for (Dim i2 = 0; i2 < Outer2; ++i2)
             for (Dim i1 = 0; i1 < Outer1; ++i1)
                 worker(i1, i2);
@@ -556,10 +605,10 @@ public:
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), gamma_field(gam), u_boundary(u_bnd) {}
 
     template <Dim direction>
-    void solve(VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector &dim_handler, bool use_omp = false)
+    void solve(VectorVariable &rhs, VectorVariable &solution, const DimensionsHandlerVector &dim_handler)
     {
         apply_bc<direction>(rhs);
-        block_solver<direction>(rhs, solution, dim_handler, use_omp);
+        block_solver<direction>(rhs, solution, dim_handler);
     };
 
     void set_gamma(ScalarVariable &g) { gamma_field = g; }

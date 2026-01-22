@@ -185,6 +185,7 @@ public:
         // 5. Physics Parameters (Reading from your updated input file)
         next_value(k_expression); // Reads "1e10"
         next_value(nu);           // Reads 6.0
+        /*
 
         std::cout << "\n===== Input Parameters Loaded =====\n";
         std::cout << "Forcing (Fx): " << fx_expression << "\n";
@@ -197,6 +198,9 @@ public:
         std::cout << "K Function:   " << k_expression << "\n";
         std::cout << "Viscosity (nu): " << nu << "\n";
         std::cout << "===================================\n";
+
+
+        */
     }
 };
 
@@ -345,9 +349,9 @@ inline BoundaryFunctions ParseInput::get_exact_pressure_function_bf() const
 {
     std::string s_p = p_exact_expression;
 
-   BoundaryFunctions p_func;
-   p_func.set_string_expression({s_p});
-   return p_func;
+    BoundaryFunctions p_func;
+    p_func.set_string_expression({s_p});
+    return p_func;
 }
 
 // 4. Coefficient (K) Helper
