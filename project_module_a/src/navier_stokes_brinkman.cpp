@@ -955,7 +955,7 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
 
         // MPI ADI velocity solves with synchronization
         // MPI ADI velocity solves with synchronization
-        vector_rhs = xi - eta.A_operator(0, 0, gamma_field);
+        vector_rhs = xi - eta.A_operator(0, gamma_field);
         /*
           for (int kk = k0; kk < k1; ++kk)
             for (int jj = j0; jj < j1; ++jj)
