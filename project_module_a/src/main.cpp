@@ -8,7 +8,6 @@ int main(int argc, char **argv)
 #else
     (void)argc;
     (void)argv;
-    bool use_openMP = false;
-    return run_multiple(use_openMP);
+    return run_multiple(true);
 #endif
 }
