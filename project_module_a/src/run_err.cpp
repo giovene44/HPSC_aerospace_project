@@ -186,7 +186,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
     Real dx_in, Real dy_in, Real dz_in, Real T_final,
     const std::string &u_boundary_file,
     const std::string &p_boundary_file,
-    Real &time_out, const MPITopology3D &topo, bool use_omp = false)
+    Real &time_out, const MPITopology3D &topo, bool use_omp)
 {
     auto &parser = ParseInput::getInstance();
     Real nu = parser.nu;
@@ -401,7 +401,15 @@ int run_multiple_mpi(int argc, char **argv)
             errors_rel_u.emplace_back(errors.first.second);
             errors_rel_p.emplace_back(errors.second.second);
             time_values.emplace_back(time_curr);
-            time_speedUps.emplace_back(1.0); // No serial comparison in MPI mode
+
+            time_curr = 0.0;
+            errors = single_run_mpi(
+                Nx_curr, Ny_curr, Nz_curr, dt_curr,
+                dx_curr, dy_curr, dz_curr, T_final,
+                parser.u_boundary_file, parser.p_boundary_file,
+                time_curr, topo, true);
+            auto speed_up = time_values.back() / time_curr;
+            time_speedUps.emplace_back(speed_up); // No serial comparison in MPI mode
         }
 
         if (world_rank == 0)
@@ -418,7 +426,7 @@ int run_multiple_mpi(int argc, char **argv)
             std::system("mkdir -p OUTPUT");
             std::ofstream convergence_file(filename);
 
-            std::string header = "Nx\t\tdx\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTime\t\tProcs\t\tRate_u\t\tRate_p\n";
+            std::string header = "Nx\t\tdx\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTime\t\tTimeSpeedUp\t\tProcs\t\tRate_u\t\tRate_p\n";
             std::cout << header;
             convergence_file << header;
 
@@ -443,6 +451,7 @@ int run_multiple_mpi(int argc, char **argv)
                     << errors_rel_u[i] << "\t\t"
                     << errors_rel_p[i] << "\t\t"
                     << time_values[i] << "\t\t"
+                    << time_speedUps[i] << "\t\t"
                     << world_size << "\t\t"
                     << std::fixed << std::setprecision(2)
                     << rate_u << "\t\t"

@@ -25,39 +25,6 @@ Real NavierStokesBrinkmann::compute_beta(Dim index) const
     return compute_beta(i, j, k);
 }
 
-void NavierStokesBrinkmann::center_pressure(ScalarVariable &pressure_field)
-{
-    Real average = 0.0f;
-    Real total_elements = 0.0f;
-
-    for (Dim idx = 0; idx < Nx; ++idx)
-    {
-        for (Dim idy = 0; idy < Ny; ++idy)
-        {
-            for (Dim idz = 0; idz < Nz; ++idz)
-            {
-                Dim weight = 1;
-                if (idx == 0 || idx == Nx - 1)
-                    weight *= 0.5;
-                if (idy == 0 || idy == Ny - 1)
-                    weight *= 0.5;
-                if (idz == 0 || idz == Nz - 1)
-                    weight *= 0.5;
-                average += pressure_field.get(idx, idy, idz) * weight;
-
-                total_elements += weight;
-            }
-        }
-    }
-
-    average /= total_elements;
-
-    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
-    {
-        pressure_field.set(idx) = pressure_field.get(idx) - average;
-    }
-}
-
 Real NavierStokesBrinkmann::compute_gamma(Dim i, Dim j, Dim k) const
 {
     Real k_val = k_field.get(i, j, k);
@@ -103,6 +70,8 @@ void NavierStokesBrinkmann::initialize_k_field()
         k_field.set(idx) = k_function(x, y, z);
     }
 }
+
+//TODO: not called
 void NavierStokesBrinkmann::compute_vector_g(Real t)
 {
     // -------------------------------------------------------------------------
@@ -195,6 +164,7 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
         }
     }
 }
+//TODO: not called
 void NavierStokesBrinkmann::compute_vector_xi()
 {
     for (Dim comp = 0; comp < xi.size(); ++comp)
@@ -206,7 +176,7 @@ void NavierStokesBrinkmann::compute_vector_xi()
         }
     }
 }
-
+//TODO: not called
 void NavierStokesBrinkmann::compute_divergence_cell_center(const VectorVariable &u,
                                                            ScalarVariable &div)
 {
@@ -227,8 +197,6 @@ void NavierStokesBrinkmann::compute_divergence_cell_center(const VectorVariable 
 void NavierStokesBrinkmann::compute_rhs_pressure(Real t)
 {
 
-    ScalarVariable div_u(Nx, Ny, Nz, dx, dy, dz);
-    compute_divergence_cell_center(velocity_solution, div_u);
     rhs.set_all(Real(0.0));
 
     for (Dim k = 1; k < Nz - 1; ++k)
@@ -237,7 +205,7 @@ void NavierStokesBrinkmann::compute_rhs_pressure(Real t)
             {
 
                 rhs.set(i, j, k) =
-                    -div_u.get(i, j, k) / dt;
+                    Real(-(velocity_solution.divergence(i, j, k)) / dt);
             }
 }
 
@@ -394,7 +362,7 @@ static void build_rhs(VectorVariable &rhs,
 }
 
 #ifndef USE_MPI
-Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms, bool openMP)
+Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 {
     Real t = Real(1.5);
 
@@ -446,16 +414,17 @@ Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms, bool openMP)
         velocity_solver.set_t(t_np1);
 
         compute_forcing_analytic(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field);
+        // f_half.set_all(forcing_function, t_half, false);
 
-        // RHS uses (pressure_solution - ∇pressure_predictor) in an Auteri-consistent way
+        // RHS uses (pressure_solution - ∇pressure_predictor)
         build_rhs(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field);
 
-        vector_rhs = xi - eta.A_operator(0, 0, gamma_field);
-        velocity_solver.solve<0>(vector_rhs, eta, x_vector_handler, openMP);
-        vector_rhs = eta - zeta.A_operator(1, 1, gamma_field);
-        velocity_solver.solve<1>(vector_rhs, zeta, y_vector_handler, openMP);
-        vector_rhs = zeta - velocity_solution.A_operator(2, 2, gamma_field);
-        velocity_solver.solve<2>(vector_rhs, velocity_solution, z_vector_handler, openMP);
+        vector_rhs = xi - eta.A_operator(0, gamma_field);
+        velocity_solver.solve<0>(vector_rhs, eta, x_vector_handler);
+        vector_rhs = eta - zeta.A_operator(1, gamma_field);
+        velocity_solver.solve<1>(vector_rhs, zeta, y_vector_handler);
+        vector_rhs = zeta - velocity_solution.A_operator(2, gamma_field);
+        velocity_solver.solve<2>(vector_rhs, velocity_solution, z_vector_handler);
         // ---- Pressure correction (space-factored operator A)
 
         compute_rhs_pressure(t_np1);
@@ -466,9 +435,10 @@ Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms, bool openMP)
         // (I - dyy) phi = psi
         // (I - dzz) corr_new = phi
 
-        pressure_solver.solve_x(rhs, psi, openMP);
-        pressure_solver.solve_y(psi, phi, openMP);
-        pressure_solver.solve_z(phi, other_phi, openMP);
+        pressure_solver.solve_pressure<0>(rhs, phi, x_scalar_handler);
+        pressure_solver.solve_pressure<1>(phi, other_phi, y_scalar_handler);
+        pressure_solver.solve_pressure<2>(other_phi, other_phi, z_scalar_handler);
+
 
         // ---- Pressure update at half-step (Auteri):
         // p^{n+1/2} = p^{n-1/2} + ϕ^{n+1/2}
@@ -476,6 +446,8 @@ Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms, bool openMP)
         pressure_solution += other_phi;
 
         t = t_np1;
+
+        std::cout << "Completed time step " << n + 1 << " / " << nsteps << ", t = " << t << "\n";
     }
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end_time - start_time;
@@ -983,7 +955,7 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
 
         // MPI ADI velocity solves with synchronization
         // MPI ADI velocity solves with synchronization
-        vector_rhs = xi - eta.A_operator(0, 0, gamma_field);
+        vector_rhs = xi - eta.A_operator(0, gamma_field);
         /*
           for (int kk = k0; kk < k1; ++kk)
             for (int jj = j0; jj < j1; ++jj)
@@ -997,14 +969,15 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
         */
 
         velocity_solver.solve_x_only(vector_rhs, eta, topo, x_vector_handler, use_omp);
-        // sync_vector_field_full(eta, Nx, Ny, Nz, topo);
+        sync_vector_field_full(eta, Nx, Ny, Nz, topo);
 
-        vector_rhs = eta - zeta.A_operator(1, 1, gamma_field);
+        vector_rhs = eta - zeta.A_operator(1, gamma_field);
         velocity_solver.solve_y_only(vector_rhs, zeta, topo, y_vector_handler, use_omp);
-        // sync_vector_field_full(zeta, Nx, Ny, Nz, topo);
+        sync_vector_field_full(zeta, Nx, Ny, Nz, topo);
 
-        vector_rhs = zeta - velocity_solution.A_operator(2, 2, gamma_field);
+        vector_rhs = zeta - velocity_solution.A_operator(2, gamma_field);
         velocity_solver.solve_z_only(vector_rhs, velocity_solution, topo, z_vector_handler, use_omp);
+        sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
         sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
 
         // Pressure correction

@@ -385,9 +385,10 @@ public:
         return out;
     }
 
-    VectorVariable A_operator(int derivation_direction, int component, ScalarVariable gamma) const
+    VectorVariable A_operator(int derivation_direction, ScalarVariable gamma) const
     {
         VectorVariable out(Nx, Ny, Nz, dx, dy, dz);
+        for (Dim component = 0; component < 3; ++component)
         for (Dim i = 0; i < Nx; ++i)
         {
             for (Dim j = 0; j < Ny; ++j)

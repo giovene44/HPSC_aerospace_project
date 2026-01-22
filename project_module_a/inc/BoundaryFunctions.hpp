@@ -30,45 +30,55 @@ public:
     }
 
     template <Dim component = 0>
-    Real value(Real x_, Real y_, Real z_, Real t_) const
+Real value(Real x_, Real y_, Real z_, Real t_) const
+{
+    // Thread-local parser and values: each thread gets its own instance
+    // Note: Since this is a template, value<0>, value<1>, value<2> get 
+    // DIFFERENT static instances. This prevents "thrashing" when you 
+    // call them sequentially in the VectorVariable loop.
+    thread_local ParserX p_local;
+    thread_local Value xval_local;
+    thread_local Value yval_local;
+    thread_local Value zval_local;
+    thread_local Value tval_local;
+    thread_local bool initialized = false;
+    
+    thread_local std::string last_expr_str = "";
+
+    if (!initialized)
     {
-        // Thread-local parser and values: each thread gets its own instance
-        thread_local ParserX p_local;
-        thread_local Value xval_local;
-        thread_local Value yval_local;
-        thread_local Value zval_local;
-        thread_local Value tval_local;
-        thread_local bool initialized = false;
+        xval_local = Value(Real(0.0));
+        yval_local = Value(Real(0.0));
+        zval_local = Value(Real(0.0));
+        tval_local = Value(Real(0.0));
+        p_local.DefineVar("x", Variable(&xval_local));
+        p_local.DefineVar("y", Variable(&yval_local));
+        p_local.DefineVar("z", Variable(&zval_local));
+        p_local.DefineVar("t", Variable(&tval_local));
+        initialized = true;
+    }
 
-        if (!initialized)
-        {
-            xval_local = Value(Real(0.0));
-            yval_local = Value(Real(0.0));
-            zval_local = Value(Real(0.0));
-            tval_local = Value(Real(0.0));
-            p_local.DefineVar("x", Variable(&xval_local));
-            p_local.DefineVar("y", Variable(&yval_local));
-            p_local.DefineVar("z", Variable(&zval_local));
-            p_local.DefineVar("t", Variable(&tval_local));
-            initialized = true;
-        }
-
+    if (last_expr_str != string_expression[component])
+    {
         try
         {
             p_local.SetExpr(string_expression[component]);
+            last_expr_str = string_expression[component];
         }
         catch (ParserError &e)
         {
             std::cerr << "Parser error in BoundaryFunctions::value(): " << e.GetMsg() << std::endl;
             throw;
         }
-        xval_local = Value(x_);
-        yval_local = Value(y_);
-        zval_local = Value(z_);
-        tval_local = Value(t_);
-
-        return p_local.Eval().GetFloat();
     }
+
+    xval_local = Value(x_);
+    yval_local = Value(y_);
+    zval_local = Value(z_);
+    tval_local = Value(t_);
+
+    return p_local.Eval().GetFloat();
+}
 
     template <Dim component = 0>
     Real first_derivative(Real x_, Real y_, Real z_, Real t_, Real d) const

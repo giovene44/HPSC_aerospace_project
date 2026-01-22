@@ -185,22 +185,22 @@ public:
         // 5. Physics Parameters (Reading from your updated input file)
         next_value(k_expression); // Reads "1e10"
         next_value(nu);           // Reads 6.0
-                                  /*
-                                    std::cout << "\n===== Input Parameters Loaded =====\n";
-                                          std::cout << "Forcing (Fx): " << fx_expression << "\n";
-                                          std::cout << "Forcing (Fy): " << fy_expression << "\n";
-                                          std::cout << "Forcing (Fz): " << fz_expression << "\n";
-                                          std::cout << "Exact U:      " << u_exact_expression << "\n";
-                                          std::cout << "Exact V:      " << v_exact_expression << "\n";
-                                          std::cout << "Exact W:      " << w_exact_expression << "\n";
-                                          std::cout << "Exact P:      " << p_exact_expression << "\n";
-                                          std::cout << "K Function:   " << k_expression << "\n";
-                                          std::cout << "Viscosity (nu): " << nu << "\n";
-                                          std::cout << "===================================\n";
-                          
-                          
-                          
-                                  */
+        /*
+
+        std::cout << "\n===== Input Parameters Loaded =====\n";
+        std::cout << "Forcing (Fx): " << fx_expression << "\n";
+        std::cout << "Forcing (Fy): " << fy_expression << "\n";
+        std::cout << "Forcing (Fz): " << fz_expression << "\n";
+        std::cout << "Exact U:      " << u_exact_expression << "\n";
+        std::cout << "Exact V:      " << v_exact_expression << "\n";
+        std::cout << "Exact W:      " << w_exact_expression << "\n";
+        std::cout << "Exact P:      " << p_exact_expression << "\n";
+        std::cout << "K Function:   " << k_expression << "\n";
+        std::cout << "Viscosity (nu): " << nu << "\n";
+        std::cout << "===================================\n";
+
+
+        */
     }
 };
 
