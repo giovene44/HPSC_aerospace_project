@@ -215,19 +215,11 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         dx_in, dy_in, dz_in,
         nu);
 
-    if (rank == 0)
-        std::cout << "Solver initialized (nu=" << nu << ").\n";
-
     // Use MPI solve
     Real time_out_auto = nsb_solver.solve_mpi(mms, topo, use_omp);
     time_out = time_out_auto;
-    if (rank == 0)
-        std::cout << "\nSolver run completed.\n";
 
     T_final += Real(1.5);
-
-    if (rank == 0)
-        std::cout << "Computing Errors at T = " << T_final << "...\n";
 
     const Real L2_u_local = compute_err2_velocity_local(u_exact_func, nsb_solver.velocity_solution, Nx_in, Ny_in, Nz_in, dx_in, dy_in, dz_in, T_final, topo);
 
@@ -247,7 +239,8 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
 
     if (rank == 0)
     {
-        std::cout << "=============================\n";
+        /*
+          std::cout << "=============================\n";
         std::cout << "   MMS Accuracy Results      \n";
         std::cout << "=============================\n";
         std::cout << "Velocity L2 absolute  = " << err_u << "\n";
@@ -255,6 +248,8 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         std::cout << "Velocity L2 relative  = " << rel_err_u << "\n";
         std::cout << "Pressure L2 relative  = " << rel_err_p << "\n";
         std::cout << "=============================\n";
+
+        */
     }
 
     return std::make_pair(std::make_pair(err_u, rel_err_u), std::make_pair(err_p, rel_err_p));
@@ -331,6 +326,19 @@ int run_multiple_mpi(int argc, char **argv)
             std::cout << "Topology: " << Px << " x " << Py << " x " << Pz << "\n";
         }
 
+        // print the number of threads
+        if (world_rank == 0)
+        {
+#pragma omp parallel
+            {
+#pragma omp single
+                {
+                    int nthreads = omp_get_num_threads();
+                    std::cout << "MPI Rank " << world_rank << " using " << nthreads << " OpenMP threads.\n";
+                }
+            }
+        }
+
         // 1) Create 3D Cartesian topology
         MPITopology3D topo(MPI_COMM_WORLD, Pz, Py, Px);
 
@@ -369,10 +377,14 @@ int run_multiple_mpi(int argc, char **argv)
 
             if (world_rank == 0)
             {
-                std::cout << "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
+                /*
+                 std::cout << "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
                 std::cout << "Running MPI simulation with (Nx, Ny, Nz) = ("
                           << Nx_curr << ", " << Ny_curr << ", " << Nz_curr << ") and dt = "
                           << dt_curr << "\n\n";
+
+
+                */
             }
 
             Real time_curr = 0.0;
@@ -395,14 +407,14 @@ int run_multiple_mpi(int argc, char **argv)
         if (world_rank == 0)
         {
             std::cout << "\n=============================\n";
-            std::cout << "   Convergence Analysis (MPI)\n";
+            std::cout << "   Convergence Analysis (MPI + " << omp_get_num_threads() << " threads)\n";
             std::cout << "=============================\n";
 
             auto now = std::chrono::system_clock::now();
             auto time = std::chrono::system_clock::to_time_t(now);
             std::stringstream ss;
             ss << std::put_time(std::localtime(&time), "%Y-%m-%d_%H-%M-%S");
-            std::string filename = "OUTPUT/Convergence_Analysis_MPI_" + ss.str() + ".dat";
+            std::string filename = "OUTPUT/Convergence_Analysis_MPI_" + std::to_string(world_size) + "_" + "OpenMP_" + std::to_string(omp_get_num_threads()) + ".dat";
             std::system("mkdir -p OUTPUT");
             std::ofstream convergence_file(filename);
 
