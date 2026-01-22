@@ -274,12 +274,15 @@ int run_multiple_mpi(int argc, char **argv)
         int Px, Py, Pz;
         if (world_size == 1)
         {
+            std::cout << "Running in serial mode.\n";
             Px = 1;
             Py = 1;
             Pz = 1;
         }
         else if (world_size == 2)
         {
+            if (world_rank == 0)
+                std::cout << "Running with 2 MPI processes.\n";
             Px = 2;
             Py = 1;
             Pz = 1;
@@ -294,6 +297,24 @@ int run_multiple_mpi(int argc, char **argv)
         {
             Px = 2;
             Py = 2;
+            Pz = 2;
+        }
+        else if (world_size == 12)
+        {
+            Px = 3;
+            Py = 2;
+            Pz = 2;
+        }
+        else if (world_size == 16)
+        {
+            Px = 4;
+            Py = 2;
+            Pz = 2;
+        }
+        else if (world_size == 18)
+        {
+            Px = 3;
+            Py = 3;
             Pz = 2;
         }
         else
@@ -359,7 +380,7 @@ int run_multiple_mpi(int argc, char **argv)
                 Nx_curr, Ny_curr, Nz_curr, dt_curr,
                 dx_curr, dy_curr, dz_curr, T_final,
                 parser.u_boundary_file, parser.p_boundary_file,
-                time_curr, topo, false);
+                time_curr, topo, true);
 
             N_values.emplace_back(Nx_curr);
             dt_values.emplace_back(dt_curr);

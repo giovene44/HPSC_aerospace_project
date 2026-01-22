@@ -93,9 +93,17 @@ public:
         : Solver(Nx_, Ny_, Nz_, dx_, dy_, dz_, dt_), p_boundary(p_boundary_) {}
 
     BoundaryFunctions &set_p_boundary() { return p_boundary; }
+    // =============================================================
+    // PRESSURE SWEEP (scalar) - FAST + BATCHED + OpenMP
+    // - builds RHS only for local_N
+    // - batched Schur solve (one MPI collective per batch, not per line)
+    // - OpenMP used in pack + unpack loops
+    // =============================================================
+
     void solve_x_mpi(ScalarVariable &rhs,
                      ScalarVariable &solution,
-                     const MPITopology3D &topo)
+                     const MPITopology3D &topo,
+                     bool use_omp = false)
     {
         const Dim N = Nx;
         const Real h = dx;
@@ -105,27 +113,24 @@ public:
         // Communicator in X
         // ---------------------------
         MPI_Comm comm_x_raw = topo.comm_x();
-
         int rank_x = 0, size_x = 1;
         MPI_Comm_rank(comm_x_raw, &rank_x);
         MPI_Comm_size(comm_x_raw, &size_x);
-
         MPICommunicator comm_x(comm_x_raw, false);
 
         // ---------------------------
         // Build global a,b,c once (scalar)
-        // (I - dxx) with Neumann via ghost elimination like your serial code
+        // (I - dxx) with Neumann via ghost elimination
         // ---------------------------
         std::vector<Real> a_full(N, -alpha);
         std::vector<Real> b_full(N, Real(1.0) + Real(2.0) * alpha);
         std::vector<Real> c_full(N, -alpha);
 
-        // Neumann rows (ghost elimination)
-        // left:  (1+2α) ψ0 - 2α ψ1 = rhs0 - 2 gL/h
+        // left Neumann: (1+2α) ψ0 - 2α ψ1 = rhs0 - 2 gL/h
         a_full[0] = Real(0.0);
         c_full[0] = -Real(2.0) * alpha;
 
-        // right: -2α ψ_{N-2} + (1+2α) ψ_{N-1} = rhs_{N-1} + 2 gR/h
+        // right Neumann: -2α ψ_{N-2} + (1+2α) ψ_{N-1} = rhs_{N-1} + 2 gR/h
         a_full[N - 1] = -Real(2.0) * alpha;
         c_full[N - 1] = Real(0.0);
 
@@ -140,7 +145,7 @@ public:
         std::vector<Real> a_local(local_N, 0.0), b_local(local_N, 0.0), c_local(local_N, 0.0);
         for (int il = 0; il < local_N; ++il)
         {
-            int ig = global_start + il;
+            const int ig = global_start + il;
             if (ig < 0 || ig >= (int)N)
                 continue;
             a_local[il] = a_full[ig];
@@ -152,178 +157,139 @@ public:
         // ---------------------------
         // Local (j,k) slab for this rank (in Py,Pz)
         // ---------------------------
-        Dim j0 = topo.local_j0(Ny);
-        Dim j1 = topo.local_j1(Ny);
-        Dim k0 = topo.local_k0(Nz);
-        Dim k1 = topo.local_k1(Nz);
+        Dim j0 = topo.local_j0(Ny), j1 = topo.local_j1(Ny);
+        Dim k0 = topo.local_k0(Nz), k1 = topo.local_k1(Nz);
 
-        // ---------------------------
-        // Loop lines (j,k) and solve
-        // ---------------------------
+        const int nJ = int(j1 - j0);
+        const int nK = int(k1 - k0);
+        const int nLinesLocal = nJ * nK;
+
+        auto lid_of = [&](Dim j, Dim k) -> int
+        { return int((k - k0) * nJ + (j - j0)); };
+
+        auto jk_of_lid = [&](int lid, Dim &j, Dim &k)
+        {
+            k = k0 + Dim(lid / nJ);
+            j = j0 + Dim(lid - int(k - k0) * nJ);
+        };
+
+        // write-back: avoid duplicate left interface
+        const int i0_local = (rank_x == 0) ? 0 : 1;
+
+        // ------------------------------------------------------------
+        // Build RHS only for local_N entries (FAST)
+        // Neumann contributions:
+        //   d[0]     -= 2*gL/h
+        //   d[N-1]   += 2*gR/h
+        // ------------------------------------------------------------
+        auto build_rhs_local = [&](Dim j, Dim k, Real *out)
+        {
+            const Real y = Real(j) * dy;
+            const Real z = Real(k) * dz;
+
+            // g = dψ/dx on boundaries
+            const Real gL = p_boundary.value<0>(Real(0.0), y, z, t);
+            const Real gR = p_boundary.value<0>((Nx - Real(0.5)) * dx, y, z, t);
+
+            for (int il = 0; il < local_N; ++il)
+            {
+                const int ig = global_start + il;
+
+                if (ig < 0 || ig >= (int)N)
+                {
+                    out[il] = Real(0.0);
+                    continue;
+                }
+
+                Real val = rhs.get(Dim(ig), j, k);
+
+                if (ig == 0)
+                    val -= Real(2.0) * gL / h;
+                else if (ig == N - 1)
+                    val += Real(2.0) * gR / h;
+
+                out[il] = val;
+            }
+        };
+
+        // ------------------------------------------------------------
+        // Batched solve over all (j,k) lines
+        // ------------------------------------------------------------
+        std::vector<int> active_lids;
+        active_lids.reserve(nLinesLocal);
+
         for (Dim k = k0; k < k1; ++k)
             for (Dim j = j0; j < j1; ++j)
+                active_lids.push_back(lid_of(j, k));
+
+        const int nActive = int(active_lids.size());
+        if (nActive == 0)
+            return;
+
+        std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
+        std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
+
+#pragma omp parallel for schedule(static) if (use_omp)
+        for (int p = 0; p < nActive; ++p)
+        {
+            Dim j, k;
+            jk_of_lid(active_lids[p], j, k);
+            build_rhs_local(j, k, rhs_flat.data() + size_t(p) * size_t(local_N));
+        }
+
+        schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
+
+#pragma omp parallel for schedule(static) if (use_omp)
+        for (int p = 0; p < nActive; ++p)
+        {
+            Dim j, k;
+            jk_of_lid(active_lids[p], j, k);
+
+            const Real *x = sol_flat.data() + size_t(p) * size_t(local_N);
+            for (int il = i0_local; il < local_N; ++il)
             {
-                // Global RHS line d
-                std::vector<Real> d(N, 0.0);
-
-                for (Dim i = 0; i < N; ++i)
-                    d[i] = rhs.get(i, j, k);
-
-                // Neumann BC contributions (g = dψ/dx at boundary)
-                const Real gL = p_boundary.value<0>(Real(0.0), j * dy, k * dz, t);
-                const Real gR = p_boundary.value<0>((Nx - Real(0.5)) * dx, j * dy, k * dz, t);
-
-                d[0] -= Real(2.0) * gL / h;
-                d[N - 1] += Real(2.0) * gR / h;
-
-                // Extract local RHS
-                std::vector<Real> rhs_local(local_N, 0.0);
-                for (int il = 0; il < local_N; ++il)
-                {
-                    int ig = global_start + il;
-                    if (ig < 0 || ig >= (int)N)
-                        continue;
-                    rhs_local[il] = d[ig];
-                }
-
-                // Solve
-                std::vector<Real> x_local;
-                schur.solve(rhs_local, x_local);
-
-                // Write back only owned part
-                // (avoid duplicating the left interface point on ranks > 0)
-                int i0_local = (rank_x == 0) ? 0 : 1;
-                for (int il = i0_local; il < local_N; ++il)
-                {
-                    int ig = global_start + il;
-                    if (ig < 0 || ig >= (int)N)
-                        continue;
-                    solution.set(ig, j, k) = x_local[il];
-                }
+                const int ig = global_start + il;
+                if (ig < 0 || ig >= (int)N)
+                    continue;
+                solution.set(Dim(ig), j, k) = x[il];
             }
-    }
-    void solve_x(ScalarVariable &rhs, ScalarVariable &solution)
-    {
-        const Real alpha = Real(1.0) / (dx * dx); // α = 1/dx^2
-
-        std::vector<Real> a(Nx, -alpha);
-        std::vector<Real> b(Nx, Real(1.0) + Real(2.0) * alpha);
-        std::vector<Real> c(Nx, -alpha);
-        std::vector<Real> d(Nx), x(Nx);
-
-        // Neumann rows via ghost elimination:
-        // left:  (1+2α) ψ0 - 2α ψ1 = rhs0 - 2 g/dx
-        a[0] = Real(0.0);
-        c[0] = -Real(2.0) * alpha;
-
-        // right: -2α ψ_{N-2} + (1+2α) ψ_{N-1} = rhs_{N-1} + 2 g/dx
-        a[Nx - 1] = -Real(2.0) * alpha;
-        c[Nx - 1] = Real(0.0);
-
-        for (Dim j = 0; j < Ny; ++j)
-            for (Dim k = 0; k < Nz; ++k)
-            {
-                // Copy rhs line
-                for (Dim i = 0; i < Nx; ++i)
-                    d[i] = rhs.get(i, j, k);
-
-                // Add Neumann BC contributions to rhs (NOT inside matrix)
-                // g = ∂ψ/∂x at boundary.
-                const Real gL = p_boundary.value<0>(Real(0.0), j * dy, k * dz, t);
-                const Real gR = p_boundary.value<0>((Nx - Real(0.5)) * dx, j * dy, k * dz, t);
-
-                d[0] -= Real(2.0) * gL / dx;
-                d[Nx - 1] += Real(2.0) * gR / dx;
-
-                thomas_algorithm(a, b, c, d, x);
-
-                for (Dim i = 0; i < Nx; ++i)
-                    solution.set(i, j, k) = x[i];
-            }
-    }
-
-    void solve_y(ScalarVariable &rhs, ScalarVariable &solution)
-    {
-        const Real alpha = Real(1.0) / (dy * dy);
-
-        std::vector<Real> a(Ny, -alpha);
-        std::vector<Real> b(Ny, Real(1.0) + Real(2.0) * alpha);
-        std::vector<Real> c(Ny, -alpha);
-        std::vector<Real> d(Ny), x(Ny);
-
-        a[0] = Real(0.0);
-        c[0] = -Real(2.0) * alpha;
-
-        a[Ny - 1] = -Real(2.0) * alpha;
-        c[Ny - 1] = Real(0.0);
-
-        for (Dim i = 0; i < Nx; ++i)
-            for (Dim k = 0; k < Nz; ++k)
-            {
-                for (Dim j = 0; j < Ny; ++j)
-                    d[j] = rhs.get(i, j, k);
-
-                const Real gB = p_boundary.value<1>(i * dx, Real(0.0), k * dz, t);
-                const Real gT = p_boundary.value<1>(i * dx, (Ny - Real(0.5)) * dy, k * dz, t);
-
-                d[0] -= Real(2.0) * gB / dy;
-                d[Ny - 1] += Real(2.0) * gT / dy;
-
-                thomas_algorithm(a, b, c, d, x);
-
-                for (Dim j = 0; j < Ny; ++j)
-                    solution.set(i, j, k) = x[j];
-            }
+        }
     }
 
     void solve_y_mpi(ScalarVariable &rhs,
                      ScalarVariable &solution,
-                     const MPITopology3D &topo)
+                     const MPITopology3D &topo,
+                     bool use_omp = false)
     {
         const Dim N = Ny;
         const Real h = dy;
         const Real alpha = Real(1.0) / (h * h);
 
-        // ---------------------------
-        // Communicator in Y
-        // ---------------------------
+        // communicator in Y
         MPI_Comm comm_y_raw = topo.comm_y();
-
         int rank_y = 0, size_y = 1;
         MPI_Comm_rank(comm_y_raw, &rank_y);
         MPI_Comm_size(comm_y_raw, &size_y);
-
         MPICommunicator comm_y(comm_y_raw, false);
 
-        // ---------------------------
-        // Build global a,b,c once (scalar)
-        // (I - dyy) with Neumann via ghost elimination
-        // ---------------------------
+        // a,b,c with Neumann via ghost elimination
         std::vector<Real> a_full(N, -alpha);
         std::vector<Real> b_full(N, Real(1.0) + Real(2.0) * alpha);
         std::vector<Real> c_full(N, -alpha);
 
-        // Neumann rows (ghost elimination)
-        // bottom: (1+2α) ψ0 - 2α ψ1 = rhs0 - 2 gB/h
         a_full[0] = Real(0.0);
         c_full[0] = -Real(2.0) * alpha;
-
-        // top: -2α ψ_{N-2} + (1+2α) ψ_{N-1} = rhs_{N-1} + 2 gT/h
         a_full[N - 1] = -Real(2.0) * alpha;
         c_full[N - 1] = Real(0.0);
 
-        // ---------------------------
-        // Schur solver preprocess (once)
-        // ---------------------------
         SchurComplementSolver schur(N, size_y, rank_y, comm_y);
-
         const int local_N = schur.get_local_N();
         const int global_start = schur.get_global_start();
 
         std::vector<Real> a_local(local_N, 0.0), b_local(local_N, 0.0), c_local(local_N, 0.0);
         for (int il = 0; il < local_N; ++il)
         {
-            int ig = global_start + il;
+            const int ig = global_start + il;
             if (ig < 0 || ig >= (int)N)
                 continue;
             a_local[il] = a_full[ig];
@@ -332,142 +298,127 @@ public:
         }
         schur.preprocess(a_local, b_local, c_local);
 
-        // ---------------------------
-        // Local (i,k) slab for this rank (in Px,Pz)
-        // ---------------------------
-        Dim i0 = topo.local_i0(Nx);
-        Dim i1 = topo.local_i1(Nx);
-        Dim k0 = topo.local_k0(Nz);
-        Dim k1 = topo.local_k1(Nz);
+        // local (i,k) slab
+        Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
+        Dim k0 = topo.local_k0(Nz), k1 = topo.local_k1(Nz);
 
-        // ---------------------------
-        // Loop lines (i,k) and solve
-        // ---------------------------
+        const int nI = int(i1 - i0);
+        const int nK = int(k1 - k0);
+        const int nLinesLocal = nI * nK;
+
+        auto lid_of = [&](Dim i, Dim k) -> int
+        { return int((k - k0) * nI + (i - i0)); };
+
+        auto ik_of_lid = [&](int lid, Dim &i, Dim &k)
+        {
+            k = k0 + Dim(lid / nI);
+            i = i0 + Dim(lid - int(k - k0) * nI);
+        };
+
+        const int j0_local = (rank_y == 0) ? 0 : 1;
+
+        auto build_rhs_local = [&](Dim i, Dim k, Real *out)
+        {
+            const Real x = Real(i) * dx;
+            const Real z = Real(k) * dz;
+
+            const Real gB = p_boundary.value<1>(x, Real(0.0), z, t);
+            const Real gT = p_boundary.value<1>(x, (Ny - Real(0.5)) * dy, z, t);
+
+            for (int il = 0; il < local_N; ++il)
+            {
+                const int ig = global_start + il;
+                if (ig < 0 || ig >= (int)N)
+                {
+                    out[il] = Real(0.0);
+                    continue;
+                }
+
+                Real val = rhs.get(i, Dim(ig), k);
+
+                if (ig == 0)
+                    val -= Real(2.0) * gB / h;
+                else if (ig == N - 1)
+                    val += Real(2.0) * gT / h;
+
+                out[il] = val;
+            }
+        };
+
+        std::vector<int> active_lids;
+        active_lids.reserve(nLinesLocal);
         for (Dim k = k0; k < k1; ++k)
             for (Dim i = i0; i < i1; ++i)
+                active_lids.push_back(lid_of(i, k));
+
+        const int nActive = int(active_lids.size());
+        if (nActive == 0)
+            return;
+
+        std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
+        std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
+
+#pragma omp parallel for schedule(static) if (use_omp)
+        for (int p = 0; p < nActive; ++p)
+        {
+            Dim i, k;
+            ik_of_lid(active_lids[p], i, k);
+            build_rhs_local(i, k, rhs_flat.data() + size_t(p) * size_t(local_N));
+        }
+
+        schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
+
+#pragma omp parallel for schedule(static) if (use_omp)
+        for (int p = 0; p < nActive; ++p)
+        {
+            Dim i, k;
+            ik_of_lid(active_lids[p], i, k);
+
+            const Real *x = sol_flat.data() + size_t(p) * size_t(local_N);
+            for (int il = j0_local; il < local_N; ++il)
             {
-                // Global RHS line d
-                std::vector<Real> d(N, 0.0);
-
-                for (Dim j = 0; j < N; ++j)
-                    d[j] = rhs.get(i, j, k);
-
-                // Neumann BC contributions (g = dψ/dy at boundary)
-                const Real gB = p_boundary.value<1>(i * dx, Real(0.0), k * dz, t);
-                const Real gT = p_boundary.value<1>(i * dx, (Ny - Real(0.5)) * dy, k * dz, t);
-
-                d[0] -= Real(2.0) * gB / h;
-                d[N - 1] += Real(2.0) * gT / h;
-
-                // Extract local RHS
-                std::vector<Real> rhs_local(local_N, 0.0);
-                for (int il = 0; il < local_N; ++il)
-                {
-                    int ig = global_start + il;
-                    if (ig < 0 || ig >= (int)N)
-                        continue;
-                    rhs_local[il] = d[ig];
-                }
-
-                // Solve
-                std::vector<Real> x_local;
-                schur.solve(rhs_local, x_local);
-
-                // Write back only owned part
-                // (avoid duplicating the left interface point on ranks > 0)
-                int j0_local = (rank_y == 0) ? 0 : 1;
-                for (int il = j0_local; il < local_N; ++il)
-                {
-                    int ig = global_start + il;
-                    if (ig < 0 || ig >= (int)N)
-                        continue;
-                    solution.set(i, ig, k) = x_local[il];
-                }
+                const int ig = global_start + il;
+                if (ig < 0 || ig >= (int)N)
+                    continue;
+                solution.set(i, Dim(ig), k) = x[il];
             }
-    }
-
-    void solve_z(ScalarVariable &rhs, ScalarVariable &solution)
-    {
-        const Real alpha = Real(1.0) / (dz * dz);
-
-        std::vector<Real> a(Nz, -alpha);
-        std::vector<Real> b(Nz, Real(1.0) + Real(2.0) * alpha);
-        std::vector<Real> c(Nz, -alpha);
-        std::vector<Real> d(Nz), x(Nz);
-
-        a[0] = Real(0.0);
-        c[0] = -Real(2.0) * alpha;
-
-        a[Nz - 1] = -Real(2.0) * alpha;
-        c[Nz - 1] = Real(0.0);
-
-        for (Dim i = 0; i < Nx; ++i)
-            for (Dim j = 0; j < Ny; ++j)
-            {
-                for (Dim k = 0; k < Nz; ++k)
-                    d[k] = rhs.get(i, j, k);
-
-                const Real gF = p_boundary.value<2>(i * dx, j * dy, Real(0.0), t);
-                const Real gB = p_boundary.value<2>(i * dx, j * dy, (Nz - Real(0.5)) * dz, t);
-
-                d[0] -= Real(2.0) * gF / dz;
-                d[Nz - 1] += Real(2.0) * gB / dz;
-
-                thomas_algorithm(a, b, c, d, x);
-
-                for (Dim k = 0; k < Nz; ++k)
-                    solution.set(i, j, k) = x[k];
-            }
+        }
     }
 
     void solve_z_mpi(ScalarVariable &rhs,
                      ScalarVariable &solution,
-                     const MPITopology3D &topo)
+                     const MPITopology3D &topo,
+                     bool use_omp = false)
     {
         const Dim N = Nz;
         const Real h = dz;
         const Real alpha = Real(1.0) / (h * h);
 
-        // ---------------------------
-        // Communicator in Z
-        // ---------------------------
+        // communicator in Z
         MPI_Comm comm_z_raw = topo.comm_z();
-
         int rank_z = 0, size_z = 1;
         MPI_Comm_rank(comm_z_raw, &rank_z);
         MPI_Comm_size(comm_z_raw, &size_z);
-
         MPICommunicator comm_z(comm_z_raw, false);
 
-        // ---------------------------
-        // Build global a,b,c once (scalar)
-        // (I - dzz) with Neumann via ghost elimination
-        // ---------------------------
+        // a,b,c with Neumann via ghost elimination
         std::vector<Real> a_full(N, -alpha);
         std::vector<Real> b_full(N, Real(1.0) + Real(2.0) * alpha);
         std::vector<Real> c_full(N, -alpha);
 
-        // Neumann rows (ghost elimination)
-        // front: (1+2α) ψ0 - 2α ψ1 = rhs0 - 2 gF/h
         a_full[0] = Real(0.0);
         c_full[0] = -Real(2.0) * alpha;
-
-        // back: -2α ψ_{N-2} + (1+2α) ψ_{N-1} = rhs_{N-1} + 2 gB/h
         a_full[N - 1] = -Real(2.0) * alpha;
         c_full[N - 1] = Real(0.0);
 
-        // ---------------------------
-        // Schur solver preprocess (once)
-        // ---------------------------
         SchurComplementSolver schur(N, size_z, rank_z, comm_z);
-
         const int local_N = schur.get_local_N();
         const int global_start = schur.get_global_start();
 
         std::vector<Real> a_local(local_N, 0.0), b_local(local_N, 0.0), c_local(local_N, 0.0);
         for (int il = 0; il < local_N; ++il)
         {
-            int ig = global_start + il;
+            const int ig = global_start + il;
             if (ig < 0 || ig >= (int)N)
                 continue;
             a_local[il] = a_full[ig];
@@ -476,58 +427,91 @@ public:
         }
         schur.preprocess(a_local, b_local, c_local);
 
-        // ---------------------------
-        // Local (i,j) slab for this rank (in Px,Py)
-        // ---------------------------
-        Dim i0 = topo.local_i0(Nx);
-        Dim i1 = topo.local_i1(Nx);
-        Dim j0 = topo.local_j0(Ny);
-        Dim j1 = topo.local_j1(Ny);
+        // local (i,j) slab
+        Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
+        Dim j0 = topo.local_j0(Ny), j1 = topo.local_j1(Ny);
 
-        // ---------------------------
-        // Loop lines (i,j) and solve
-        // ---------------------------
+        const int nI = int(i1 - i0);
+        const int nJ = int(j1 - j0);
+        const int nLinesLocal = nI * nJ;
+
+        auto lid_of = [&](Dim i, Dim j) -> int
+        { return int((j - j0) * nI + (i - i0)); };
+
+        auto ij_of_lid = [&](int lid, Dim &i, Dim &j)
+        {
+            j = j0 + Dim(lid / nI);
+            i = i0 + Dim(lid - int(j - j0) * nI);
+        };
+
+        const int k0_local = (rank_z == 0) ? 0 : 1;
+
+        auto build_rhs_local = [&](Dim i, Dim j, Real *out)
+        {
+            const Real x = Real(i) * dx;
+            const Real y = Real(j) * dy;
+
+            const Real gF = p_boundary.value<2>(x, y, Real(0.0), t);
+            const Real gB = p_boundary.value<2>(x, y, (Nz - Real(0.5)) * dz, t);
+
+            for (int il = 0; il < local_N; ++il)
+            {
+                const int ig = global_start + il;
+                if (ig < 0 || ig >= (int)N)
+                {
+                    out[il] = Real(0.0);
+                    continue;
+                }
+
+                Real val = rhs.get(i, j, Dim(ig));
+
+                if (ig == 0)
+                    val -= Real(2.0) * gF / h;
+                else if (ig == N - 1)
+                    val += Real(2.0) * gB / h;
+
+                out[il] = val;
+            }
+        };
+
+        std::vector<int> active_lids;
+        active_lids.reserve(nLinesLocal);
         for (Dim j = j0; j < j1; ++j)
             for (Dim i = i0; i < i1; ++i)
+                active_lids.push_back(lid_of(i, j));
+
+        const int nActive = int(active_lids.size());
+        if (nActive == 0)
+            return;
+
+        std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
+        std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
+
+#pragma omp parallel for schedule(static) if (use_omp)
+        for (int p = 0; p < nActive; ++p)
+        {
+            Dim i, j;
+            ij_of_lid(active_lids[p], i, j);
+            build_rhs_local(i, j, rhs_flat.data() + size_t(p) * size_t(local_N));
+        }
+
+        schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
+
+#pragma omp parallel for schedule(static) if (use_omp)
+        for (int p = 0; p < nActive; ++p)
+        {
+            Dim i, j;
+            ij_of_lid(active_lids[p], i, j);
+
+            const Real *x = sol_flat.data() + size_t(p) * size_t(local_N);
+            for (int il = k0_local; il < local_N; ++il)
             {
-                // Global RHS line d
-                std::vector<Real> d(N, 0.0);
-
-                for (Dim k = 0; k < N; ++k)
-                    d[k] = rhs.get(i, j, k);
-
-                // Neumann BC contributions (g = dψ/dz at boundary)
-                const Real gF = p_boundary.value<2>(i * dx, j * dy, Real(0.0), t);
-                const Real gB = p_boundary.value<2>(i * dx, j * dy, (Nz - Real(0.5)) * dz, t);
-
-                d[0] -= Real(2.0) * gF / h;
-                d[N - 1] += Real(2.0) * gB / h;
-
-                // Extract local RHS
-                std::vector<Real> rhs_local(local_N, 0.0);
-                for (int il = 0; il < local_N; ++il)
-                {
-                    int ig = global_start + il;
-                    if (ig < 0 || ig >= (int)N)
-                        continue;
-                    rhs_local[il] = d[ig];
-                }
-
-                // Solve
-                std::vector<Real> x_local;
-                schur.solve(rhs_local, x_local);
-
-                // Write back only owned part
-                // (avoid duplicating the left interface point on ranks > 0)
-                int k0_local = (rank_z == 0) ? 0 : 1;
-                for (int il = k0_local; il < local_N; ++il)
-                {
-                    int ig = global_start + il;
-                    if (ig < 0 || ig >= (int)N)
-                        continue;
-                    solution.set(i, j, ig) = x_local[il];
-                }
+                const int ig = global_start + il;
+                if (ig < 0 || ig >= (int)N)
+                    continue;
+                solution.set(i, j, Dim(ig)) = x[il];
             }
+        }
     }
 };
 

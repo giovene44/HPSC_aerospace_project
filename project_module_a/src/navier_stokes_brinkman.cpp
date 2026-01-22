@@ -803,7 +803,7 @@ static void compute_forcing_analytic_mpi(VectorVariable &f,
 
                     // Pressure gradient: dp/dx for p = sin(t)*cos(x)*cos(y)*cos(z)
                     Real dp_dx = -std::sin(t) * std::sin(x) * std::cos(y) * std::cos(z);
-                    dp_dx = 0.0; // Temporarily disable pressure gradient for MPI testing
+                    // dp_dx = 0.0; // Temporarily disable pressure gradient for MPI testing
                     f.set(0, ii, jj, kk) = ut - nu * lap_u + (nu / k.get(ii, jj, kk)) * u + dp_dx;
                 }
 
@@ -828,7 +828,7 @@ static void compute_forcing_analytic_mpi(VectorVariable &f,
 
                     // dp/dy = -sin(t)*cos(x)*sin(y)*cos(z)
                     Real dp_dy = -std::sin(t) * std::cos(x) * std::sin(y) * std::cos(z);
-                    dp_dy = 0.0; // Temporarily disable pressure gradient for MPI testing
+                    // dp_dy = 0.0; // Temporarily disable pressure gradient for MPI testing
                     f.set(1, ii, jj, kk) = vt - nu * lap_v + (nu / k.get(ii, jj, kk)) * v + dp_dy;
                 }
 
@@ -853,7 +853,7 @@ static void compute_forcing_analytic_mpi(VectorVariable &f,
 
                     // dp/dz = -sin(t)*cos(x)*cos(y)*sin(z)
                     Real dp_dz = -std::sin(t) * std::cos(x) * std::cos(y) * std::sin(z);
-                    dp_dz = 0.0; // Temporarily disable pressure gradient for MPI testing
+                    // dp_dz = 0.0; // Temporarily disable pressure gradient for MPI testing
                     f.set(2, ii, jj, kk) = wt - nu * lap_w + (nu / k.get(ii, jj, kk)) * w + dp_dz;
                 }
             }
@@ -913,9 +913,9 @@ static void build_rhs_mpi(VectorVariable &rhs,
                         Real dp_dx = (p_star.get(ii + 1, jj, kk) - p_star.get(ii, jj, kk)) / dx;
                         Real dp_dy = (p_star.get(ii, jj + 1, kk) - p_star.get(ii, jj, kk)) / dy;
                         Real dp_dz = (p_star.get(ii, jj, kk + 1) - p_star.get(ii, jj, kk)) / dz;
-                        dp_dx = 0.0; // Temporarily disable pressure gradient for MPI testing
-                        dp_dy = 0.0;
-                        dp_dz = 0.0;
+                        // dp_dx = 0.0; // Temporarily disable pressure gradient for MPI testing
+                        // dp_dy = 0.0;
+                        // dp_dz = 0.0;
                         if (c == 0)
                             val -= dt * dp_dx;
                         else if (c == 1)
@@ -971,13 +971,15 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
         const Real t_np1 = t + dt;
         const Real t_half = t + dt / Real(2.0);
 
-        // pressure_predictor = pressure_solution + other_phi;
+        pressure_predictor = pressure_solution + other_phi;
 
         velocity_solver.set_t(t_np1);
 
         compute_forcing_analytic_mpi(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field, topo);
-
         build_rhs_mpi(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field, topo);
+
+        // compute_forcing_analytic(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field);
+        // build_rhs(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field);
 
         // MPI ADI velocity solves with synchronization
         // MPI ADI velocity solves with synchronization
@@ -1003,27 +1005,24 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
 
         vector_rhs = zeta - velocity_solution.A_operator(2, 2, gamma_field);
         velocity_solver.solve_z_only(vector_rhs, velocity_solution, topo, z_vector_handler, use_omp);
-        // sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
+        sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
 
-        /*
-         // Pressure correction
+        // Pressure correction
         compute_rhs_pressure(t_np1);
 
         pressure_solver.set_t(t_np1);
 
         // MPI ADI pressure solves with synchronization
-        pressure_solver.solve_x_mpi(rhs, psi, topo);
+        pressure_solver.solve_x_mpi(rhs, psi, topo, use_omp);
         sync_scalar_field_full(psi, Nx, Ny, Nz, topo);
 
-        pressure_solver.solve_y_mpi(psi, phi, topo);
+        pressure_solver.solve_y_mpi(psi, phi, topo, use_omp);
         sync_scalar_field_full(phi, Nx, Ny, Nz, topo);
 
-        pressure_solver.solve_z_mpi(phi, other_phi, topo);
+        pressure_solver.solve_z_mpi(phi, other_phi, topo, use_omp);
         sync_scalar_field_full(other_phi, Nx, Ny, Nz, topo);
 
         pressure_solution += other_phi;
-
-        */
 
         t = t_np1;
     }
