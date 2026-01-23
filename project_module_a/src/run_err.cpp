@@ -474,7 +474,7 @@ int run_multiple_mpi(int argc, char **argv)
                 auto time = std::chrono::system_clock::to_time_t(now);
                 std::stringstream ss;
                 ss << std::put_time(std::localtime(&time), "%Y-%m-%d_%H-%M-%S");
-                std::string filename = "OUTPUT/Convergence_Analysis_MPI_" + std::to_string(world_size) + "_" + "OpenMP_" + std::to_string(omp_get_num_threads()) + ".dat";
+                std::string filename = "OUTPUT/Convergence_Analysis_MPI_" + std::to_string(world_size) + "_" + "OpenMP_" + std::to_string(nthreads) + ".dat";
                 std::system("mkdir -p OUTPUT");
                 std::ofstream convergence_file(filename);
 
