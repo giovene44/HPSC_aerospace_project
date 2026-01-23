@@ -182,8 +182,8 @@ public:
         // ------------------------------------------------------------
         auto build_rhs_local = [&](Dim j, Dim k, Real *out)
         {
-            const Real y = Real(j) * dy;
-            const Real z = Real(k) * dz;
+            // const Real y = Real(j) * dy;
+            // const Real z = Real(k) * dz;
 
             // g = dψ/dx on boundaries
             // const Real gL = p_boundary.value<0>(Real(0.0), y, z, t);
@@ -317,8 +317,8 @@ public:
 
         auto build_rhs_local = [&](Dim i, Dim k, Real *out)
         {
-            const Real x = Real(i) * dx;
-            const Real z = Real(k) * dz;
+            // const Real x = Real(i) * dx;
+            // const Real z = Real(k) * dz;
 
             // const Real gB = p_boundary.value<1>(x, Real(0.0), z, t);
             // const Real gT = p_boundary.value<1>(x, (Ny - Real(0.5)) * dy, z, t);
@@ -446,8 +446,8 @@ public:
 
         auto build_rhs_local = [&](Dim i, Dim j, Real *out)
         {
-            const Real x = Real(i) * dx;
-            const Real y = Real(j) * dy;
+            // const Real x = Real(i) * dx;
+            // const Real y = Real(j) * dy;
 
             // const Real gF = p_boundary.value<2>(x, y, Real(0.0), t);
             // const Real gB = p_boundary.value<2>(x, y, (Nz - Real(0.5)) * dz, t);

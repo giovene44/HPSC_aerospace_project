@@ -12,7 +12,7 @@
 #endif
 #include "manufactured_solution_technique.hpp"
 
-class NavierStokesBrinkmann
+class NavierStokesBrinkman
 {
 public:
     class Grid
@@ -30,7 +30,7 @@ public:
     };
 
 public:
-    NavierStokesBrinkmann(const Dim Nx, const Dim Ny, const Dim Nz,
+    NavierStokesBrinkman(const Dim Nx, const Dim Ny, const Dim Nz,
                           const Real dt, const Real T,
                           BoundaryFunctions forcing_func,
                           std::function<Real(Real, Real, Real)> k_func,
@@ -38,7 +38,8 @@ public:
                           std::string p_boundary_file,
                           BoundaryFunctions p_exact,
                           const Real dx, const Real dy, const Real dz,
-                          const Real nu)
+                          const Real nu,
+                          const bool use_openmp = false)
         : // ============================
           // GRID, MATERIAL, AND TIME INFO
           // ============================
@@ -97,7 +98,8 @@ public:
           // FINAL SOLUTION STORAGE
           // ============================
           velocity_solution(Nx, Ny, Nz, dx, dy, dz),
-          pressure_solution(Nx, Ny, Nz, dx, dy, dz)
+          pressure_solution(Nx, Ny, Nz, dx, dy, dz),
+          use_openmp(use_openmp)
 
     {
         // --- Initialize all fields ---
@@ -141,6 +143,15 @@ public:
     // methods inside the iteration:
     void compute_vector_g(Real t);
     void compute_vector_xi();
+    void build_rhs(VectorVariable &rhs,
+                   const VectorVariable &velocity_solution,
+                   const ScalarVariable &p_star, // predictor pressure at cell centers
+                   const VectorVariable &f_half,
+                   Real dx, Real dy, Real dz,
+                   Dim Nx, Dim Ny, Dim Nz,
+                   Real dt,
+                   Real nu,
+                   const ScalarVariable &k);
 
     void center_pressure(ScalarVariable &pressure_field);
     void compute_divergence_cell_center(const VectorVariable &u,
@@ -149,8 +160,121 @@ public:
     void compute_rhs_pressure(Real t);
     void update_pressure_and_velocity_fields();
 #ifdef USE_MPI
-    Real solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo, bool use_omp = false);
-    void compute_forcing_mpi(VectorVariable &f, Real t, const MPITopology3D &topo);
+
+    Real solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo);
+    void compute_forcing_term_mpi(VectorVariable &f, Real t, const MPITopology3D &topo);
+    void globalize_velocity(VectorVariable &field, Dim Nx, Dim Ny, Dim Nz, const MPITopology3D &topo);
+    void globalize_pressure(ScalarVariable &field, Dim Nx, Dim Ny, Dim Nz, const MPITopology3D &topo);
+
+    void build_rhs_mpi(VectorVariable &rhs,
+                       const VectorVariable &velocity_solution,
+                       const ScalarVariable &p_star, // predictor pressure at cell centers
+                       const VectorVariable &f_half,
+                       Real dx, Real dy, Real dz,
+                       Dim Nx, Dim Ny, Dim Nz,
+                       Real dt,
+                       Real nu,
+                       const ScalarVariable &k, const MPITopology3D &topo);
+
+    #ifdef USE_MPI
+    /**
+     * @brief Computes L2 errors for both Velocity and Pressure in a single pass over the grid.
+     * * @param u_num Numerical velocity field (Pass nsb_solver.u_0)
+     * @param p_num Numerical pressure field (Pass nsb_solver.p_0)
+     * @param mms   Manufactured Solution instance
+     * @param t     Current simulation time
+     * @param topo  MPI Topology for bounds
+     */
+    std::pair<std::pair<Real, Real>, std::pair<Real, Real>> compute_L2_errors_mpi(
+        const VectorVariable &u_num,
+        const ScalarVariable &p_num,
+        const ManufacturedSolution &mms,
+        Real t,
+        const MPITopology3D &topo)
+    {
+        // 1. Get Local Iteration Bounds (Global Indices)
+        Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
+        Dim j0 = topo.local_j0(Ny), j1 = topo.local_j1(Ny);
+        Dim k0 = topo.local_k0(Nz), k1 = topo.local_k1(Nz);
+
+        Real local_sum_err_u = 0.0, local_sum_norm_u = 0.0;
+        Real local_sum_err_p = 0.0, local_sum_norm_p = 0.0;
+
+        // 2. Single Unified Loop for both Fields
+        // Collapsing loops improves OpenMP efficiency
+        #pragma omp parallel for reduction(+:local_sum_err_u, local_sum_norm_u, local_sum_err_p, local_sum_norm_p) collapse(2) if(use_openmp)
+        for (Dim k = k0; k < k1; ++k)
+        {
+            for (Dim j = j0; j < j1; ++j)
+            {
+                for (Dim i = i0; i < i1; ++i)
+                {
+                    // --- Coordinates ---
+                    Real x = i * dx;
+                    Real y = j * dy;
+                    Real z = k * dz;
+
+                    // ============================
+                    // 1. VELOCITY (Staggered Grid)
+                    // ============================
+                    // Fetch Exact Solution at staggered positions
+                    Real u_ex_x = u_boundary.value<0>(x + dx * 0.5, y, z, t);
+                    Real u_ex_y = u_boundary.value<1>(x, y + dy * 0.5, z, t);
+                    Real u_ex_z = u_boundary.value<2>(x, y, z + dz * 0.5, t);
+
+                    // Fetch Numerical Solution
+                    // NOTE: Ensure value() accepts Global Indices (i,j,k)
+                    Real u_num_x = u_num.value(0, i, j, k);
+                    Real u_num_y = u_num.value(1, i, j, k);
+                    Real u_num_z = u_num.value(2, i, j, k);
+
+                    Real du_x = u_num_x - u_ex_x;
+                    Real du_y = u_num_y - u_ex_y;
+                    Real du_z = u_num_z - u_ex_z;
+
+                    local_sum_err_u  += du_x*du_x + du_y*du_y + du_z*du_z;
+                    local_sum_norm_u += u_ex_x*u_ex_x + u_ex_y*u_ex_y + u_ex_z*u_ex_z;
+
+                    // ============================
+                    // 2. PRESSURE (Cell Center)
+                    // ============================
+                    Real p_ex  = p_exact.value(x, y, z, t);
+                    Real p_val = p_num.get(i, j, k);
+                    Real dp    = p_val - p_ex;
+
+                    local_sum_err_p  += dp * dp;
+                    local_sum_norm_p += p_ex * p_ex;
+                }
+            }
+        }
+
+        // 3. Global Reduction (Pack 4 values into one MPI call)
+        // Order: [err_u_sq, norm_u_sq, err_p_sq, norm_p_sq]
+        Real local_sums[4] = {local_sum_err_u, local_sum_norm_u, local_sum_err_p, local_sum_norm_p};
+        Real global_sums[4] = {0.0};
+
+        // Determine MPI type (float or double)
+        MPI_Datatype mpi_real = (sizeof(Real) == sizeof(double)) ? MPI_DOUBLE : MPI_FLOAT;
+        
+        MPI_Allreduce(local_sums, global_sums, 4, mpi_real, MPI_SUM, topo.cart_comm());
+
+        // 4. Final Calculation
+        Real dV = dx * dy * dz;
+        
+        Real err_u_abs = std::sqrt(global_sums[0] * dV);
+        Real nrm_u_abs = std::sqrt(global_sums[1] * dV);
+        
+        Real err_p_abs = std::sqrt(global_sums[2] * dV);
+        Real nrm_p_abs = std::sqrt(global_sums[3] * dV);
+
+        // Prevent division by zero
+        Real err_u_rel = (nrm_u_abs > 1e-12) ? err_u_abs / nrm_u_abs : err_u_abs;
+        Real err_p_rel = (nrm_p_abs > 1e-12) ? err_p_abs / nrm_p_abs : err_p_abs;
+
+        return {{err_u_abs, err_u_rel}, {err_p_abs, err_p_rel}};
+    }
+#endif
+
 #else
     Real solve(const ManufacturedSolution &mms);
 #endif
@@ -226,96 +350,6 @@ public:
         return {{err_u, rel_err_u}, {err_p, rel_err_p}};
     }
 
-    // /**
-    //  * @brief Computes the L2 relative error ONLY on the boundary nodes.
-    //  * Useful to verify if Dirichlet Boundary Conditions are being respected/overwritten.
-    //  */
-    // std::pair<std::pair<Real, Real>, std::pair<Real, Real>> compute_Boundary_L2_errors(
-    //     const VectorVariable &u_num,
-    //     const ScalarVariable &p_num,
-    //     const ManufacturedSolution &mms,
-    //     Real t)
-    // {
-    //     // 1. Get Grid Dimensions
-    //     Dim Nx = u_num.get_Nx();
-    //     Dim Ny = u_num.get_Ny();
-    //     Dim Nz = u_num.get_Nz();
-
-    //     // 2. Calculate Volume Element
-    //     // Note: Even on boundary, we treat the node as representing a volume element for consistency
-    //     Real dV = dx * dy * dz;
-
-    //     Real err_u = 0.0, err_p = 0.0;
-    //     Real norm_u = 0.0, norm_p = 0.0;
-
-    //     // 3. Loop over grid
-    //     for (Dim k = 0; k < Nz; ++k)
-    //     {
-    //         for (Dim j = 0; j < Ny; ++j)
-    //         {
-    //             for (Dim i = 0; i < Nx; ++i)
-    //             {
-    //                 // // --- FILTER: ONLY PROCESS BOUNDARY NODES ---
-    //                 // bool is_boundary = (i == 0 || i == Nx - 1 ||
-    //                 //                     j == 0 || j == Ny - 1 ||
-    //                 //                     k == 0 || k == Nz - 1);
-
-    //                 // if (!is_boundary)
-    //                 //     continue; // Skip internal nodes
-
-    //                 // boundary_node_count++;
-
-    //                 // Physical Coordinates
-    //                 Real x = i * dx;
-    //                 Real y = j * dy;
-    //                 Real z = k * dz;
-
-    //                 // --- Exact Solution ---
-    //                 std::vector<Real> u_ex = mms.velocity(x, y, z, t);
-    //                 Real p_ex = mms.pressure(x, y, z, t);
-
-    //                 // --- Numerical Solution ---
-    //                 Real u_num_x = u_num.value(0, i, j, k);
-    //                 Real u_num_y = u_num.value(1, i, j, k);
-    //                 Real u_num_z = u_num.value(2, i, j, k);
-    //                 Real p_val = p_num.get(i, j, k);
-
-    //                 // --- Velocity Error Accumulation ---
-    //                 Real dux = u_num_x - u_ex[0];
-    //                 Real duy = u_num_y - u_ex[1];
-    //                 Real duz = u_num_z - u_ex[2];
-
-    //                 err_u += dux * dux + duy * duy + duz * duz;
-    //                 norm_u += u_ex[0] * u_ex[0] + u_ex[1] * u_ex[1] + u_ex[2] * u_ex[2];
-
-    //                 // --- Pressure Error Accumulation ---
-    //                 err_p += (p_val - p_ex) * (p_val - p_ex);
-    //                 norm_p += p_ex * p_ex;
-    //             }
-    //         }
-    //     }
-
-    //     // 4. Scale and Root
-    //     err_u = std::sqrt(err_u * dV);
-    //     norm_u = std::sqrt(norm_u * dV);
-    //     err_p = std::sqrt(err_p * dV);
-    //     norm_p = std::sqrt(norm_p * dV);
-
-    //     // 5. Compute Relative Errors
-    //     Real rel_err_u = (norm_u > 1e-15) ? err_u / norm_u : 0.0;
-    //     Real rel_err_p = (norm_p > 1e-15) ? err_p / norm_p : 0.0;
-
-    //     // 6. PRINT DIAGNOSTICS
-    //     // std::cout << "------------------------------------------\n";
-    //     // std::cout << " BOUNDARY ERRORS at t = " << t << " (Nodes: " << boundary_node_count << ")\n";
-    //     std::cout << " Velocity -> Abs: " << err_u << " | Rel: " << rel_err_u << "\n";
-    //     std::cout << " Pressure -> Abs: " << err_p << " | Rel: " << rel_err_p << "\n";
-    //     // std::cout << "------------------------------------------\n";
-
-    //     // return {rel_err_u, rel_err_p};
-    //     return {err_u, err_p};
-    // };
-
     void write_velocity_vtk(const std::string &filename) const;
     void write_pressure_vtk(const std::string &filename) const;
 
@@ -330,11 +364,13 @@ public:
     Dim Ny; // Grid points in y
     Dim Nz; // Grid points in z
 
-    Real dx = 1.0f; // Grid spacing in x
-    Real dy = 1.0f; // Grid spacing in y
-    Real dz = 1.0f; // Grid spacing in z
+    Real dx = Real(1.0); // Grid spacing in x
+    Real dy = Real(1.0); // Grid spacing in y
+    Real dz = Real(1.0); // Grid spacing in z
 
     Real T;
+
+    bool use_openmp;
 
     // ============================================================================
     // SOLVER CLASS

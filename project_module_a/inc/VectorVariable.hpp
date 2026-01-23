@@ -81,17 +81,15 @@ public:
 
     void set_all(BoundaryFunctions &other, Real t, bool use_staggering = true)
     {
-
-        for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
-        {
-            Dim i = idx % Nx;
-            Dim j = (idx / Nx) % Ny;
-            Dim k = idx / (Nx * Ny);
-
+        for(Dim i=0; i<Nx; ++i)
+        for(Dim j=0; j<Ny; ++j)
+        for(Dim k=0; k<Nz; ++k){
             // Convert grid indices to physical coordinates
             Real x = i * dx;
             Real y = j * dy;
             Real z = k * dz;
+
+            Dim idx = i + j * Nx + k * Nx * Ny;
 
             if (!use_staggering)
             {
@@ -303,7 +301,7 @@ public:
         return second_derivative(axes, derivation_direction, i, j, k);
     }
 
-    Real divergence(Dim index, BoundaryFunctions const &other, Real t) const
+    Real divergence(Dim index) const
     {
         Dim i = index % Nx;
         Dim j = (index / Nx) % Ny;

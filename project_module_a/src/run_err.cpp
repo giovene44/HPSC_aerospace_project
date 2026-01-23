@@ -53,7 +53,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
     std::cout << "Manufactured solution initialized.\n";
 
     // 3) SOLVER INITIALIZATION
-    NavierStokesBrinkmann nsb_solver(
+    NavierStokesBrinkman nsb_solver(
         Nx_in, Ny_in, Nz_in,
         dt_in, T_final,
         forcing_func_bf,
@@ -102,84 +102,6 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
 
 #ifdef USE_MPI
 
-static Real allreduce_sum_real(Real local, MPI_Comm comm)
-{
-#ifdef USE_MPI
-    Real global = 0;
-    MPI_Allreduce(&local, &global, 1, MPI_FLOAT, MPI_SUM, comm);
-    return global;
-#else
-    return local;
-#endif
-}
-
-static Real compute_err2_velocity_local(auto u_exact_func, const VectorVariable &u_num,
-                                        Dim Nx, Dim Ny, Dim Nz,
-                                        Real dx, Real dy, Real dz,
-                                        Real t,
-                                        const MPITopology3D &topo)
-{
-
-    Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
-    Dim j0 = topo.local_j0(Ny), j1 = topo.local_j1(Ny);
-    Dim k0 = topo.local_k0(Nz), k1 = topo.local_k1(Nz);
-
-    Real err2_local = Real(0);
-    Real x, y, z;
-    for (int comp = 0; comp < 3; ++comp)
-        for (Dim k = k0; k < k1; ++k)
-            for (Dim j = j0; j < j1; ++j)
-                for (Dim i = i0; i < i1; ++i)
-                {
-                    if (comp == 0)
-                    {
-                        x = i * dx + dx / Real(2.0);
-                        y = j * dy;
-                        z = k * dz;
-                    }
-                    else if (comp == 1)
-                    {
-                        x = i * dx;
-                        y = j * dy + dy / Real(2.0);
-                        z = k * dz;
-                    }
-                    else // comp == 2
-                    {
-                        x = i * dx;
-                        y = j * dy;
-                        z = k * dz + dz / Real(2.0);
-                    }
-                    const Real diff = u_num.value(comp, i, j, k) - u_exact_func(x, y, z, t)[comp];
-                    err2_local += diff * diff;
-                }
-
-    return err2_local;
-}
-
-static Real compute_err2_pressure_local(auto p_exact_func, const ScalarVariable &p_num,
-                                        Dim Nx, Dim Ny, Dim Nz,
-                                        Real dx, Real dy, Real dz,
-                                        Real t,
-                                        const MPITopology3D &topo)
-{
-
-    Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
-    Dim j0 = topo.local_j0(Ny), j1 = topo.local_j1(Ny);
-    Dim k0 = topo.local_k0(Nz), k1 = topo.local_k1(Nz);
-
-    Real err2_local = Real(0);
-
-    for (Dim k = k0; k < k1; ++k)
-        for (Dim j = j0; j < j1; ++j)
-            for (Dim i = i0; i < i1; ++i)
-            {
-                const Real diff = p_num.get(i, j, k) - p_exact_func(i * dx, j * dy, k * dz, t);
-                err2_local += diff * diff;
-            }
-
-    return err2_local;
-}
-
 // MPI version of single_run
 static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
     Dim Nx_in, Dim Ny_in, Dim Nz_in, Real dt_in,
@@ -204,7 +126,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
 
     int rank = topo.cart_rank();
 
-    NavierStokesBrinkmann nsb_solver(
+    NavierStokesBrinkman nsb_solver(
         Nx_in, Ny_in, Nz_in,
         dt_in, T_final,
         forcing_func_bf,
@@ -214,74 +136,30 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         p_exact_bf,
         dx_in, dy_in, dz_in,
         nu);
-
-    // Use MPI solve
-    Real time_out_auto = nsb_solver.solve_mpi(mms, topo, use_omp);
+    
+    Real time_out_auto = nsb_solver.solve_mpi(mms, topo);
     time_out = time_out_auto;
 
+
+    if (rank == 0)
+    {
+        std::cout << "Solver initialized (nu=" << nu << ").\n";
+    }
+
+    // Use MPI solve
     T_final += Real(1.5);
 
-    const Real L2_u_local = compute_err2_velocity_local(u_exact_func, nsb_solver.velocity_solution, Nx_in, Ny_in, Nz_in, dx_in, dy_in, dz_in, T_final, topo);
+    auto L2_errors = nsb_solver.compute_L2_errors_mpi(
+        nsb_solver.velocity_solution,
+        nsb_solver.pressure_solution,
+        mms,
+        T_final,
+        topo);
 
-    // pressure is stored at half-step; compare to true pressure at same time
-    const Real L2_p_local = compute_err2_pressure_local(p_exact_func, nsb_solver.pressure_solution, Nx_in, Ny_in, Nz_in, dx_in, dy_in, dz_in, T_final, topo);
-
-    Real err2_u_global = allreduce_sum_real(L2_u_local, topo.cart_comm());
-    Real L2_u_global = std::sqrt(err2_u_global * dx_in * dy_in * dz_in);
-
-    Real err2_p_global = allreduce_sum_real(L2_p_local, topo.cart_comm());
-    Real L2_p_global = std::sqrt(err2_p_global * dx_in * dy_in * dz_in);
-
-    Real err_u = L2_u_global;
-    Real err_p = L2_p_global;
-    // Compute norms for relative error
-    Real norm2_u_local = Real(0);
-    Real norm2_p_local = Real(0);
-    {
-        Dim i0 = topo.local_i0(Nx_in), i1 = topo.local_i1(Nx_in);
-        Dim j0 = topo.local_j0(Ny_in), j1 = topo.local_j1(Ny_in);
-        Dim k0 = topo.local_k0(Nz_in), k1 = topo.local_k1(Nz_in);
-
-        Real x, y, z;
-        for (int comp = 0; comp < 3; ++comp)
-            for (Dim k = k0; k < k1; ++k)
-                for (Dim j = j0; j < j1; ++j)
-                    for (Dim i = i0; i < i1; ++i)
-                    {
-                        if (comp == 0)
-                        {
-                            x = i * dx_in + dx_in / Real(2.0);
-                            y = j * dy_in;
-                            z = k * dz_in;
-                        }
-                        else if (comp == 1)
-                        {
-                            x = i * dx_in;
-                            y = j * dy_in + dy_in / Real(2.0);
-                            z = k * dz_in;
-                        }
-                        else // comp == 2
-                        {
-                            x = i * dx_in;
-                            y = j * dy_in;
-                            z = k * dz_in + dz_in / Real(2.0);
-                        }
-                        const Real val = u_exact_func(x, y, z, T_final)[comp];
-                        norm2_u_local += val * val;
-                    }
-
-        for (Dim k = k0; k < k1; ++k)
-            for (Dim j = j0; j < j1; ++j)
-                for (Dim i = i0; i < i1; ++i)
-                {
-                    const Real val = p_exact_func(i * dx_in, j * dy_in, k * dz_in, T_final);
-                    norm2_p_local += val * val;
-                }
-    }
-    Real norm2_u_global = allreduce_sum_real(norm2_u_local, topo.cart_comm());
-    Real norm2_p_global = allreduce_sum_real(norm2_p_local, topo.cart_comm());
-    Real rel_err_u = err_u / std::sqrt(norm2_u_global * dx_in * dy_in * dz_in);
-    Real rel_err_p = err_p / std::sqrt(norm2_p_global * dx_in * dy_in * dz_in);
+    Real err_u = L2_errors.first.first;
+    Real rel_err_u = L2_errors.first.second;
+    Real err_p = L2_errors.second.first;
+    Real rel_err_p = L2_errors.second.second;
 
     if (rank == 0)
     {
@@ -384,136 +262,140 @@ int run_multiple_mpi(int argc, char **argv)
 
         // 1) Create 3D Cartesian topology
         {
-        MPITopology3D topo(MPI_COMM_WORLD, Pz, Py, Px);
+            MPITopology3D topo(MPI_COMM_WORLD, Pz, Py, Px);
 
-        ParseInput &parser = ParseInput::getInstance();
-        parser.parse_input("./Input/Input.in");
+            ParseInput &parser = ParseInput::getInstance();
+            parser.parse_input("./Input/Input.in");
 
-        int num_runs = parser.num_runs;
-        Dim N_initial_x = parser.Nx;
-        Dim N_initial_y = parser.Ny;
-        Dim N_initial_z = parser.Nz;
-        Real dt_initial = parser.dt;
-        Real T_final = parser.T;
+            int num_runs = parser.num_runs;
+            Dim N_initial_x = parser.Nx;
+            Dim N_initial_y = parser.Ny;
+            Dim N_initial_z = parser.Nz;
+            Real dt_initial = parser.dt;
+            Real T_final = parser.T;
 
-        std::vector<Real> N_values;
-        std::vector<Real> dt_values;
-        std::vector<Real> errors_u;
-        std::vector<Real> errors_p;
-        std::vector<Real> errors_rel_u;
-        std::vector<Real> errors_rel_p;
-        std::vector<std::pair<Real, Real>> time_values;
-        std::vector<Real> time_speedUps;
+            std::vector<Real> N_values;
+            std::vector<Real> dt_values;
+            std::vector<Real> errors_u;
+            std::vector<Real> errors_p;
+            std::vector<Real> errors_rel_u;
+            std::vector<Real> errors_rel_p;
+            std::vector<std::pair<Real, Real>> time_values;
+            std::vector<Real> time_speedUps;
 
-        for (int i = 0; i < num_runs; i++)
-        {
+            for (int i = 0; i < num_runs; i++)
+            {
 
-            std::pair<Real, Real> time_per_run;
-            Real refinement_factor = std::pow(2, i);
+                std::pair<Real, Real> time_per_run;
+                Real refinement_factor = std::pow(2, i);
 
-            Dim Nx_curr = N_initial_x * refinement_factor;
-            Dim Ny_curr = N_initial_y * refinement_factor;
-            Dim Nz_curr = N_initial_z * refinement_factor;
+                Dim Nx_curr = N_initial_x * refinement_factor;
+                Dim Ny_curr = N_initial_y * refinement_factor;
+                Dim Nz_curr = N_initial_z * refinement_factor;
 
-            Real dt_curr = dt_initial;
+                Real dt_curr = dt_initial;
 
-            Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
-            Real dy_curr = parser.DimY / (Real)(Ny_curr - 0.5);
-            Real dz_curr = parser.DimZ / (Real)(Nz_curr - 0.5);
+                Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
+                Real dy_curr = parser.DimY / (Real)(Ny_curr - 0.5);
+                Real dz_curr = parser.DimZ / (Real)(Nz_curr - 0.5);
+
+                if (world_rank == 0)
+                {
+
+                    std::cout << "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
+                    std::cout << "Running MPI simulation with (Nx, Ny, Nz) = ("
+                              << Nx_curr << ", " << Ny_curr << ", " << Nz_curr << ") and dt = "
+                              << dt_curr << "\n\n";
+                }
+
+                Real time_no_omp = 0.0;
+                auto errors = single_run_mpi(
+                    Nx_curr, Ny_curr, Nz_curr, dt_curr,
+                    dx_curr, dy_curr, dz_curr, T_final,
+                    parser.u_boundary_file, parser.p_boundary_file,
+                    time_no_omp, topo, false);
+
+                N_values.emplace_back(Nx_curr);
+                dt_values.emplace_back(dt_curr);
+                errors_u.emplace_back(errors.first.first);
+                errors_p.emplace_back(errors.second.first);
+                errors_rel_u.emplace_back(errors.first.second);
+                errors_rel_p.emplace_back(errors.second.second);
+                time_per_run.first = time_no_omp;
+
+                Real time_omp = 0.0;
+                errors = single_run_mpi(
+                    Nx_curr, Ny_curr, Nz_curr, dt_curr,
+                    dx_curr, dy_curr, dz_curr, T_final,
+                    parser.u_boundary_file, parser.p_boundary_file,
+                    time_omp, topo, true);
+                time_per_run.second = time_omp;
+                time_values.emplace_back(time_per_run);
+                auto speed_up = time_per_run.first / time_per_run.second;
+                time_speedUps.emplace_back(speed_up); // No serial comparison in MPI mode
+            }
 
             if (world_rank == 0)
             {
-                
-                std::cout << "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
-                std::cout << "Running MPI simulation with (Nx, Ny, Nz) = ("
-                          << Nx_curr << ", " << Ny_curr << ", " << Nz_curr << ") and dt = "
-                          << dt_curr << "\n\n";
+                std::cout << "\n=============================\n";
+                std::cout << "   Convergence Analysis (MPI + " << omp_get_max_threads() << " threads)\n";
+                std::cout << "=============================\n";
+
+                auto now = std::chrono::system_clock::now();
+                auto time = std::chrono::system_clock::to_time_t(now);
+                std::stringstream ss;
+                ss << std::put_time(std::localtime(&time), "%Y-%m-%d_%H-%M-%S");
+                std::string filename = "OUTPUT/Convergence_Analysis_" + ss.str() + "_MPI_" + std::to_string(world_size) + "_" + "OpenMP_" + std::to_string(omp_get_max_threads()) + ".dat";
+                std::system("mkdir -p OUTPUT");
+                std::ofstream convergence_file(filename);
+
+                std::string header = "Nx\t\tdx\t\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTimeNoOMP\tTimeOMP\t\tSpeedUp\t\tProcs\t\tThreads\t\tRate_u\t\tRate_p\n";
+                std::cout << header;
+                convergence_file << header;
+
+                for (size_t i = 0; i < N_values.size(); ++i)
+                {
+                    Real dx = parser.DimX / (Real)(N_values[i] - 0.5);
+                    Real dx_prev = (i > 0) ? parser.DimX / (Real)(N_values[i - 1] - 0.5) : 0.0;
+                    Dim nsteps = (Dim)(T_final / dt_values[i]);
+
+                    Real rate_u = (i > 0) ? std::log(errors_u[i - 1] / errors_u[i]) / std::log(dx_prev / dx) : 0.0;
+                    Real rate_p = (i > 0) ? std::log(errors_p[i - 1] / errors_p[i]) / std::log(dx_prev / dx) : 0.0;
+
+                    std::ostringstream oss;
+                    oss << std::fixed << std::setprecision(0)
+                        << N_values[i] << "\t\t"
+                        << std::scientific << std::setprecision(6)
+                        << dx << "\t\t"
+                        << std::fixed << std::setprecision(6)
+                        << dt_values[i] << "\t\t"
+                        << nsteps << "\t\t"
+                        << std::scientific << std::setprecision(6)
+                        << errors_u[i] << "\t\t"
+                        << errors_p[i] << "\t\t"
+                        << errors_rel_u[i] << "\t\t"
+                        << errors_rel_p[i] << "\t\t"
+                        << time_values[i].first << "\t"
+                        << time_values[i].second << "\t\t"
+                        << std::fixed << std::setprecision(2)
+                        << time_speedUps[i] << "\t\t"
+                        << std::fixed << std::setprecision(0)
+                        << world_size << "\t\t"
+                        << omp_get_max_threads() << "\t\t"
+                        << std::fixed << std::setprecision(2)
+                        << rate_u << "\t\t"
+                        << rate_p << "\n";
+
+                    std::cout << oss.str();
+                    convergence_file << oss.str();
+                }
+
+                convergence_file.close();
+                std::cout << std::defaultfloat;
+                std::cout << "=============================\n";
+                std::cout << "Results saved to " << filename << "\n";
             }
-
-            Real time_curr = 0.0;
-            auto errors = single_run_mpi(
-                Nx_curr, Ny_curr, Nz_curr, dt_curr,
-                dx_curr, dy_curr, dz_curr, T_final,
-                parser.u_boundary_file, parser.p_boundary_file,
-                time_curr, topo, false);
-
-            N_values.emplace_back(Nx_curr);
-            dt_values.emplace_back(dt_curr);
-            errors_u.emplace_back(errors.first.first);
-            errors_p.emplace_back(errors.second.first);
-            errors_rel_u.emplace_back(errors.first.second);
-            errors_rel_p.emplace_back(errors.second.second);
-            time_per_run.first = time_curr;
-
-            time_curr = 0.0;
-            errors = single_run_mpi(
-                Nx_curr, Ny_curr, Nz_curr, dt_curr,
-                dx_curr, dy_curr, dz_curr, T_final,
-                parser.u_boundary_file, parser.p_boundary_file,
-                time_curr, topo, true);
-            time_per_run.second = time_curr;
-            time_values.emplace_back(time_per_run);
-            auto speed_up = time_values[time_values.size() - 2].second / time_curr;
-            time_speedUps.emplace_back(speed_up); // No serial comparison in MPI mode
         }
-
-        if (world_rank == 0)
-        {
-            std::cout << "\n=============================\n";
-            std::cout << "   Convergence Analysis (MPI + " << omp_get_num_threads() << " threads)\n";
-            std::cout << "=============================\n";
-
-            auto now = std::chrono::system_clock::now();
-            auto time = std::chrono::system_clock::to_time_t(now);
-            std::stringstream ss;
-            ss << std::put_time(std::localtime(&time), "%Y-%m-%d_%H-%M-%S");
-            std::string filename = "OUTPUT/Convergence_Analysis_MPI_" + std::to_string(world_size) + "_" + "OpenMP_" + std::to_string(omp_get_num_threads()) + ".dat";
-            std::system("mkdir -p OUTPUT");
-            std::ofstream convergence_file(filename);
-
-            std::string header = "Nx\t\tdx\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTimeNoOMP\t\tTimeOMP\t\tTimeSpeedUp\t\tProcs\t\tRate_u\t\tRate_p\n";
-            std::cout << header;
-            convergence_file << header;
-
-            for (size_t i = 0; i < N_values.size(); ++i)
-            {
-                Real dx = parser.DimX / (Real)(N_values[i] - 0.5);
-                Real dx_prev = (i > 0) ? parser.DimX / (Real)(N_values[i - 1] - 0.5) : 0.0;
-                Dim nsteps = (Dim)(T_final / dt_values[i]);
-
-                Real rate_u = (i > 0) ? std::log(errors_u[i - 1] / errors_u[i]) / std::log(dx_prev / dx) : 0.0;
-                Real rate_p = (i > 0) ? std::log(errors_p[i - 1] / errors_p[i]) / std::log(dx_prev / dx) : 0.0;
-
-                std::ostringstream oss;
-                oss << std::fixed << std::setprecision(0)
-                    << N_values[i] << "\t"
-                    << std::scientific << std::setprecision(6)
-                    << dx << "\t"
-                    << dt_values[i] << "\t"
-                    << nsteps << "\t\t"
-                    << errors_u[i] << "\t\t"
-                    << errors_p[i] << "\t\t"
-                    << errors_rel_u[i] << "\t\t"
-                    << errors_rel_p[i] << "\t\t"
-                    << errors_rel_p[i] << "\t\t"
-                    << time_values[i].first << "\t\t"
-                    << time_values[i].second << "\t\t"
-                    << time_speedUps[i] << "\t\t"
-                    << world_size << "\t\t"
-                    << std::fixed << std::setprecision(2)
-                    << rate_u << "\t\t"
-                    << rate_p << "\n";
-
-                std::cout << oss.str();
-                convergence_file << oss.str();
-            }
-
-            convergence_file.close();
-            std::cout << std::defaultfloat;
-            std::cout << "=============================\n";
-            std::cout << "Results saved to " << filename << "\n";
-        }
-    }
         comm.finalize(); // MPI_Finalize inside
     }
     catch (const std::exception &e)
@@ -606,6 +488,7 @@ int run_multiple()
         auto time = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss;
         ss << std::put_time(std::localtime(&time), "%Y-%m-%d_%H-%M-%S");
+        std::cout << "ss: " << ss.str() << "\n";
         std::string filename = "OUTPUT/Convergence_Analysis_" + ss.str() + ".dat";
         std::system("mkdir -p OUTPUT");
         std::ofstream convergence_file(filename);
@@ -646,7 +529,7 @@ int run_multiple()
         convergence_file.close();
         std::cout << std::defaultfloat;
         std::cout << "=============================\n";
-        std::cout << "Results saved to Convergence_Analysis_today_data.dat\n";
+        std::cout << "Results saved to " << filename << "\n";
 
         // std::system("python ./utils/plot.py ./velocity_error.dat");
         // std::system("python ./utils/plot.py ./pressure_error.dat");
