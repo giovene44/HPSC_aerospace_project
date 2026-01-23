@@ -150,6 +150,7 @@ public:
     void update_pressure_and_velocity_fields();
 #ifdef USE_MPI
     Real solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo, bool use_omp = false);
+    void compute_forcing_mpi(VectorVariable &f, Real t, const MPITopology3D &topo);
 #else
     Real solve(const ManufacturedSolution &mms);
 #endif

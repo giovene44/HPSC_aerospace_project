@@ -735,104 +735,7 @@ static void sync_vector_field_full(VectorVariable &field, Dim Nx, Dim Ny, Dim Nz
     }
 }
 
-static void compute_forcing_analytic_mpi(VectorVariable &f,
-                                         Real dx, Real dy, Real dz,
-                                         Dim Nx, Dim Ny, Dim Nz,
-                                         Real t,
-                                         Real nu,
-                                         ScalarVariable k, const MPITopology3D &topo)
-{
-    Dim k0, k1, j0, j1, i0, i1;
-    k0 = topo.local_k0(Nz);
-    k1 = topo.local_k1(Nz);
-    j0 = topo.local_j0(Ny);
-    j1 = topo.local_j1(Ny);
-    i0 = topo.local_i0(Nx);
-    i1 = topo.local_i1(Nx);
 
-    const Real A = std::sin(t);
-    const Real Ap = std::cos(t);
-
-    for (Dim kk = k0; kk < k1; ++kk)
-        for (Dim jj = j0; jj < j1; ++jj)
-            for (Dim ii = i0; ii < i1; ++ii)
-            {
-                // --------------------------------------------------
-                // Component 0: u at (x+dx/2, y, z)
-                // u = sin(t)*sin(x)*sin(y)*sin(z)
-                // --------------------------------------------------
-                {
-                    const Real x = (Real(ii) + Real(0.5)) * dx;
-                    const Real y = Real(jj) * dy;
-                    const Real z = Real(kk) * dz;
-
-                    const Real sx = std::sin(x), cx = std::cos(x);
-                    const Real sy = std::sin(y), cy = std::cos(y);
-                    const Real sz = std::sin(z), cz = std::cos(z);
-
-                    const Real u = A * sx * sy * sz;
-                    const Real ut = Ap * sx * sy * sz;
-
-                    // Laplacian: d²u/dx² + d²u/dy² + d²u/dz²
-                    const Real lap_u = -A * sx * sy * sz - A * sx * sy * sz - A * sx * sy * sz;
-
-                    // Pressure gradient: dp/dx for p = sin(t)*cos(x)*cos(y)*cos(z)
-                    Real dp_dx = -std::sin(t) * std::sin(x) * std::cos(y) * std::cos(z);
-                    // dp_dx = 0.0; // Temporarily disable pressure gradient for MPI testing
-                    f.set(0, ii, jj, kk) = ut - nu * lap_u + (nu / k.get(ii, jj, kk)) * u + dp_dx;
-                }
-
-                // --------------------------------------------------
-                // Component 1: v at (x, y+dy/2, z)
-                // v = sin(t)*cos(x)*cos(y)*cos(z)
-                // --------------------------------------------------
-                {
-                    const Real x = Real(ii) * dx;
-                    const Real y = (Real(jj) + Real(0.5)) * dy;
-                    const Real z = Real(kk) * dz;
-
-                    const Real sx = std::sin(x), cx = std::cos(x);
-                    const Real sy = std::sin(y), cy = std::cos(y);
-                    const Real sz = std::sin(z), cz = std::cos(z);
-
-                    const Real v = A * cx * cy * cz;
-                    const Real vt = Ap * cx * cy * cz;
-
-                    // Laplacian
-                    const Real lap_v = -A * cx * cy * cz - A * cx * cy * cz - A * cx * cy * cz;
-
-                    // dp/dy = -sin(t)*cos(x)*sin(y)*cos(z)
-                    Real dp_dy = -std::sin(t) * std::cos(x) * std::sin(y) * std::cos(z);
-                    // dp_dy = 0.0; // Temporarily disable pressure gradient for MPI testing
-                    f.set(1, ii, jj, kk) = vt - nu * lap_v + (nu / k.get(ii, jj, kk)) * v + dp_dy;
-                }
-
-                // --------------------------------------------------
-                // Component 2: w at (x, y, z+dz/2)
-                // w = sin(t)*cos(x)*sin(y)*(cos(z)+sin(z))
-                // --------------------------------------------------
-                {
-                    const Real x = Real(ii) * dx;
-                    const Real y = Real(jj) * dy;
-                    const Real z = (Real(kk) + Real(0.5)) * dz;
-
-                    const Real sx = std::sin(x), cx = std::cos(x);
-                    const Real sy = std::sin(y), cy = std::cos(y);
-                    const Real sz = std::sin(z), cz = std::cos(z);
-
-                    const Real w = A * cx * sy * (cz + sz);
-                    const Real wt = Ap * cx * sy * (cz + sz);
-
-                    // Laplacian
-                    const Real lap_w = -A * cx * sy * (cz + sz) - A * cx * sy * (cz + sz) - A * cx * sy * (cz + sz);
-
-                    // dp/dz = -sin(t)*cos(x)*cos(y)*sin(z)
-                    Real dp_dz = -std::sin(t) * std::cos(x) * std::cos(y) * std::sin(z);
-                    // dp_dz = 0.0; // Temporarily disable pressure gradient for MPI testing
-                    f.set(2, ii, jj, kk) = wt - nu * lap_w + (nu / k.get(ii, jj, kk)) * w + dp_dz;
-                }
-            }
-}
 
 static void build_rhs_mpi(VectorVariable &rhs,
                           const VectorVariable &velocity_solution,
@@ -903,6 +806,51 @@ static void build_rhs_mpi(VectorVariable &rhs,
                 }
 }
 
+void NavierStokesBrinkmann::compute_forcing_mpi(VectorVariable &f,
+                                            Real t,
+                                            const MPITopology3D &topo)
+{
+    Dim k0, k1, j0, j1, i0, i1;
+    k0 = topo.local_k0(Nz);
+    k1 = topo.local_k1(Nz);
+    j0 = topo.local_j0(Ny);
+    j1 = topo.local_j1(Ny);
+    i0 = topo.local_i0(Nx);
+    i1 = topo.local_i1(Nx);
+
+    #pragma omp parallel for
+    for (Dim comp=0; comp<3; ++comp)
+    for (Dim kk = k0; kk < k1; ++kk)
+        for (Dim jj = j0; jj < j1; ++jj)
+            for (Dim ii = i0; ii < i1; ++ii)
+            {
+                Real f_val;
+                if(comp==0)
+                {
+                    const Real x = (Real(ii) + Real(0.5)) * dx;
+                    const Real y = Real(jj) * dy;
+                    const Real z = Real(kk) * dz;
+                    f_val = forcing_function.value<0>(x, y, z, t);
+                }
+                else if(comp==1)
+                {
+                    const Real x = Real(ii) * dx;
+                    const Real y = (Real(jj) + Real(0.5)) * dy;
+                    const Real z = Real(kk) * dz;
+                    f_val = forcing_function.value<1>(x, y, z, t);
+                }
+                else // comp==2
+                {
+                    const Real x = Real(ii) * dx;
+                    const Real y = Real(jj) * dy;
+                    const Real z = (Real(kk) + Real(0.5)) * dz;
+                    f_val = forcing_function.value<2>(x, y, z, t);
+                }
+                f.set(comp, ii, jj, kk) = f_val;
+            }
+
+}
+
 Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo, bool use_omp)
 {
     Real t = Real(1.5);
@@ -950,11 +898,9 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
 
         velocity_solver.set_t(t_np1);
 
-        compute_forcing_analytic_mpi(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field, topo);
+        // compute_forcing_analytic_mpi(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field, topo);
+        compute_forcing_mpi(f_half, t_half, topo);
         build_rhs_mpi(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field, topo);
-
-        // compute_forcing_analytic(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field);
-        // build_rhs(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field);
 
         // MPI ADI velocity solves with synchronization
         // MPI ADI velocity solves with synchronization
@@ -987,6 +933,9 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
 
         pressure_solution += other_phi;
 
+        if(topo.cart_rank()==0)
+            std::cout << "Completed time step " << n + 1 << " / " << nsteps << ", t = " << t_np1 << "\n";
+        
         t = t_np1;
     }
 

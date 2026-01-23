@@ -14,8 +14,6 @@
 #include "MPITopology3D.hpp"
 #include "SchurComplementSolver.hpp"
 
-constexpr bool DEBUG_BLOCK = false; // set to true to enable debug prints
-
 class Solver
 {
 public:
@@ -131,7 +129,7 @@ public:
         c_full[0] = -Real(2.0) * alpha;
 
         // right Neumann: -2α ψ_{N-2} + (1+2α) ψ_{N-1} = rhs_{N-1} + 2 gR/h
-        a_full[N - 1] = -Real(2.0) * alpha;
+        b_full[N - 1] = Real(1.0) + Real(1.0) * alpha;
         c_full[N - 1] = Real(0.0);
 
         // ---------------------------
@@ -188,8 +186,8 @@ public:
             const Real z = Real(k) * dz;
 
             // g = dψ/dx on boundaries
-            const Real gL = p_boundary.value<0>(Real(0.0), y, z, t);
-            const Real gR = p_boundary.value<0>((Nx - Real(0.5)) * dx, y, z, t);
+            // const Real gL = p_boundary.value<0>(Real(0.0), y, z, t);
+            // const Real gR = p_boundary.value<0>((Nx - Real(0.5)) * dx, y, z, t);
 
             for (int il = 0; il < local_N; ++il)
             {
@@ -203,10 +201,10 @@ public:
 
                 Real val = rhs.get(Dim(ig), j, k);
 
-                if (ig == 0)
-                    val -= Real(2.0) * gL / h;
-                else if (ig == N - 1)
-                    val += Real(2.0) * gR / h;
+                // if (ig == 0)
+                //     val -= Real(2.0) * gL / h;
+                // else if (ig == N - 1)
+                //     val += Real(2.0) * gR / h;
 
                 out[il] = val;
             }
@@ -279,7 +277,7 @@ public:
 
         a_full[0] = Real(0.0);
         c_full[0] = -Real(2.0) * alpha;
-        a_full[N - 1] = -Real(2.0) * alpha;
+        b_full[N - 1] = Real(1.0) + Real(1.0) * alpha;
         c_full[N - 1] = Real(0.0);
 
         SchurComplementSolver schur(N, size_y, rank_y, comm_y);
@@ -322,8 +320,8 @@ public:
             const Real x = Real(i) * dx;
             const Real z = Real(k) * dz;
 
-            const Real gB = p_boundary.value<1>(x, Real(0.0), z, t);
-            const Real gT = p_boundary.value<1>(x, (Ny - Real(0.5)) * dy, z, t);
+            // const Real gB = p_boundary.value<1>(x, Real(0.0), z, t);
+            // const Real gT = p_boundary.value<1>(x, (Ny - Real(0.5)) * dy, z, t);
 
             for (int il = 0; il < local_N; ++il)
             {
@@ -336,10 +334,10 @@ public:
 
                 Real val = rhs.get(i, Dim(ig), k);
 
-                if (ig == 0)
-                    val -= Real(2.0) * gB / h;
-                else if (ig == N - 1)
-                    val += Real(2.0) * gT / h;
+                // if (ig == 0)
+                //     val -= Real(2.0) * gB / h;
+                // else if (ig == N - 1)
+                //     val += Real(2.0) * gT / h;
 
                 out[il] = val;
             }
@@ -408,7 +406,7 @@ public:
 
         a_full[0] = Real(0.0);
         c_full[0] = -Real(2.0) * alpha;
-        a_full[N - 1] = -Real(2.0) * alpha;
+        b_full[N - 1] = Real(1.0) + Real(1.0) * alpha;
         c_full[N - 1] = Real(0.0);
 
         SchurComplementSolver schur(N, size_z, rank_z, comm_z);
@@ -451,8 +449,8 @@ public:
             const Real x = Real(i) * dx;
             const Real y = Real(j) * dy;
 
-            const Real gF = p_boundary.value<2>(x, y, Real(0.0), t);
-            const Real gB = p_boundary.value<2>(x, y, (Nz - Real(0.5)) * dz, t);
+            // const Real gF = p_boundary.value<2>(x, y, Real(0.0), t);
+            // const Real gB = p_boundary.value<2>(x, y, (Nz - Real(0.5)) * dz, t);
 
             for (int il = 0; il < local_N; ++il)
             {
@@ -465,10 +463,10 @@ public:
 
                 Real val = rhs.get(i, j, Dim(ig));
 
-                if (ig == 0)
-                    val -= Real(2.0) * gF / h;
-                else if (ig == N - 1)
-                    val += Real(2.0) * gB / h;
+                // if (ig == 0)
+                //     val -= Real(2.0) * gF / h;
+                // else if (ig == N - 1)
+                //     val += Real(2.0) * gB / h;
 
                 out[il] = val;
             }

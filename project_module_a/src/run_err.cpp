@@ -234,13 +234,58 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
 
     Real err_u = L2_u_global;
     Real err_p = L2_p_global;
-    Real rel_err_u = 0;
-    Real rel_err_p = 0;
+    // Compute norms for relative error
+    Real norm2_u_local = Real(0);
+    Real norm2_p_local = Real(0);
+    {
+        Dim i0 = topo.local_i0(Nx_in), i1 = topo.local_i1(Nx_in);
+        Dim j0 = topo.local_j0(Ny_in), j1 = topo.local_j1(Ny_in);
+        Dim k0 = topo.local_k0(Nz_in), k1 = topo.local_k1(Nz_in);
+
+        Real x, y, z;
+        for (int comp = 0; comp < 3; ++comp)
+            for (Dim k = k0; k < k1; ++k)
+                for (Dim j = j0; j < j1; ++j)
+                    for (Dim i = i0; i < i1; ++i)
+                    {
+                        if (comp == 0)
+                        {
+                            x = i * dx_in + dx_in / Real(2.0);
+                            y = j * dy_in;
+                            z = k * dz_in;
+                        }
+                        else if (comp == 1)
+                        {
+                            x = i * dx_in;
+                            y = j * dy_in + dy_in / Real(2.0);
+                            z = k * dz_in;
+                        }
+                        else // comp == 2
+                        {
+                            x = i * dx_in;
+                            y = j * dy_in;
+                            z = k * dz_in + dz_in / Real(2.0);
+                        }
+                        const Real val = u_exact_func(x, y, z, T_final)[comp];
+                        norm2_u_local += val * val;
+                    }
+
+        for (Dim k = k0; k < k1; ++k)
+            for (Dim j = j0; j < j1; ++j)
+                for (Dim i = i0; i < i1; ++i)
+                {
+                    const Real val = p_exact_func(i * dx_in, j * dy_in, k * dz_in, T_final);
+                    norm2_p_local += val * val;
+                }
+    }
+    Real norm2_u_global = allreduce_sum_real(norm2_u_local, topo.cart_comm());
+    Real norm2_p_global = allreduce_sum_real(norm2_p_local, topo.cart_comm());
+    Real rel_err_u = err_u / std::sqrt(norm2_u_global * dx_in * dy_in * dz_in);
+    Real rel_err_p = err_p / std::sqrt(norm2_p_global * dx_in * dy_in * dz_in);
 
     if (rank == 0)
     {
-        /*
-          std::cout << "=============================\n";
+        std::cout << "=============================\n";
         std::cout << "   MMS Accuracy Results      \n";
         std::cout << "=============================\n";
         std::cout << "Velocity L2 absolute  = " << err_u << "\n";
@@ -248,8 +293,6 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         std::cout << "Velocity L2 relative  = " << rel_err_u << "\n";
         std::cout << "Pressure L2 relative  = " << rel_err_p << "\n";
         std::cout << "=============================\n";
-
-        */
     }
 
     return std::make_pair(std::make_pair(err_u, rel_err_u), std::make_pair(err_p, rel_err_p));
@@ -340,6 +383,7 @@ int run_multiple_mpi(int argc, char **argv)
         }
 
         // 1) Create 3D Cartesian topology
+        {
         MPITopology3D topo(MPI_COMM_WORLD, Pz, Py, Px);
 
         ParseInput &parser = ParseInput::getInstance();
@@ -358,11 +402,13 @@ int run_multiple_mpi(int argc, char **argv)
         std::vector<Real> errors_p;
         std::vector<Real> errors_rel_u;
         std::vector<Real> errors_rel_p;
-        std::vector<Real> time_values;
+        std::vector<std::pair<Real, Real>> time_values;
         std::vector<Real> time_speedUps;
 
         for (int i = 0; i < num_runs; i++)
         {
+
+            std::pair<Real, Real> time_per_run;
             Real refinement_factor = std::pow(2, i);
 
             Dim Nx_curr = N_initial_x * refinement_factor;
@@ -377,14 +423,11 @@ int run_multiple_mpi(int argc, char **argv)
 
             if (world_rank == 0)
             {
-                /*
-                 std::cout << "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
+                
+                std::cout << "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
                 std::cout << "Running MPI simulation with (Nx, Ny, Nz) = ("
                           << Nx_curr << ", " << Ny_curr << ", " << Nz_curr << ") and dt = "
                           << dt_curr << "\n\n";
-
-
-                */
             }
 
             Real time_curr = 0.0;
@@ -392,7 +435,7 @@ int run_multiple_mpi(int argc, char **argv)
                 Nx_curr, Ny_curr, Nz_curr, dt_curr,
                 dx_curr, dy_curr, dz_curr, T_final,
                 parser.u_boundary_file, parser.p_boundary_file,
-                time_curr, topo, true);
+                time_curr, topo, false);
 
             N_values.emplace_back(Nx_curr);
             dt_values.emplace_back(dt_curr);
@@ -400,15 +443,17 @@ int run_multiple_mpi(int argc, char **argv)
             errors_p.emplace_back(errors.second.first);
             errors_rel_u.emplace_back(errors.first.second);
             errors_rel_p.emplace_back(errors.second.second);
-            time_values.emplace_back(time_curr);
+            time_per_run.first = time_curr;
 
             time_curr = 0.0;
             errors = single_run_mpi(
                 Nx_curr, Ny_curr, Nz_curr, dt_curr,
                 dx_curr, dy_curr, dz_curr, T_final,
                 parser.u_boundary_file, parser.p_boundary_file,
-                time_curr, topo, false);
-            auto speed_up = time_values.back() / time_curr;
+                time_curr, topo, true);
+            time_per_run.second = time_curr;
+            time_values.emplace_back(time_per_run);
+            auto speed_up = time_values[time_values.size() - 2].second / time_curr;
             time_speedUps.emplace_back(speed_up); // No serial comparison in MPI mode
         }
 
@@ -426,7 +471,7 @@ int run_multiple_mpi(int argc, char **argv)
             std::system("mkdir -p OUTPUT");
             std::ofstream convergence_file(filename);
 
-            std::string header = "Nx\t\tdx\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTime\t\tTimeSpeedUp\t\tProcs\t\tRate_u\t\tRate_p\n";
+            std::string header = "Nx\t\tdx\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTimeNoOMP\t\tTimeOMP\t\tTimeSpeedUp\t\tProcs\t\tRate_u\t\tRate_p\n";
             std::cout << header;
             convergence_file << header;
 
@@ -450,7 +495,9 @@ int run_multiple_mpi(int argc, char **argv)
                     << errors_p[i] << "\t\t"
                     << errors_rel_u[i] << "\t\t"
                     << errors_rel_p[i] << "\t\t"
-                    << time_values[i] << "\t\t"
+                    << errors_rel_p[i] << "\t\t"
+                    << time_values[i].first << "\t\t"
+                    << time_values[i].second << "\t\t"
                     << time_speedUps[i] << "\t\t"
                     << world_size << "\t\t"
                     << std::fixed << std::setprecision(2)
@@ -466,7 +513,7 @@ int run_multiple_mpi(int argc, char **argv)
             std::cout << "=============================\n";
             std::cout << "Results saved to " << filename << "\n";
         }
-
+    }
         comm.finalize(); // MPI_Finalize inside
     }
     catch (const std::exception &e)
