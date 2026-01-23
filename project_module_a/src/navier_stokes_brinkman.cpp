@@ -743,7 +743,7 @@ static void build_rhs_mpi(VectorVariable &rhs,
                           Dim Nx, Dim Ny, Dim Nz,
                           Real dt,
                           Real nu,
-                          const ScalarVariable &k, const MPITopology3D &topo)
+                          const ScalarVariable &k, const MPITopology3D &topo, bool use_omp)
 {
 
     Dim k0, k1, j0, j1, i0, i1;
@@ -754,6 +754,7 @@ static void build_rhs_mpi(VectorVariable &rhs,
     i0 = topo.local_i0(Nx);
     i1 = topo.local_i1(Nx);
     for (int c = 0; c < 3; ++c)
+#pragma omp parallel for if (use_omp)
         for (Dim kk = k0; kk < k1; ++kk)
             for (Dim jj = j0; jj < j1; ++jj)
                 for (Dim ii = i0; ii < i1; ++ii)
@@ -806,7 +807,7 @@ static void build_rhs_mpi(VectorVariable &rhs,
 
 void NavierStokesBrinkmann::compute_forcing_mpi(VectorVariable &f,
                                                 Real t,
-                                                const MPITopology3D &topo)
+                                                const MPITopology3D &topo, bool use_omp)
 {
     Dim k0, k1, j0, j1, i0, i1;
     k0 = topo.local_k0(Nz);
@@ -816,7 +817,7 @@ void NavierStokesBrinkmann::compute_forcing_mpi(VectorVariable &f,
     i0 = topo.local_i0(Nx);
     i1 = topo.local_i1(Nx);
 
-#pragma omp parallel for
+#pragma omp parallel for if (use_omp)
     for (Dim comp = 0; comp < 3; ++comp)
         for (Dim kk = k0; kk < k1; ++kk)
             for (Dim jj = j0; jj < j1; ++jj)
@@ -896,8 +897,8 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
         velocity_solver.set_t(t_np1);
 
         // compute_forcing_analytic_mpi(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field, topo);
-        compute_forcing_mpi(f_half, t_half, topo);
-        build_rhs_mpi(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field, topo);
+        compute_forcing_mpi(f_half, t_half, topo, use_omp);
+        build_rhs_mpi(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field, topo, use_omp);
 
         // MPI ADI velocity solves with synchronization
         // MPI ADI velocity solves with synchronization
