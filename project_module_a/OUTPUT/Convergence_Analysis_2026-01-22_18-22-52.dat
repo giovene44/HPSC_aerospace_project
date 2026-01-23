@@ -1,0 +1,2 @@
+Nx		dx	dt		nsteps		L2_u_abs		L2_p_abs		L2_u_rel		L2_p_rel		Time		Time_SpeedUp		Rate_u		Rate_p
+64	9.894780e-02	2.000000e-05	25		5.071823e-03		6.947485e-01		4.511471e-04		1.221869e-01		3.161119e+01		9.852265e-01		0.00		0.00

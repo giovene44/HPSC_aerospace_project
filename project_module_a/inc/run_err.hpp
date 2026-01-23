@@ -16,7 +16,7 @@
 #include "MPITopology3D.hpp"
 int run_multiple_mpi(int argc, char **argv);
 #else
-int run_multiple(bool use_openMP = false);
+int run_multiple();
 #endif
 
 #endif // MMS_TEST_RUNNER_HPP

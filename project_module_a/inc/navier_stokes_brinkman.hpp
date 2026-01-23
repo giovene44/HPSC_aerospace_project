@@ -151,7 +151,7 @@ public:
 #ifdef USE_MPI
     Real solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo, bool use_omp = false);
 #else
-    Real solve(const ManufacturedSolution &mms, bool openMP = false);
+    Real solve(const ManufacturedSolution &mms);
 #endif
 
     /**

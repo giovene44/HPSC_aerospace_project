@@ -21,3 +21,5 @@ project_module_a/callgrind.out.*
 project_module_a/log
 project_module_a/log_main
 project_module_a/log_test
+project_module_a/obj/src/navier_stokes_brinkman.o
+project_module_a/obj/src/run_err.o

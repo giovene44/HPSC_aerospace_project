@@ -364,7 +364,7 @@ static void build_rhs(VectorVariable &rhs,
 #ifndef USE_MPI
 Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
 {
-    Real t = Real(1.5);
+    Real t = Real(0.0);
 
     (void)mms; // Unused parameter
     DimensionsHandlerScalar x_scalar_handler(Nx, Ny, Nz, dx);
@@ -413,8 +413,8 @@ Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
         // ---- Momentum step (ADI) with predictor pressure
         velocity_solver.set_t(t_np1);
 
-        compute_forcing_analytic(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field);
-        // f_half.set_all(forcing_function, t_half, false);
+        // compute_forcing_analytic(f_half, dx, dy, dz, Nx, Ny, Nz, t_half, nu, k_field);
+        f_half.set_all(forcing_function, t_half, false);
 
         // RHS uses (pressure_solution - ∇pressure_predictor)
         build_rhs(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field);
@@ -435,10 +435,13 @@ Real NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
         // (I - dyy) phi = psi
         // (I - dzz) corr_new = phi
 
-        pressure_solver.solve_pressure<0>(rhs, phi, x_scalar_handler);
-        pressure_solver.solve_pressure<1>(phi, other_phi, y_scalar_handler);
-        pressure_solver.solve_pressure<2>(other_phi, other_phi, z_scalar_handler);
+        pressure_solver.solve_pressure<0>(rhs, psi, x_scalar_handler);
+        pressure_solver.solve_pressure<1>(psi, phi, y_scalar_handler);
+        pressure_solver.solve_pressure<2>(phi, other_phi, z_scalar_handler);
 
+        // pressure_solver.solve_x(rhs, psi);
+        // pressure_solver.solve_y(psi, phi);
+        // pressure_solver.solve_z(phi, other_phi);
 
         // ---- Pressure update at half-step (Auteri):
         // p^{n+1/2} = p^{n-1/2} + ϕ^{n+1/2}
@@ -956,28 +959,15 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
         // MPI ADI velocity solves with synchronization
         // MPI ADI velocity solves with synchronization
         vector_rhs = xi - eta.A_operator(0, gamma_field);
-        /*
-          for (int kk = k0; kk < k1; ++kk)
-            for (int jj = j0; jj < j1; ++jj)
-                for (int ii = i0; ii < i1; ++ii)
-                {
-                    if ((ii > 0 && ii < Nx - 1 &&
-                         jj > 0 && jj < Ny - 1 &&
-                         kk > 0 && kk < Nz - 1))
-                        vector_rhs.set(0, ii, jj, kk) = xi.value(0, ii, jj, kk) - gamma_field.get(ii, jj, kk) * eta.second_derivative(0, 0, ii, jj, kk);
-                }
-        */
 
         velocity_solver.solve_x_only(vector_rhs, eta, topo, x_vector_handler, use_omp);
-        sync_vector_field_full(eta, Nx, Ny, Nz, topo);
 
         vector_rhs = eta - zeta.A_operator(1, gamma_field);
         velocity_solver.solve_y_only(vector_rhs, zeta, topo, y_vector_handler, use_omp);
-        sync_vector_field_full(zeta, Nx, Ny, Nz, topo);
 
         vector_rhs = zeta - velocity_solution.A_operator(2, gamma_field);
         velocity_solver.solve_z_only(vector_rhs, velocity_solution, topo, z_vector_handler, use_omp);
-        sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
+        
         sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
 
         // Pressure correction

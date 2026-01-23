@@ -100,7 +100,7 @@ public:
         c[0] = -Real(2.0) * alpha;
 
         // right: -2α ψ_{N-2} + (1+2α) ψ_{N-1} = rhs_{N-1} + 2 g/dx
-        a[Nx - 1] = -Real(2.0) * alpha;
+        a[Nx - 1] = -Real(1.0) * alpha;
         c[Nx - 1] = Real(0.0);
 
         auto worker = [&](Dim j, Dim k)
@@ -595,7 +595,7 @@ public:
             }
         };
 
-#pragma omp parallel for collapse(2) default(none) shared(Outer1, Outer2, worker)
+        #pragma omp parallel for collapse(2) default(none) shared(Outer1, Outer2, worker)
         for (Dim i2 = 0; i2 < Outer2; ++i2)
             for (Dim i1 = 0; i1 < Outer1; ++i1)
                 worker(i1, i2);

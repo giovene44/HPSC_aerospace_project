@@ -67,13 +67,13 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
     std::cout << "Solver initialized (nu=" << nu << ").\n";
 
     // 4) RUN SOLVER
-    Real time_out_auto = nsb_solver.solve(mms, openMP);
+    Real time_out_auto = nsb_solver.solve(mms);
     time_out = time_out_auto;
     std::cout << "\nSolver run completed.\n";
 
     // 5) COMPUTE ERRORS
 
-    T_final += Real(1.5);
+    T_final += Real(0.0);
 
     std::cout << "Computing Errors at T = " << T_final << "...\n";
 
@@ -401,7 +401,7 @@ int run_multiple_mpi(int argc, char **argv)
                 Nx_curr, Ny_curr, Nz_curr, dt_curr,
                 dx_curr, dy_curr, dz_curr, T_final,
                 parser.u_boundary_file, parser.p_boundary_file,
-                time_curr, topo, true);
+                time_curr, topo, false);
             auto speed_up = time_values.back() / time_curr;
             time_speedUps.emplace_back(speed_up); // No serial comparison in MPI mode
         }
@@ -473,7 +473,7 @@ int run_multiple_mpi(int argc, char **argv)
 }
 
 #else
-int run_multiple(bool use_openMP)
+int run_multiple()
 {
     try
     {
@@ -501,7 +501,6 @@ int run_multiple(bool use_openMP)
         std::vector<Real> errors_rel_u;
         std::vector<Real> errors_rel_p;
         std::vector<Real> time_values;
-        std::vector<Real> time_speedUps;
 
         for (int i = 0; i < num_runs; i++)
         {
@@ -543,22 +542,6 @@ int run_multiple(bool use_openMP)
             errors_rel_u.emplace_back(errors.first.second);
             errors_rel_p.emplace_back(errors.second.second);
             time_values.emplace_back(time_curr);
-            if (use_openMP)
-            {
-                openMP = true;
-                time_curr = 0.0;
-                errors = single_run(
-                    Nx_curr, Ny_curr, Nz_curr, dt_curr,
-                    dx_curr, dy_curr, dz_curr, T_final,
-                    parser.u_boundary_file, parser.p_boundary_file,
-                    time_curr, openMP);
-                auto time_speedUp = time_values.back() / time_curr;
-                time_speedUps.emplace_back(time_speedUp);
-            }
-            else
-            {
-                time_speedUps.emplace_back(0.0);
-            }
         }
 
         std::cout << "\n=============================\n";
@@ -574,7 +557,7 @@ int run_multiple(bool use_openMP)
         std::system("mkdir -p OUTPUT");
         std::ofstream convergence_file(filename);
 
-        std::string header = "Nx\t\tdx\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTime\t\tTime_SpeedUp\t\tRate_u\t\tRate_p\n";
+        std::string header = "Nx\t\tdx\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTime\t\tRate_u\t\tRate_p\n";
         std::cout << header;
         convergence_file << header;
 
@@ -599,7 +582,6 @@ int run_multiple(bool use_openMP)
                 << errors_rel_u[i] << "\t\t"
                 << errors_rel_p[i] << "\t\t"
                 << time_values[i] << "\t\t"
-                << time_speedUps[i] << "\t\t"
                 << std::fixed << std::setprecision(2)
                 << rate_u << "\t\t"
                 << rate_p << "\n";

@@ -8,6 +8,6 @@ int main(int argc, char **argv)
 #else
     (void)argc;
     (void)argv;
-    return run_multiple(true);
+    return run_multiple();
 #endif
 }
