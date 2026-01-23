@@ -1,6 +1,5 @@
 #Number of Run
 4
-
 #Dim of X
 2.0*pi
 
@@ -16,8 +15,8 @@
 # Time step size (dt)
 2e-5
 
-# Total simulation time (T)
-1e-2
+# Total simulation time (T)   25 time step
+5e-4
 
 # boundary velocity
 ./Input/boundary_u0.dat

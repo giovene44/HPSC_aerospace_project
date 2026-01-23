@@ -71,7 +71,7 @@ void NavierStokesBrinkmann::initialize_k_field()
     }
 }
 
-//TODO: not called
+// TODO: not called
 void NavierStokesBrinkmann::compute_vector_g(Real t)
 {
     // -------------------------------------------------------------------------
@@ -164,7 +164,7 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
         }
     }
 }
-//TODO: not called
+// TODO: not called
 void NavierStokesBrinkmann::compute_vector_xi()
 {
     for (Dim comp = 0; comp < xi.size(); ++comp)
@@ -176,7 +176,7 @@ void NavierStokesBrinkmann::compute_vector_xi()
         }
     }
 }
-//TODO: not called
+// TODO: not called
 void NavierStokesBrinkmann::compute_divergence_cell_center(const VectorVariable &u,
                                                            ScalarVariable &div)
 {
@@ -735,8 +735,6 @@ static void sync_vector_field_full(VectorVariable &field, Dim Nx, Dim Ny, Dim Nz
     }
 }
 
-
-
 static void build_rhs_mpi(VectorVariable &rhs,
                           const VectorVariable &velocity_solution,
                           const ScalarVariable &p_star, // predictor pressure at cell centers
@@ -807,8 +805,8 @@ static void build_rhs_mpi(VectorVariable &rhs,
 }
 
 void NavierStokesBrinkmann::compute_forcing_mpi(VectorVariable &f,
-                                            Real t,
-                                            const MPITopology3D &topo)
+                                                Real t,
+                                                const MPITopology3D &topo)
 {
     Dim k0, k1, j0, j1, i0, i1;
     k0 = topo.local_k0(Nz);
@@ -818,37 +816,36 @@ void NavierStokesBrinkmann::compute_forcing_mpi(VectorVariable &f,
     i0 = topo.local_i0(Nx);
     i1 = topo.local_i1(Nx);
 
-    #pragma omp parallel for
-    for (Dim comp=0; comp<3; ++comp)
-    for (Dim kk = k0; kk < k1; ++kk)
-        for (Dim jj = j0; jj < j1; ++jj)
-            for (Dim ii = i0; ii < i1; ++ii)
-            {
-                Real f_val;
-                if(comp==0)
+#pragma omp parallel for
+    for (Dim comp = 0; comp < 3; ++comp)
+        for (Dim kk = k0; kk < k1; ++kk)
+            for (Dim jj = j0; jj < j1; ++jj)
+                for (Dim ii = i0; ii < i1; ++ii)
                 {
-                    const Real x = (Real(ii) + Real(0.5)) * dx;
-                    const Real y = Real(jj) * dy;
-                    const Real z = Real(kk) * dz;
-                    f_val = forcing_function.value<0>(x, y, z, t);
+                    Real f_val;
+                    if (comp == 0)
+                    {
+                        const Real x = (Real(ii) + Real(0.5)) * dx;
+                        const Real y = Real(jj) * dy;
+                        const Real z = Real(kk) * dz;
+                        f_val = forcing_function.value<0>(x, y, z, t);
+                    }
+                    else if (comp == 1)
+                    {
+                        const Real x = Real(ii) * dx;
+                        const Real y = (Real(jj) + Real(0.5)) * dy;
+                        const Real z = Real(kk) * dz;
+                        f_val = forcing_function.value<1>(x, y, z, t);
+                    }
+                    else // comp==2
+                    {
+                        const Real x = Real(ii) * dx;
+                        const Real y = Real(jj) * dy;
+                        const Real z = (Real(kk) + Real(0.5)) * dz;
+                        f_val = forcing_function.value<2>(x, y, z, t);
+                    }
+                    f.set(comp, ii, jj, kk) = f_val;
                 }
-                else if(comp==1)
-                {
-                    const Real x = Real(ii) * dx;
-                    const Real y = (Real(jj) + Real(0.5)) * dy;
-                    const Real z = Real(kk) * dz;
-                    f_val = forcing_function.value<1>(x, y, z, t);
-                }
-                else // comp==2
-                {
-                    const Real x = Real(ii) * dx;
-                    const Real y = Real(jj) * dy;
-                    const Real z = (Real(kk) + Real(0.5)) * dz;
-                    f_val = forcing_function.value<2>(x, y, z, t);
-                }
-                f.set(comp, ii, jj, kk) = f_val;
-            }
-
 }
 
 Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo, bool use_omp)
@@ -913,7 +910,7 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
 
         vector_rhs = zeta - velocity_solution.A_operator(2, gamma_field);
         velocity_solver.solve_z_only(vector_rhs, velocity_solution, topo, z_vector_handler, use_omp);
-        
+
         sync_vector_field_full(velocity_solution, Nx, Ny, Nz, topo);
 
         // Pressure correction
@@ -933,9 +930,6 @@ Real NavierStokesBrinkmann::solve_mpi(const ManufacturedSolution &mms, const MPI
 
         pressure_solution += other_phi;
 
-        if(topo.cart_rank()==0)
-            std::cout << "Completed time step " << n + 1 << " / " << nsteps << ", t = " << t_np1 << "\n";
-        
         t = t_np1;
     }
 
