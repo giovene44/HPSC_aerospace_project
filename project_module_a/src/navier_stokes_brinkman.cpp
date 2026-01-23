@@ -73,8 +73,8 @@ void NavierStokesBrinkman::initialize_k_field()
 }
 
 
-// TODO: not called
-void NavierStokesBrinkmann::compute_vector_g(Real t)
+//TODO: not called
+void NavierStokesBrinkman::compute_vector_g(Real t)
 {
     // -------------------------------------------------------------------------
     // Purpose:
@@ -157,8 +157,8 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
         }
     }
 }
-// TODO: not called
-void NavierStokesBrinkmann::compute_vector_xi()
+//TODO: not called
+void NavierStokesBrinkman::compute_vector_xi()
 {
     for (Dim comp = 0; comp < xi.size(); ++comp)
     {
@@ -169,8 +169,8 @@ void NavierStokesBrinkmann::compute_vector_xi()
         }
     }
 }
-// TODO: not called
-void NavierStokesBrinkmann::compute_divergence_cell_center(const VectorVariable &u,
+//TODO: not called
+void NavierStokesBrinkman::compute_divergence_cell_center(const VectorVariable &u,
                                                            ScalarVariable &div)
 {
     div.set_all(Real(0.0));
@@ -644,7 +644,7 @@ void NavierStokesBrinkman::build_rhs_mpi(VectorVariable &rhs,
                           Dim Nx, Dim Ny, Dim Nz,
                           Real dt,
                           Real nu,
-                          const ScalarVariable &k, const MPITopology3D &topo, bool use_omp)
+                          const ScalarVariable &k, const MPITopology3D &topo)
 {
 
     Dim k0, k1, j0, j1, i0, i1;
@@ -833,6 +833,9 @@ Real NavierStokesBrinkman::solve_mpi(const ManufacturedSolution &mms, const MPIT
 
         pressure_solution += other_phi;
 
+        if(topo.cart_rank()==0)
+            std::cout << "Completed time step " << n + 1 << " / " << nsteps << ", t = " << t_np1 << "\n";
+        
         t = t_np1;
     }
 

@@ -163,9 +163,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
 
     if (rank == 0)
     {
-        /*
-
-          std::cout << "=============================\n";
+        std::cout << "=============================\n";
         std::cout << "   MMS Accuracy Results      \n";
         std::cout << "=============================\n";
         std::cout << "Velocity L2 absolute  = " << err_u << "\n";
@@ -173,7 +171,6 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         std::cout << "Velocity L2 relative  = " << rel_err_u << "\n";
         std::cout << "Pressure L2 relative  = " << rel_err_p << "\n";
         std::cout << "=============================\n";
-        */
     }
 
     return std::make_pair(std::make_pair(err_u, rel_err_u), std::make_pair(err_p, rel_err_p));
@@ -188,7 +185,6 @@ int run_multiple_mpi(int argc, char **argv)
 
         int world_rank = comm.get_rank();
         int world_size = comm.get_size();
-        int nthreads;
 
         // Supporta sia 1 processo (seriale) che 8 processi (2x2x2)
         int Px, Py, Pz;
@@ -258,7 +254,7 @@ int run_multiple_mpi(int argc, char **argv)
             {
 #pragma omp single
                 {
-                    nthreads = omp_get_num_threads();
+                    int nthreads = omp_get_num_threads();
                     std::cout << "MPI Rank " << world_rank << " using " << nthreads << " OpenMP threads.\n";
                 }
             }
@@ -267,19 +263,10 @@ int run_multiple_mpi(int argc, char **argv)
         // 1) Create 3D Cartesian topology
         {
             MPITopology3D topo(MPI_COMM_WORLD, Pz, Py, Px);
-            MPITopology3D topo(MPI_COMM_WORLD, Pz, Py, Px);
 
             ParseInput &parser = ParseInput::getInstance();
             parser.parse_input("./Input/Input.in");
-            ParseInput &parser = ParseInput::getInstance();
-            parser.parse_input("./Input/Input.in");
 
-            int num_runs = parser.num_runs;
-            Dim N_initial_x = parser.Nx;
-            Dim N_initial_y = parser.Ny;
-            Dim N_initial_z = parser.Nz;
-            Real dt_initial = parser.dt;
-            Real T_final = parser.T;
             int num_runs = parser.num_runs;
             Dim N_initial_x = parser.Nx;
             Dim N_initial_y = parser.Ny;
@@ -295,38 +282,19 @@ int run_multiple_mpi(int argc, char **argv)
             std::vector<Real> errors_rel_p;
             std::vector<std::pair<Real, Real>> time_values;
             std::vector<Real> time_speedUps;
-            std::vector<Real> N_values;
-            std::vector<Real> dt_values;
-            std::vector<Real> errors_u;
-            std::vector<Real> errors_p;
-            std::vector<Real> errors_rel_u;
-            std::vector<Real> errors_rel_p;
-            std::vector<std::pair<Real, Real>> time_values;
-            std::vector<Real> time_speedUps;
 
             for (int i = 0; i < num_runs; i++)
             {
-            for (int i = 0; i < num_runs; i++)
-            {
 
-                std::pair<Real, Real> time_per_run;
-                Real refinement_factor = std::pow(2, i);
                 std::pair<Real, Real> time_per_run;
                 Real refinement_factor = std::pow(2, i);
 
                 Dim Nx_curr = N_initial_x * refinement_factor;
                 Dim Ny_curr = N_initial_y * refinement_factor;
                 Dim Nz_curr = N_initial_z * refinement_factor;
-                Dim Nx_curr = N_initial_x * refinement_factor;
-                Dim Ny_curr = N_initial_y * refinement_factor;
-                Dim Nz_curr = N_initial_z * refinement_factor;
 
                 Real dt_curr = dt_initial;
-                Real dt_curr = dt_initial;
 
-                Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
-                Real dy_curr = parser.DimY / (Real)(Ny_curr - 0.5);
-                Real dz_curr = parser.DimZ / (Real)(Nz_curr - 0.5);
                 Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
                 Real dy_curr = parser.DimY / (Real)(Ny_curr - 0.5);
                 Real dz_curr = parser.DimZ / (Real)(Nz_curr - 0.5);
@@ -390,14 +358,7 @@ int run_multiple_mpi(int argc, char **argv)
                     Real dx = parser.DimX / (Real)(N_values[i] - 0.5);
                     Real dx_prev = (i > 0) ? parser.DimX / (Real)(N_values[i - 1] - 0.5) : 0.0;
                     Dim nsteps = (Dim)(T_final / dt_values[i]);
-                for (size_t i = 0; i < N_values.size(); ++i)
-                {
-                    Real dx = parser.DimX / (Real)(N_values[i] - 0.5);
-                    Real dx_prev = (i > 0) ? parser.DimX / (Real)(N_values[i - 1] - 0.5) : 0.0;
-                    Dim nsteps = (Dim)(T_final / dt_values[i]);
 
-                    Real rate_u = (i > 0) ? std::log(errors_u[i - 1] / errors_u[i]) / std::log(dx_prev / dx) : 0.0;
-                    Real rate_p = (i > 0) ? std::log(errors_p[i - 1] / errors_p[i]) / std::log(dx_prev / dx) : 0.0;
                     Real rate_u = (i > 0) ? std::log(errors_u[i - 1] / errors_u[i]) / std::log(dx_prev / dx) : 0.0;
                     Real rate_p = (i > 0) ? std::log(errors_p[i - 1] / errors_p[i]) / std::log(dx_prev / dx) : 0.0;
 
@@ -428,16 +389,7 @@ int run_multiple_mpi(int argc, char **argv)
                     std::cout << oss.str();
                     convergence_file << oss.str();
                 }
-                    std::cout << oss.str();
-                    convergence_file << oss.str();
-                }
 
-                convergence_file.close();
-                std::cout << std::defaultfloat;
-                std::cout << "=============================\n";
-                std::cout << "Results saved to " << filename << "\n";
-            }
-        }
                 convergence_file.close();
                 std::cout << std::defaultfloat;
                 std::cout << "=============================\n";
