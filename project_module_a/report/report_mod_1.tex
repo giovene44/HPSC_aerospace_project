@@ -10,7 +10,7 @@
 \usepackage{geometry}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
-
+\usepackage{hyperref}
 
 
 \title{High Performance Scientific Computing in Aerospace - Module 1}
@@ -588,12 +588,12 @@ The numerical convergence of the implemented solver has been verified through a 
 and the corresponding source terms are derived to ensure that this solution satisfies the Navier-Stokes-Brinkman equations.
 By running simulations with progressively refined grids and time steps, the numerical solution is compared against the analytical solution. 
 The errors are computed in appropriate norms (e.g., \(L^2\) norm) to quantify the accuracy of the solver.
-The results confirm that the solver achieves second-order accuracy in space, as shown in Figure~\ref{fig:convergence_space} consistent with the theoretical properties of the discretization scheme employed.
+The results confirm that the solver achieves second-order accuracy in space, as shown in Figure~\ref{fig:convergence_space}, the plot is consistent with the theoretical properties of the discretization scheme employed.
 This validation provides confidence in the correctness and reliability of the numerical implementation for simulating fluid flow in porous media.
-Similar convergence tests have been performed for the time discretization (Figure~\ref{fig:convergence_time}) underlining the #TO DO.
+Similar convergence tests have been performed for the time discretization (Figure~\ref{fig:convergence_time}) underlining the %TODOOOOO%.
 \begin{figure}[h!]
     \centering
-    % \includegraphics[width=0.6\textwidth]{convergence_space.png} % nome del file immagine
+    \includegraphics[width=0.6\textwidth]{convergence_plot.png}
     \caption{Spatial convergence analysis showing second-order accuracy.}
     \label{fig:convergence_space}
 \end{figure}
