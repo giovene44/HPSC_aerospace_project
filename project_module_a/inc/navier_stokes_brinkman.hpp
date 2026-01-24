@@ -38,8 +38,7 @@ public:
                           std::string p_boundary_file,
                           BoundaryFunctions p_exact,
                           const Real dx, const Real dy, const Real dz,
-                          const Real nu,
-                          const bool use_openmp = false)
+                          const Real nu)
         : // ============================
           // GRID, MATERIAL, AND TIME INFO
           // ============================
@@ -202,7 +201,7 @@ public:
 
         // 2. Single Unified Loop for both Fields
         // Collapsing loops improves OpenMP efficiency
-        #pragma omp parallel for reduction(+:local_sum_err_u, local_sum_norm_u, local_sum_err_p, local_sum_norm_p) collapse(2) if(use_openmp)
+        #pragma omp parallel for reduction(+:local_sum_err_u, local_sum_norm_u, local_sum_err_p, local_sum_norm_p) collapse(2) if (use_openmp)
         for (Dim k = k0; k < k1; ++k)
         {
             for (Dim j = j0; j < j1; ++j)
@@ -369,8 +368,6 @@ public:
     Real dz = Real(1.0); // Grid spacing in z
 
     Real T;
-
-    bool use_openmp;
 
     // ============================================================================
     // SOLVER CLASS

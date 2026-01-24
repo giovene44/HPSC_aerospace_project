@@ -14,4 +14,4 @@ make -j OMP=1 MPI=1
 echo "--- Running Executable ---"
 # executing the binary as requested
 echo -e
-OMP_NUM_THREADS=4 mpirun -np 2 ./bin/main_app
+OMP_NUM_THREADS=2 mpirun -np 8 ./bin/main_app

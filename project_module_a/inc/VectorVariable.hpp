@@ -81,6 +81,8 @@ public:
 
     void set_all(BoundaryFunctions &other, Real t, bool use_staggering = true)
     {
+
+        #pragma omp parallel for collapse(3)
         for(Dim i=0; i<Nx; ++i)
         for(Dim j=0; j<Ny; ++j)
         for(Dim k=0; k<Nz; ++k){

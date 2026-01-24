@@ -18,6 +18,10 @@
 #include <functional>
 #include <chrono>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #ifdef USE_MPI
 #include "MPICommunicator.hpp"
 #include "MPITopology3D.hpp"
@@ -108,7 +112,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
     Real dx_in, Real dy_in, Real dz_in, Real T_final,
     const std::string &u_boundary_file,
     const std::string &p_boundary_file,
-    Real &time_out, const MPITopology3D &topo, bool use_omp)
+    Real &time_out, const MPITopology3D &topo)
 {
     auto &parser = ParseInput::getInstance();
     Real nu = parser.nu;
@@ -136,10 +140,14 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         p_exact_bf,
         dx_in, dy_in, dz_in,
         nu);
-    
+
+    if(rank == 0)
+    {
+        std::cout << "Solver initialized (nu=" << nu << ").\n";
+    }
+
     Real time_out_auto = nsb_solver.solve_mpi(mms, topo);
     time_out = time_out_auto;
-
 
     if (rank == 0)
     {
@@ -185,6 +193,11 @@ int run_multiple_mpi(int argc, char **argv)
 
         int world_rank = comm.get_rank();
         int world_size = comm.get_size();
+
+        int max_omp_threads = 1;
+#ifdef _OPENMP
+        max_omp_threads = omp_get_max_threads();
+#endif
 
         // Supporta sia 1 processo (seriale) che 8 processi (2x2x2)
         int Px, Py, Pz;
@@ -308,12 +321,16 @@ int run_multiple_mpi(int argc, char **argv)
                               << dt_curr << "\n\n";
                 }
 
+#ifdef _OPENMP
+                omp_set_num_threads(1);
+#endif
                 Real time_no_omp = 0.0;
+
                 auto errors = single_run_mpi(
                     Nx_curr, Ny_curr, Nz_curr, dt_curr,
                     dx_curr, dy_curr, dz_curr, T_final,
                     parser.u_boundary_file, parser.p_boundary_file,
-                    time_no_omp, topo, false);
+                    time_no_omp, topo);
 
                 N_values.emplace_back(Nx_curr);
                 dt_values.emplace_back(dt_curr);
@@ -323,12 +340,15 @@ int run_multiple_mpi(int argc, char **argv)
                 errors_rel_p.emplace_back(errors.second.second);
                 time_per_run.first = time_no_omp;
 
+#ifdef _OPENMP
+                omp_set_num_threads(max_omp_threads);
+#endif
                 Real time_omp = 0.0;
                 errors = single_run_mpi(
                     Nx_curr, Ny_curr, Nz_curr, dt_curr,
                     dx_curr, dy_curr, dz_curr, T_final,
                     parser.u_boundary_file, parser.p_boundary_file,
-                    time_omp, topo, true);
+                    time_omp, topo);
                 time_per_run.second = time_omp;
                 time_values.emplace_back(time_per_run);
                 auto speed_up = time_per_run.first / time_per_run.second;

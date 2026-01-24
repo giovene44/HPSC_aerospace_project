@@ -959,7 +959,7 @@ inline void SchurComplementSolver::solve_batch(
     std::vector<LineCache> cache(nLines);
 
 // ============ Phase 1-2: parallel ============
-#pragma omp parallel if (use_omp)
+#pragma omp parallel //if (use_omp)
     {
         ThreadWorkspace ws;
         std::vector<Real> iface_rhs_line;
@@ -986,7 +986,7 @@ inline void SchurComplementSolver::solve_batch(
     }
 
 // ============ Phase 4-5: parallel ============
-#pragma omp parallel if (use_omp)
+#pragma omp parallel //if (use_omp)
     {
         ThreadWorkspace ws;
         std::vector<Real> iface_rhs_line;

@@ -227,7 +227,7 @@ public:
         std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
         std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
         for (int p = 0; p < nActive; ++p)
         {
             Dim j, k;
@@ -237,7 +237,7 @@ public:
 
         schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
         for (int p = 0; p < nActive; ++p)
         {
             Dim j, k;
@@ -356,7 +356,7 @@ public:
         std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
         std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
         for (int p = 0; p < nActive; ++p)
         {
             Dim i, k;
@@ -366,7 +366,7 @@ public:
 
         schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
         for (int p = 0; p < nActive; ++p)
         {
             Dim i, k;
@@ -485,7 +485,7 @@ public:
         std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
         std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
         for (int p = 0; p < nActive; ++p)
         {
             Dim i, j;
@@ -495,7 +495,7 @@ public:
 
         schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
         for (int p = 0; p < nActive; ++p)
         {
             Dim i, j;
@@ -906,7 +906,7 @@ public:
             std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
             std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
             for (int p = 0; p < nActive; ++p)
             {
                 Dim j, k;
@@ -916,7 +916,7 @@ public:
 
             schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
             for (int p = 0; p < nActive; ++p)
             {
                 Dim j, k;
@@ -1169,7 +1169,7 @@ public:
             std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
             std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
             for (int p = 0; p < nActive; ++p)
             {
                 Dim i, k;
@@ -1179,7 +1179,7 @@ public:
 
             schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
             for (int p = 0; p < nActive; ++p)
             {
                 Dim i, k;
@@ -1432,7 +1432,7 @@ public:
             std::vector<Real> rhs_flat(size_t(nActive) * size_t(local_N));
             std::vector<Real> sol_flat(size_t(nActive) * size_t(local_N));
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
             for (int p = 0; p < nActive; ++p)
             {
                 Dim i, j;
@@ -1442,7 +1442,7 @@ public:
 
             schur.solve_batch(rhs_flat.data(), nActive, sol_flat.data(), use_omp);
 
-#pragma omp parallel for schedule(static) if (use_omp)
+#pragma omp parallel for schedule(static) //if (use_omp)
             for (int p = 0; p < nActive; ++p)
             {
                 Dim i, j;

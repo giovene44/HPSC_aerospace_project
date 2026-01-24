@@ -1,0 +1,2 @@
+Nx		dx		dt		nsteps		L2_u_abs		L2_p_abs		L2_u_rel		L2_p_rel		TimeNoOMP	TimeOMP		SpeedUp		Procs		Threads		Rate_u		Rate_p
+128		4.927989e-02		0.000020		25		1.495811e-03		3.865744e-01		1.338547e-04		6.959943e-02		1.420500e+02	1.346662e+02		1.05		8		2		0.00		0.00

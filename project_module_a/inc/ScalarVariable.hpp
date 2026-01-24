@@ -118,12 +118,13 @@ public:
 
     void set_all(BoundaryFunctions &other, Real t)
     {
-        for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
-        {
-            Dim i = idx % Nx;
-            Dim j = (idx / Nx) % Ny;
-            Dim k = idx / (Nx * Ny);
 
+        #pragma omp parallel for collapse(3)
+        for (Dim k = 0; k < Nz; ++k)
+        for (Dim j = 0; j < Ny; ++j)
+        for (Dim i = 0; i < Nx; ++i)
+        {
+            Dim idx = i + j * Nx + k * Nx * Ny;
             // Convert grid indices to physical coordinates
             Real x = i * dx;
             Real y = j * dy;
