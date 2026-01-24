@@ -77,7 +77,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
 
     // 5) COMPUTE ERRORS
 
-    T_final += Real(0.0);
+    T_final += Real(1.5);
 
     std::cout << "Computing Errors at T = " << T_final << "...\n";
 
