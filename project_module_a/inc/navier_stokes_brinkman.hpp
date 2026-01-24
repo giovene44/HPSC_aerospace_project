@@ -97,8 +97,7 @@ public:
           // FINAL SOLUTION STORAGE
           // ============================
           velocity_solution(Nx, Ny, Nz, dx, dy, dz),
-          pressure_solution(Nx, Ny, Nz, dx, dy, dz),
-          use_openmp(use_openmp)
+          pressure_solution(Nx, Ny, Nz, dx, dy, dz)
 
     {
         // --- Initialize all fields ---
@@ -201,7 +200,7 @@ public:
 
         // 2. Single Unified Loop for both Fields
         // Collapsing loops improves OpenMP efficiency
-        #pragma omp parallel for reduction(+:local_sum_err_u, local_sum_norm_u, local_sum_err_p, local_sum_norm_p) collapse(2) if (use_openmp)
+        #pragma omp parallel for reduction(+:local_sum_err_u, local_sum_norm_u, local_sum_err_p, local_sum_norm_p) collapse(2)
         for (Dim k = k0; k < k1; ++k)
         {
             for (Dim j = j0; j < j1; ++j)

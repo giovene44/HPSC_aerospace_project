@@ -809,13 +809,13 @@ Real NavierStokesBrinkman::solve_mpi(const ManufacturedSolution &mms, const MPIT
         // MPI ADI velocity solves with synchronization
         vector_rhs = xi - eta.A_operator(0, gamma_field);
 
-        velocity_solver.solve_x_only(vector_rhs, eta, topo, x_vector_handler, use_openmp);
+        velocity_solver.solve_x_only(vector_rhs, eta, topo, x_vector_handler);
 
         vector_rhs = eta - zeta.A_operator(1, gamma_field);
-        velocity_solver.solve_y_only(vector_rhs, zeta, topo, y_vector_handler, use_openmp);
+        velocity_solver.solve_y_only(vector_rhs, zeta, topo, y_vector_handler);
 
         vector_rhs = zeta - velocity_solution.A_operator(2, gamma_field);
-        velocity_solver.solve_z_only(vector_rhs, velocity_solution, topo, z_vector_handler, use_openmp);
+        velocity_solver.solve_z_only(vector_rhs, velocity_solution, topo, z_vector_handler);
         
         globalize_velocity(velocity_solution, Nx, Ny, Nz, topo);
 
@@ -825,12 +825,12 @@ Real NavierStokesBrinkman::solve_mpi(const ManufacturedSolution &mms, const MPIT
         pressure_solver.set_t(t_np1);
 
         // MPI ADI pressure solves with synchronization
-        pressure_solver.solve_x_mpi(rhs, psi, topo, use_openmp);
+        pressure_solver.solve_x_mpi(rhs, psi, topo);
         globalize_pressure(psi, Nx, Ny, Nz, topo);
 
-        pressure_solver.solve_y_mpi(psi, phi, topo, use_openmp);
+        pressure_solver.solve_y_mpi(psi, phi, topo);
         globalize_pressure(phi, Nx, Ny, Nz, topo);
-        pressure_solver.solve_z_mpi(phi, other_phi, topo, use_openmp);
+        pressure_solver.solve_z_mpi(phi, other_phi, topo);
         globalize_pressure(other_phi, Nx, Ny, Nz, topo);
 
         pressure_solution += other_phi;
