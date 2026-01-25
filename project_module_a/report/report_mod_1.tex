@@ -557,6 +557,7 @@ The serial execution follows a structured sequence of directional sweeps to upda
 
 \begin{algorithm}[H]
 \caption{Direction Splitting (single sweep)}
+\label{alg:direction_splitting}
 \begin{algorithmic}[1]
 \For{$i_1 = 0$ to $N_1^{\text{not swept}}-1$}
   \For{$i_2 = 0$ to $N_2^{\text{not swept}}-1$}
@@ -686,7 +687,7 @@ To overcome these limitations, a parallelization strategy based on the distribut
 
 Within the framework of Direction Splitting, a \emph{line} is defined as the set of grid points aligned along the current computational direction, for example along the $x$-axis. The parallelization strategy is organized into two distinct and complementary levels:
 
-\begin{itemize}
+\begin{enumerate}
     \item \textbf{Segment level (MPI)}:
     Each one-dimensional line arising from a directional sweep is decomposed into contiguous local segments. Every MPI process owns one segment per line and applies the Schur Complement Method to correctly account for the coupling with neighboring segments located on different processes. This strategy enables the efficient solution of the global tridiagonal system in a distributed-memory environment with minimal communication.
 
@@ -695,9 +696,9 @@ Within the framework of Direction Splitting, a \emph{line} is defined as the set
 
     \item \textbf{Domain decomposition (MPI)}:
     The full three-dimensional domain is partitioned into subdomains and distributed across MPI processes. Within each subdomain, the segment-level (Schur complement) and bundle-level (OpenMP) parallelization strategies are applied. This hierarchical organization enables simultaneous computation across different regions of the domain while solving multiple lines per region, achieving scalable parallel efficiency at the distributed-memory level.
-\end{itemize}
+\end{enumerate}
 
-\subsection{Schur Complement Method}
+\subsection{Schur Complement}
 
 At the segment level, each MPI process classifies its unknowns into internal variables $u_i$ and interface variables $u_s$. For a given one-dimensional segment, the global linear system
 \[
@@ -739,6 +740,11 @@ yields the reduced interface system (Schur complement)
 \end{equation}
 
 The resulting Schur matrix remains tridiagonal, allowing the reduced system to be efficiently solved using the Thomas algorithm.
+\subsection{Bundle-Level Parallelism (OpenMP)}
+Algorithm~\ref{alg:direction_splitting} illustrates the bundle-level structure of a single directional sweep. For a fixed sweep direction, the three-dimensional domain is interpreted as a collection of independent one-dimensional lines indexed by $(i_1,i_2)$. Within each MPI process, these lines are mutually independent and can therefore be solved concurrently. This natural parallelism is exploited using OpenMP by distributing the iterations of the outer loops across threads. As a result, multiple lines are processed simultaneously within a shared-memory node, maximizing core utilization and significantly reducing the computational cost of each time step.
+
+
+
 
 \subsection{Domain Decomposition}
 
