@@ -146,7 +146,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         // std::cout << "Solver initialized (nu=" << nu << ").\n";
     }
 
-    Real time_out_auto = nsb_solver.solve_only_momentum_mpi(mms, topo);
+    Real time_out_auto = nsb_solver.solve_mpi(mms, topo);
     time_out = time_out_auto;
 
     if (rank == 0)
