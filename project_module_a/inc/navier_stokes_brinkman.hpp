@@ -31,14 +31,14 @@ public:
 
 public:
     NavierStokesBrinkman(const Dim Nx, const Dim Ny, const Dim Nz,
-                          const Real dt, const Real T,
-                          BoundaryFunctions forcing_func,
-                          std::function<Real(Real, Real, Real)> k_func,
-                          std::string u_boundary_file,
-                          std::string p_boundary_file,
-                          BoundaryFunctions p_exact,
-                          const Real dx, const Real dy, const Real dz,
-                          const Real nu)
+                         const Real dt, const Real T,
+                         BoundaryFunctions forcing_func,
+                         std::function<Real(Real, Real, Real)> k_func,
+                         std::string u_boundary_file,
+                         std::string p_boundary_file,
+                         BoundaryFunctions p_exact,
+                         const Real dx, const Real dy, const Real dz,
+                         const Real nu)
         : // ============================
           // GRID, MATERIAL, AND TIME INFO
           // ============================
@@ -160,6 +160,7 @@ public:
 #ifdef USE_MPI
 
     Real solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo);
+    Real solve_only_momentum_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo);
     void compute_forcing_term_mpi(VectorVariable &f, Real t, const MPITopology3D &topo);
     void globalize_velocity(VectorVariable &field, Dim Nx, Dim Ny, Dim Nz, const MPITopology3D &topo);
     void globalize_pressure(ScalarVariable &field, Dim Nx, Dim Ny, Dim Nz, const MPITopology3D &topo);
@@ -174,7 +175,7 @@ public:
                        Real nu,
                        const ScalarVariable &k, const MPITopology3D &topo);
 
-    #ifdef USE_MPI
+#ifdef USE_MPI
     /**
      * @brief Computes L2 errors for both Velocity and Pressure in a single pass over the grid.
      * * @param u_num Numerical velocity field (Pass nsb_solver.u_0)
@@ -198,9 +199,9 @@ public:
         Real local_sum_err_u = 0.0, local_sum_norm_u = 0.0;
         Real local_sum_err_p = 0.0, local_sum_norm_p = 0.0;
 
-        // 2. Single Unified Loop for both Fields
-        // Collapsing loops improves OpenMP efficiency
-        #pragma omp parallel for reduction(+:local_sum_err_u, local_sum_norm_u, local_sum_err_p, local_sum_norm_p) collapse(2)
+// 2. Single Unified Loop for both Fields
+// Collapsing loops improves OpenMP efficiency
+#pragma omp parallel for reduction(+ : local_sum_err_u, local_sum_norm_u, local_sum_err_p, local_sum_norm_p) collapse(2)
         for (Dim k = k0; k < k1; ++k)
         {
             for (Dim j = j0; j < j1; ++j)
@@ -230,17 +231,17 @@ public:
                     Real du_y = u_num_y - u_ex_y;
                     Real du_z = u_num_z - u_ex_z;
 
-                    local_sum_err_u  += du_x*du_x + du_y*du_y + du_z*du_z;
-                    local_sum_norm_u += u_ex_x*u_ex_x + u_ex_y*u_ex_y + u_ex_z*u_ex_z;
+                    local_sum_err_u += du_x * du_x + du_y * du_y + du_z * du_z;
+                    local_sum_norm_u += u_ex_x * u_ex_x + u_ex_y * u_ex_y + u_ex_z * u_ex_z;
 
                     // ============================
                     // 2. PRESSURE (Cell Center)
                     // ============================
-                    Real p_ex  = p_exact.value(x, y, z, t);
+                    Real p_ex = p_exact.value(x, y, z, t);
                     Real p_val = p_num.get(i, j, k);
-                    Real dp    = p_val - p_ex;
+                    Real dp = p_val - p_ex;
 
-                    local_sum_err_p  += dp * dp;
+                    local_sum_err_p += dp * dp;
                     local_sum_norm_p += p_ex * p_ex;
                 }
             }
@@ -253,15 +254,15 @@ public:
 
         // Determine MPI type (float or double)
         MPI_Datatype mpi_real = (sizeof(Real) == sizeof(double)) ? MPI_DOUBLE : MPI_FLOAT;
-        
+
         MPI_Allreduce(local_sums, global_sums, 4, mpi_real, MPI_SUM, topo.cart_comm());
 
         // 4. Final Calculation
         Real dV = dx * dy * dz;
-        
+
         Real err_u_abs = std::sqrt(global_sums[0] * dV);
         Real nrm_u_abs = std::sqrt(global_sums[1] * dV);
-        
+
         Real err_p_abs = std::sqrt(global_sums[2] * dV);
         Real nrm_p_abs = std::sqrt(global_sums[3] * dV);
 
