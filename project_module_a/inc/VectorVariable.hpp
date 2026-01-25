@@ -13,7 +13,7 @@ public:
     {
         data.clear();
         for (int a = 0; a < 3; ++a)
-            data.push_back(ScalarVariable(Nx, Ny, Nz, dx, dy, dz));
+            data.emplace_back(ScalarVariable(Nx, Ny, Nz, dx, dy, dz));
     }
 
     inline Dim size() const noexcept
@@ -79,23 +79,30 @@ public:
         }
     }
 
-    void set_all(BoundaryFunctions &other, Real t)
+    void set_all(BoundaryFunctions &other, Real t, bool use_staggering = true)
     {
 
-        for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
-        {
-            Dim i = idx % Nx;
-            Dim j = (idx / Nx) % Ny;
-            Dim k = idx / (Nx * Ny);
-
+        #pragma omp parallel for collapse(3)
+        for(Dim i=0; i<Nx; ++i)
+        for(Dim j=0; j<Ny; ++j)
+        for(Dim k=0; k<Nz; ++k){
             // Convert grid indices to physical coordinates
             Real x = i * dx;
             Real y = j * dy;
             Real z = k * dz;
 
-            data[0].set(idx) = other.value<0>(x, y, z, t);
-            data[1].set(idx) = other.value<1>(x, y, z, t);
-            data[2].set(idx) = other.value<2>(x, y, z, t);
+            Dim idx = i + j * Nx + k * Nx * Ny;
+
+            if (!use_staggering)
+            {
+                data[0].set(idx) = other.value<0>(x, y, z, t);
+                data[1].set(idx) = other.value<1>(x, y, z, t);
+                data[2].set(idx) = other.value<2>(x, y, z, t);
+                continue;
+            }
+            data[0].set(idx) = other.value<0>(x + dx / Real(2.0), y, z, t);
+            data[1].set(idx) = other.value<1>(x, y + dy / Real(2.0), z, t);
+            data[2].set(idx) = other.value<2>(x, y, z + dz / Real(2.0), t);
         }
     }
 
@@ -119,9 +126,7 @@ public:
     // -------------------------------------------------------------------------
     // Uses centered difference (u_{i+1} - u_{i-1}) / (2*h) for interior points.
     // Uses one-sided difference at boundaries (1st Order).
-
-    // TODO: This should be changed: it needs to shift to the pressure nodes!
-    Real first_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k) const
+    Real first_derivative(int axes, int derivation_direction, Dim i, Dim j, Dim k, BoundaryFunctions const &other, Real t) const
     {
 
         Real v_plus = 0.0;
@@ -133,28 +138,67 @@ public:
 
         if (derivation_direction == 0)
         { // x
-            if (i == 0 && axes == 0)
-                throw std::invalid_argument("VectorVariable::first_derivative: invalid i for centered difference");
+            if (i == 0)
+            {   
+                Real boundary_value = 0.0;
+                if (axes == 0)
+                    boundary_value = other.value<0>(0.0, j * dy, k * dz, t);
+                else if (axes == 1)
+                    boundary_value = other.value<1>(0.0, j * dy, k * dz, t);
+                else if (axes == 2)
+                    boundary_value = other.value<2>(0.0, j * dy, k * dz, t);
+                return (-Real(4.0) * boundary_value + Real(3.0) * value(axes, i, j, k) + value(axes, i + 1, j, k)) / (3.0 * dx);
+            }
+            else if (i == Nx - 1)
+            {
+                return (Real(3.0) * value(axes, i, j, k) - Real(4.0) * value(axes, i - 1, j, k) + value(axes, i - 2, j, k)) / (2.0 * dx);
+            }
 
-            v_plus = value(axes, i, j, k);
+            v_plus = value(axes, i + 1, j, k);
             v_minus = value(axes, i - 1, j, k);
             den = dx;
         }
         else if (derivation_direction == 1)
         { // y
-            if (j == 0 && axes == 1)
-                throw std::invalid_argument("VectorVariable::first_derivative: invalid j for centered difference");
+            if (j == 0)
+            {
+                Real boundary_value = 0.0;
+                if (axes == 0)
+                    boundary_value = other.value<0>(i * dx, 0.0, k * dz, t);
+                else if (axes == 1)
+                    boundary_value = other.value<1>(i * dx, 0.0, k * dz, t);
+                else if (axes == 2)
+                    boundary_value = other.value<2>(i * dx, 0.0, k * dz, t);
+                return (-Real(4.0) * boundary_value + Real(3.0) * value(axes, i, j, k) + value(axes, i, j + 1, k)) / (3.0 * dy);
+            }
+            else if (j == Ny - 1)
+            {
+                return (Real(3.0) * value(axes, i, j, k) - Real(4.0) * value(axes, i, j - 1, k) + value(axes, i, j - 2, k)) / (2.0 * dy);
+            }
 
-            v_plus = value(axes, i, j, k);
+            v_plus = value(axes, i, j + 1, k);
             v_minus = value(axes, i, j - 1, k);
             den = dy;
         }
         else if (derivation_direction == 2)
         { // z
-            if (k == 0 && axes == 2)
-                throw std::invalid_argument("VectorVariable::first_derivative: invalid k for centered difference");
+            if(k == 0)
+            {
+                Real boundary_value = 0.0;
+                if (axes == 0)
+                    boundary_value = other.value<0>(i * dx, j * dy, 0.0, t);
+                else if (axes == 1)
+                    boundary_value = other.value<1>(i * dx, j * dy, 0.0, t);
+                else if (axes == 2)
+                    boundary_value = other.value<2>(i * dx, j * dy, 0.0, t);
+                return (-Real(4.0) * boundary_value + Real(3.0) * value(axes, i, j, k) + value(axes, i, j, k + 1)) / (3.0 * dz);
+            }
+            else if (k == Nz - 1)
+            {
+                return (Real(3.0) * value(axes, i, j, k) - Real(4.0) * value(axes, i, j, k - 1) + value(axes, i, j, k - 2)) / (2.0 * dz);
+            }
 
-            v_plus = value(axes, i, j, k);
+            v_plus = value(axes, i, j, k + 1);
             v_minus = value(axes, i, j, k - 1);
             den = dz;
         }
@@ -163,15 +207,15 @@ public:
             throw std::invalid_argument("VectorVariable::first_derivative: invalid derivation_direction");
         }
 
-        return (v_plus - v_minus) / den;
+        return (v_plus - v_minus) / (2 * den);
     }
 
-    Real first_derivative(int axes, int derivation_direction, Dim index) const
+    Real first_derivative(int axes, int derivation_direction, Dim index, BoundaryFunctions const &other, Real t) const
     {
         Dim i = index % Nx;
         Dim j = (index / Nx) % Ny;
         Dim k = index / (Nx * Ny);
-        return first_derivative(axes, derivation_direction, i, j, k);
+        return first_derivative(axes, derivation_direction, i, j, k, other, t);
     }
 
     // second order derivative on the velocity nodes (staggering handled by using
@@ -269,7 +313,11 @@ public:
 
     Real divergence(Dim i, Dim j, Dim k) const
     {
-        return (first_derivative(0, 0, i, j, k) + first_derivative(1, 1, i, j, k) + first_derivative(2, 2, i, j, k));
+        Real dudx = (value(0, i, j, k) - value(0, i - 1, j, k)) / dx;
+        Real dvdy = (value(1, i, j, k) - value(1, i, j - 1, k)) / dy;
+        Real dwdz = (value(2, i, j, k) - value(2, i, j, k - 1)) / dz;
+
+        return dudx + dvdy + dwdz;
     }
 
     VectorVariable &operator+=(const VectorVariable &rhs)
@@ -299,7 +347,7 @@ public:
             throw std::invalid_argument("VectorVariable::operator- dimension mismatch");
 
         VectorVariable out(Nx, Ny, Nz, dx, dy, dz);
-        for (int a = 0; a < static_cast<int>(size()); ++a)
+        for (Dim a = 0; a < Dim(size()); ++a)
         {
             for (Dim i = 0; i < Nx; ++i)
             {
@@ -307,7 +355,7 @@ public:
                 {
                     for (Dim k = 0; k < Nz; ++k)
                     {
-                        out.set(a, i, j, k) = value(a, i, j, k) - rhs.value(a, i, j, k);
+                        out.set(a, i, j, k) = this->value(a, i, j, k) - rhs.value(a, i, j, k);
                     }
                 }
             }
@@ -337,11 +385,49 @@ public:
         return out;
     }
 
+    VectorVariable A_operator(int derivation_direction, ScalarVariable gamma) const
+    {
+        VectorVariable out(Nx, Ny, Nz, dx, dy, dz);
+        for (Dim component = 0; component < 3; ++component)
+        for (Dim i = 0; i < Nx; ++i)
+        {
+            for (Dim j = 0; j < Ny; ++j)
+            {
+                for (Dim k = 0; k < Nz; ++k)
+                {
+                    out.set(component, i, j, k) = gamma.get(i, j, k) * second_derivative(component, derivation_direction, i, j, k);
+                }
+            }
+        }
+        return out;
+    }
+
     inline ScalarVariable &component(int axes)
     {
         if (axes < 0 || axes >= static_cast<int>(size()))
             throw std::out_of_range("axes index out of range");
         return data[axes];
+    }
+
+    void print_vector()
+    {
+        for (int a = 0; a < 3; a++)
+        {
+            std::cout << "Component " << a << ":\n";
+            for (Dim k = 0; k < Nz; k++)
+            {
+                for (Dim j = Ny - 1; j >= 0; j--)
+                {
+                    for (Dim i = 0; i < Nx; i++)
+                    {
+                        std::cout << value(a, i, j, k) << " ";
+                    }
+                    std::cout << "\n";
+                }
+                std::cout << "----\n";
+            }
+            std::cout << "====================\n";
+        }
     }
 
     // Convenient named accessors

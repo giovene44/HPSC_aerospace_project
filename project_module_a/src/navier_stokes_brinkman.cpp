@@ -5,17 +5,19 @@
 #include <fstream>
 #include <sstream>
 #include <helper.hpp>
+#include <filesystem>
+#include <chrono>
 
-Real NavierStokesBrinkmann::compute_beta(Dim i, Dim j, Dim k) const
+Real NavierStokesBrinkman::compute_beta(Dim i, Dim j, Dim k) const
 {
     Real k_val = k_field.get(i, j, k);
     if (std::fabs(k_val) < 1e-12f)
         k_val = 1e-12f;
 
-    return 1.0f + (dt * nu) / (2.0f * k_val);
+    return (dt * nu) / (Real(2.0) * k_val);
 }
 
-Real NavierStokesBrinkmann::compute_beta(Dim index) const
+Real NavierStokesBrinkman::compute_beta(Dim index) const
 {
     Dim i = index % Nx;
     Dim j = (index / Nx) % Ny;
@@ -23,49 +25,17 @@ Real NavierStokesBrinkmann::compute_beta(Dim index) const
     return compute_beta(i, j, k);
 }
 
-void NavierStokesBrinkmann::center_pressure(ScalarVariable &pressure_field)
-{
-    Real average = 0.0f;
-    Real total_elements = 0.0f;
-
-    for (Dim idx = 0; idx < Nx; ++idx)
-    {
-        for(Dim idy = 0; idy< Ny; ++idy)
-        {
-            for(Dim idz = 0; idz < Nz; ++idz)
-            {
-                Dim weight = 1;
-                if (idx == 0 || idx == Nx - 1) weight *= 0.5;
-                if (idy == 0 || idy == Ny - 1) weight *= 0.5;
-                if (idz == 0 || idz == Nz - 1) weight *= 0.5;
-                average += pressure_field.get(idx, idy, idz) * weight;
-
-                total_elements += weight;
-
-            }
-        }
-    }
-
-
-    average /= total_elements;
-
-    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
-    {
-        pressure_field.set(idx) = pressure_field.get(idx) - average;
-    }
-}
-
-Real NavierStokesBrinkmann::compute_gamma(Dim i, Dim j, Dim k) const
+Real NavierStokesBrinkman::compute_gamma(Dim i, Dim j, Dim k) const
 {
     Real k_val = k_field.get(i, j, k);
-    if (std::fabs(k_val) < 1e-12f)
-        k_val = 1e-12f;
+    if (std::fabs(k_val) < Real(1e-12))
+        k_val = Real(1e-12);
 
-    Real beta = 1.0f + (dt * nu) / (2.0f * k_val);
-    return (dt * nu) / (2.0f * beta);
+    Real beta = compute_beta(i, j, k);
+    return (dt * nu / Real(2.0)) / (Real(1.0) + beta);
 }
 
-Real NavierStokesBrinkmann::compute_gamma(Dim index) const
+Real NavierStokesBrinkman::compute_gamma(Dim index) const
 {
     Dim i = index % Nx;
     Dim j = (index / Nx) % Ny;
@@ -73,34 +43,45 @@ Real NavierStokesBrinkmann::compute_gamma(Dim index) const
     return compute_gamma(i, j, k);
 }
 
-void NavierStokesBrinkmann::initialize_gamma_field()
+void NavierStokesBrinkman::initialize_gamma_field()
 {
-    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+#pragma omp parallel for collapse(3)
+    for (Dim k = 0; k < Nz; ++k)
     {
-        Dim i = idx % Nx;
-        Dim j = (idx / Nx) % Ny;
-        Dim k = idx / (Nx * Ny);
-        gamma_field.set(idx) = compute_gamma(i, j, k);
+        for (Dim j = 0; j < Ny; ++j)
+        {
+            for (Dim i = 0; i < Nx; ++i)
+            {
+                Dim idx = i + j * Nx + k * Nx * Ny;
+                gamma_field.set(idx) = compute_gamma(i, j, k);
+            }
+        }
+    }
+}
+void NavierStokesBrinkman::initialize_k_field()
+{
+#pragma omp parallel for collapse(3)
+    for (Dim k = 0; k < Nz; ++k)
+    {
+        for (Dim j = 0; j < Ny; ++j)
+        {
+            for (Dim i = 0; i < Nx; ++i)
+            {
+                Dim idx = i + j * Nx + k * Nx * Ny;
+
+                // Convert grid indices to physical coordinates
+                Real x = i * dx;
+                Real y = j * dy;
+                Real z = k * dz;
+
+                k_field.set(idx) = k_function(x, y, z);
+            }
+        }
     }
 }
 
-void NavierStokesBrinkmann::initialize_k_field()
-{
-    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
-    {
-        Dim i = idx % Nx;
-        Dim j = (idx / Nx) % Ny;
-        Dim k = idx / (Nx * Ny);
-
-        // Convert grid indices to physical coordinates
-        Real x = i * dx;
-        Real y = j * dy;
-        Real z = k * dz;
-
-        k_field.set(idx) = k_function(x, y, z);
-    }
-}
-void NavierStokesBrinkmann::compute_vector_g(Real t)
+// TODO: not called
+void NavierStokesBrinkman::compute_vector_g(Real t)
 {
     // -------------------------------------------------------------------------
     // Purpose:
@@ -108,21 +89,12 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
     //
     //   g = f - ∇p + (ν/2)(Dxx*η0 + Dyy*ζ0 + Dzz*u0) - (ν / (2k)) * u0
     // -------------------------------------------------------------------------
-    pressure_predictor = pressure_solution + other_phi;
-    
-    gradient_pressure_predictor.set(0) = pressure_predictor.getGradient_x();
-    gradient_pressure_predictor.set(1) = pressure_predictor.getGradient_y();
-    gradient_pressure_predictor.set(2) = pressure_predictor.getGradient_z();
 
-    // Define a target index for debugging prints to avoid console flood
-    constexpr Dim DEBUG_I = 1;
-    constexpr Dim DEBUG_J = 1;
-    constexpr Dim DEBUG_K = 1;
-    constexpr Dim DEBUG_COMP = 0; // Check the x-component
+    g.set_all(Real(0.0));
 
     for (Dim comp = 0; comp < vector_rhs.size(); ++comp)
     {
-        for (Dim idx = 0; idx < vector_rhs.elements_per_component(); ++idx)
+        for (Dim idx = 0; idx < g.elements_per_component(); ++idx)
         {
             // Convert linear index to 3D coordinates
             Dim i = idx % Nx;
@@ -146,67 +118,44 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
             // -----------------------------------------------------------------
             // Directional Laplacian terms
             // -----------------------------------------------------------------
-            Real dxx_eta = eta.second_derivative(comp, 0, idx);             // ∂²η/∂x²
-            Real dyy_zeta = zeta.second_derivative(comp, 1, idx);           // ∂²ζ/∂y²
-            Real dzz_u = velocity_solution.second_derivative(comp, 2, idx); // ∂²u/∂z²
+            Real dxx_eta = velocity_solution.second_derivative(comp, 0, idx);  // ∂²η/∂x²
+            Real dyy_zeta = velocity_solution.second_derivative(comp, 1, idx); // ∂²ζ/∂y²
+            Real dzz_u = velocity_solution.second_derivative(comp, 2, idx);    // ∂²u/∂z²
             Real laplacian = dxx_eta + dyy_zeta + dzz_u;
 
             // -----------------------------------------------------------------
             // Physical properties
             // -----------------------------------------------------------------
-            Real nu_val = nu;
-            Real k_val = std::max(k_field.get(idx), 1e-12f); // local permeability k
+            Real k_val = std::max(k_field.get(idx), Real(1e-12)); // local permeability k (unused)
 
             // Evaluate forcing function
-            std::vector<Real> forcing_vec = forcing_function(x, y, z, t);
-            Real forcing = forcing_vec[comp];
-            Real p_grad = gradient_pressure_predictor.value(comp, idx);
-            Real velocity = velocity_solution.value(comp, idx);
+            std::vector<Real> forcing_current = {forcing_function.value<0>(x, y, z, t + dt * Real(0.5)),
+                                                 forcing_function.value<1>(x, y, z, t + dt * Real(0.5)),
+                                                 forcing_function.value<2>(x, y, z, t + dt * Real(0.5))};
+            Real forcing = forcing_current[comp];
 
-            // =================================================================
-            // DEBUGGING OUTPUT
-            // =================================================================
-            /*
-            if (i == DEBUG_I && j == DEBUG_J && k == DEBUG_K && comp == DEBUG_COMP)
-            {
-                std::cout << "\n--- DEBUG: Time=" << t << ", Index (" << i << "," << j << "," << k << "), Comp=" << comp << " ---\n";
-                std::cout << "k_val (permeability): " << k_val << "\n";
-                std::cout << "Laplacian components:\n";
-                std::cout << "  Dxx_eta: " << dxx_eta << "\n";
-                std::cout << "  Dyy_zeta: " << dyy_zeta << "\n";
-                std::cout << "  Dzz_u: " << dzz_u << "\n";
-                std::cout << "Laplacian sum: " << laplacian << "\n";
-                std::cout << "p_grad: " << p_grad << "\n";
-                std::cout << "Forcing: " << forcing << "\n";
-            }
-
-
-            */
+            // Real p_grad = gradient_pressure_predictor.value(comp, idx); // unused
+            // Real velocity = velocity_solution.value(comp, idx); // unused
 
             // =================================================================
 
             // -----------------------------------------------------------------
             // Assemble RHS term
             // -----------------------------------------------------------------
-            Real g_val =
-                forcing                                      // f
-                - p_grad                                     // -∇p
-                + Real(0.5) * nu_val * laplacian             // + (ν/2)(∇²η + ∇²ζ + ∇²u)
-                - (nu_val / (Real(2.0) * k_val)) * velocity; // - (ν/(2k))u₀
 
-            // =================================================================
-            // DEBUGGING OUTPUT - Final result
-            // =================================================================
-            /*
-              if (i == DEBUG_I && j == DEBUG_J && k == DEBUG_K && comp == DEBUG_COMP)
+            if (i == 0 || j == 0 || k == 0 || i == Nx - 1 || j == Ny - 1 || k == Nz - 1)
             {
-                std::cout << "g_val (FINAL): " << g_val << "\n";
-                std::cout << "--------------------------------------------------\n";
+                // Boundary points: set g to zero (or handle as needed)
+                g.set(comp, idx) = forcing - nu / (Real(2.0) * k) * velocity_solution.value(comp, idx);
+                continue;
             }
 
-            */
-
-            // =================================================================
+            Real g_val =
+                forcing                                                           // f
+                - gradient_pressure_predictor.value(comp, idx)                    // -∇p
+                + Real(0.5) * nu * laplacian                                      // + (ν/2)(∇²η + ∇²ζ + ∇²u)
+                - (nu / (Real(2.0) * k_val)) * velocity_solution.value(comp, idx) // - (ν/(2k))u₀
+                ;
 
             // -----------------------------------------------------------------
             // Store result
@@ -215,197 +164,751 @@ void NavierStokesBrinkmann::compute_vector_g(Real t)
         }
     }
 }
-void NavierStokesBrinkmann::compute_vector_xi()
+// TODO: not called
+void NavierStokesBrinkman::compute_vector_xi()
 {
     for (Dim comp = 0; comp < xi.size(); ++comp)
     {
         for (Dim idx = 0; idx < xi.elements_per_component(); ++idx)
         {
             xi.set(comp, idx) =
-                velocity_solution.value(comp, idx) + (dt / compute_beta(idx)) * g.value(comp, idx);
+                (velocity_solution.value(comp, idx) + dt * g.value(comp, idx)) / compute_beta(idx);
         }
     }
 }
-
-void NavierStokesBrinkmann::compute_rhs_pressure()
+// TODO: not called
+void NavierStokesBrinkman::compute_divergence_cell_center(const VectorVariable &u,
+                                                          ScalarVariable &div)
 {
-    for (Dim x = 1; x < Nx; ++x)
-    {
-        for (Dim y = 1; y < Ny; ++y)
-        {
-            for (Dim z = 1; z < Nz; ++z)
+    div.set_all(Real(0.0));
+
+    for (Dim k = 1; k < Nz - 1; ++k)
+        for (Dim j = 1; j < Ny - 1; ++j)
+            for (Dim i = 1; i < Nx - 1; ++i)
             {
-                rhs.set(x, y, z) =
-                    -(1.0f / dt) *
-                    velocity_solution.divergence(x, y, z);
+                const Real dudx = (u.value(0, i, j, k) - u.value(0, i - 1, j, k)) / dx;
+                const Real dvdy = (u.value(1, i, j, k) - u.value(1, i, j - 1, k)) / dy;
+                const Real dwdz = (u.value(2, i, j, k) - u.value(2, i, j, k - 1)) / dz;
+
+                div.set(i, j, k) = dudx + dvdy + dwdz;
             }
-        }
-    }
-
-
-    //We Impose div(u)=0 at boundaries:
-
-    for (Dim j = 1; j < Ny; ++j)
-    {
-        for (Dim k = 1; k < Nz; ++k)
-        { 
-            rhs.set(0, j, k) = 0.0;
-        }
-    }
-
-    for (Dim i = 1; i < Nx; ++i)
-    {
-        for (Dim k = 1; k < Nz; ++k)
-        {
-            rhs.set(i, 0, k) = 0.0;
-        }
-    }
-
-    for (Dim i = 1; i < Nx; ++i)
-    {
-        for (Dim j = 1; j < Ny; ++j)
-        { 
-            rhs.set(i, j, 0) = 0.0;
-        }
-    }
-
-
-    rhs.set(0, 0, 0) = 0.0;
-
-    // edge (x,0,0):
-    for(Dim i = 1; i < Nx; ++i)
-    {
-        rhs.set(i, 0, 0) = 0.0;
-    }
-
-    // edge (0,y,0):
-    for(Dim j = 1; j < Ny; ++j)
-    {
-        rhs.set(0, j, 0) = 0.0;
-    }
-    // edge (0,0,z):
-    for(Dim k = 1; k < Nz; ++k)
-    {
-        rhs.set(0, 0, k) = 0.0;
-    }
 }
 
-void NavierStokesBrinkmann::solve(const ManufacturedSolution &mms)
+void NavierStokesBrinkman::compute_rhs_pressure(Real t)
 {
-    auto stride_x = [this](Dim j, Dim k)
-    { return j * Nx + k * Nx * Ny; };
-    auto stride_y = [this](Dim i, Dim k)
-    { return i + k * Nx * Ny; };
-    auto stride_z = [this](Dim i, Dim j)
-    { return i + j * Nx; };
 
-    DimensionsHandlerScalar<decltype(stride_x)> x_scalar_handler(Nx, Ny, Nz, dx, stride_x);
-    DimensionsHandlerScalar<decltype(stride_y)> y_scalar_handler(Nx, Ny, Nz, dy, stride_y);
-    DimensionsHandlerScalar<decltype(stride_z)> z_scalar_handler(Nx, Ny, Nz, dz, stride_z);
+    rhs.set_all(Real(0.0));
 
-    DimensionsHandlerVector<decltype(stride_x)> x_vector_handler(Nx, Ny, Nz, 0, 1, 2, dx, stride_x);
-    DimensionsHandlerVector<decltype(stride_y)> y_vector_handler(Nx, Ny, Nz, 1, 0, 2, dy, stride_y);
-    DimensionsHandlerVector<decltype(stride_z)> z_vector_handler(Nx, Ny, Nz, 2, 0, 1, dz, stride_z);
+    for (Dim k = 1; k < Nz - 1; ++k)
+        for (Dim j = 1; j < Ny - 1; ++j)
+            for (Dim i = 1; i < Nx - 1; ++i)
+            {
+
+                rhs.set(i, j, k) =
+                    Real(-(velocity_solution.divergence(i, j, k)) / dt);
+            }
+}
+
+void NavierStokesBrinkman::build_rhs(VectorVariable &rhs,
+                                     const VectorVariable &velocity_solution,
+                                     const ScalarVariable &p_star, // predictor pressure at cell centers
+                                     const VectorVariable &f_half,
+                                     Real dx, Real dy, Real dz,
+                                     Dim Nx, Dim Ny, Dim Nz,
+                                     Real dt,
+                                     Real nu,
+                                     const ScalarVariable &k)
+{
+    for (int c = 0; c < 3; ++c)
+        for (Dim kk = 0; kk < Nz; ++kk)
+            for (Dim jj = 0; jj < Ny; ++jj)
+                for (Dim ii = 0; ii < Nx; ++ii)
+                {
+                    const Real beta = (nu * dt) / (Real(2.0) * k.get(ii, jj, kk));
+                    const Real scale = Real(1.0) / (Real(1.0) + beta);
+                    const Real diff = (nu * dt) / Real(2.0);
+
+                    Real val = velocity_solution.value(c, ii, jj, kk) + dt * f_half.value(c, ii, jj, kk) - beta * velocity_solution.value(c, ii, jj, kk);
+
+                    const bool interior =
+                        (ii > 0 && ii < Nx - 1 &&
+                         jj > 0 && jj < Ny - 1 &&
+                         kk > 0 && kk < Nz - 1);
+                    if (interior)
+                    {
+                        // Explicit CN half diffusion: + (nu dt/2) Lap(u^n)
+                        const Real u0 = velocity_solution.value(c, ii, jj, kk);
+
+                        const Real uxx =
+                            (velocity_solution.value(c, ii + 1, jj, kk) - Real(2.0) * u0 + velocity_solution.value(c, ii - 1, jj, kk)) / (dx * dx);
+                        const Real uyy =
+                            (velocity_solution.value(c, ii, jj + 1, kk) - Real(2.0) * u0 + velocity_solution.value(c, ii, jj - 1, kk)) / (dy * dy);
+                        const Real uzz =
+                            (velocity_solution.value(c, ii, jj, kk + 1) - Real(2.0) * u0 + velocity_solution.value(c, ii, jj, kk - 1)) / (dz * dz);
+
+                        val += diff * (uxx + uyy + uzz);
+
+                        // Predictor pressure gradient at staggered locations (MAC-consistent one-sided):
+                        // u-face: dp/dx ≈ (p(i+1)-p(i))/dx
+                        // v-face: dp/dy ≈ (p(j+1)-p(j))/dy
+                        // w-face: dp/dz ≈ (p(k+1)-p(k))/dz
+                        const Real dp_dx = (p_star.get(ii + 1, jj, kk) - p_star.get(ii, jj, kk)) / dx;
+                        const Real dp_dy = (p_star.get(ii, jj + 1, kk) - p_star.get(ii, jj, kk)) / dy;
+                        const Real dp_dz = (p_star.get(ii, jj, kk + 1) - p_star.get(ii, jj, kk)) / dz;
+
+                        if (c == 0)
+                            val -= dt * dp_dx;
+                        else if (c == 1)
+                            val -= dt * dp_dy;
+                        else
+                            val -= dt * dp_dz;
+                    }
+
+                    rhs.set(c, ii, jj, kk) = val * scale;
+                }
+}
+
+#ifndef USE_MPI
+Real NavierStokesBrinkman::solve(const ManufacturedSolution &mms)
+{
+    Real t = Real(1.5);
+
+    (void)mms; // Unused parameter
+    DimensionsHandlerScalar x_scalar_handler(Nx, Ny, Nz, dx);
+    DimensionsHandlerScalar y_scalar_handler(Ny, Nx, Nz, dy);
+    DimensionsHandlerScalar z_scalar_handler(Nz, Nx, Ny, dz);
+
+    DimensionsHandlerVector x_vector_handler(Nx, Ny, Nz, 0, 1, 2, dx);
+    DimensionsHandlerVector y_vector_handler(Ny, Nx, Nz, 1, 0, 2, dy);
+    DimensionsHandlerVector z_vector_handler(Nz, Nx, Ny, 2, 0, 1, dz);
+
+    VectorVariable f_half(Nx, Ny, Nz, dx, dy, dz);
 
     // Initialize
-    velocity_solution.set_all(u_boundary, Real(0.0));
-    pressure_solution.set_all(p_boundary, Real(0.0));
+    velocity_solution.set_all(u_boundary, t);
+    pressure_solution.set_all(p_exact, t);
 
     // Init intermediate vars to avoid junk values
     xi = eta = zeta = velocity_solution;
-    psi = phi = other_phi = pressure_solution;
+    other_phi = phi = pressure_solution;
+    // other_phi.set_all(Real(0.0));
 
     velocity_time_series.clear();
     pressure_time_series.clear();
     velocity_time_series.emplace_back(velocity_solution);
     pressure_time_series.emplace_back(pressure_solution);
 
-       // --- Time Stepping Loop ---
-    for (Real t = dt; t <= T; t += dt)
+    // write_pressure_vtk("./Output/pressure_N"+std::to_string(Nx) +"_step"+ std::to_string(0) + ".vtk");
+
+    Dim nsteps = static_cast<Dim>(std::ceil(T / dt));
+    // --- Time Stepping Loop ---
+
+    // ScalarVariable corr_prev(Nx, Ny, Nz, dx, dy, dz);
+    ScalarVariable div_u(Nx, Ny, Nz, dx, dy, dz);
+    VectorVariable u_tmp(Nx, Ny, Nz, dx, dy, dz);
+    VectorVariable u_np1(Nx, Ny, Nz, dx, dy, dz);
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    for (int n = 0; n < nsteps; ++n)
     {
-        // 1. Momentum Predictor Step (Calculate u*)
-        // ------------------------------------------
-        compute_vector_g(t);
-        compute_vector_xi();
+        const Real t_np1 = t + dt;
+        const Real t_half = t + dt / Real(2.0);
 
-        // X-Sweep
-        vector_rhs = xi - eta;
-        velocity_solver.solve<decltype(stride_x), 0>(vector_rhs, vector_intermediate_solution, x_vector_handler);
-        eta += vector_intermediate_solution;
+        pressure_predictor = pressure_solution + other_phi;
 
-        // Y-Sweep
-        vector_rhs = eta - zeta;
-        velocity_solver.solve<decltype(stride_y), 1>(vector_rhs, vector_intermediate_solution, y_vector_handler);
-        zeta += vector_intermediate_solution;
+        // ---- Momentum step (ADI) with predictor pressure
+        velocity_solver.set_t(t_np1);
 
-        // Z-Sweep
-        vector_rhs = zeta - velocity_solution;
-        velocity_solver.solve<decltype(stride_z), 2>(vector_rhs, vector_intermediate_solution, z_vector_handler);
+        f_half.set_all(forcing_function, t_half, false);
 
-        // Update to Intermediate Velocity u*
-        velocity_solution += vector_intermediate_solution;
+        // RHS uses (pressure_solution - ∇pressure_predictor)
+        build_rhs(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field);
 
-        // 2. Pressure Projection Step (Calculate phi)
-        // -------------------------------------------
-        compute_rhs_pressure(); // RHS = -div(u*) / dt
+        vector_rhs = xi - eta.A_operator(0, gamma_field);
+        velocity_solver.solve<0>(vector_rhs, eta, x_vector_handler);
+        vector_rhs = eta - zeta.A_operator(1, gamma_field);
+        velocity_solver.solve<1>(vector_rhs, zeta, y_vector_handler);
+        vector_rhs = zeta - velocity_solution.A_operator(2, gamma_field);
+        velocity_solver.solve<2>(vector_rhs, velocity_solution, z_vector_handler);
+        // ---- Pressure correction (space-factored operator A)
 
-        // Solve Poisson Equation: Laplacian(phi) = RHS
-        pressure_solver.solve_pressure<decltype(stride_x), 0>(rhs, psi, x_scalar_handler);
-        pressure_solver.solve_pressure<decltype(stride_y), 1>(psi, phi, y_scalar_handler);
-        pressure_solver.solve_pressure<decltype(stride_z), 2>(phi, other_phi, z_scalar_handler);
+        compute_rhs_pressure(t_np1);
 
-        // 3. Update Fields
-        // -------------------------------------------
+        pressure_solver.set_t(t_np1);
 
-        // Update Pressure: p^{n+1} = phi (assuming phi is total pressure from BCs)
+        // (I - dxx) psi = rhs_p
+        // (I - dyy) phi = psi
+        // (I - dzz) corr_new = phi
+
+        pressure_solver.solve_pressure<0>(rhs, psi, x_scalar_handler);
+        pressure_solver.solve_pressure<1>(psi, phi, y_scalar_handler);
+        pressure_solver.solve_pressure<2>(phi, other_phi, z_scalar_handler);
+
+        // pressure_solver.solve_x(rhs, psi);
+        // pressure_solver.solve_y(psi, phi);
+        // pressure_solver.solve_z(phi, other_phi);
+
+        // ---- Pressure update at half-step (Auteri):
+        // p^{n+1/2} = p^{n-1/2} + ϕ^{n+1/2}
+
         pressure_solution += other_phi;
-        center_pressure(pressure_solution);
-        /*
-        // Correct Velocity: u^{n+1} = u* - (dt/beta) * grad(phi)
-        // This projects velocity onto the divergence-free space
-        for (Dim k = 0; k < Nz; ++k)
-        {
-            for (Dim j = 0; j < Ny; ++j)
+
+        t = t_np1;
+
+        std::cout << "Completed time step " << n + 1 << " / " << nsteps << ", t = " << t << "\n";
+    }
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end_time - start_time;
+    return elapsed.count();
+}
+#endif
+
+void NavierStokesBrinkman::write_velocity_vtk(const std::string &filename) const
+{
+    // Ensure the output directory exists
+    std::filesystem::path filepath(filename);
+    std::filesystem::create_directories(filepath.parent_path());
+
+    std::ofstream file(filename);
+    if (!file.is_open())
+        throw std::runtime_error("Cannot open file: " + filename);
+
+    // VTK header
+    file << "# vtk DataFile Version 3.0\n";
+    file << "Velocity field\n";
+    file << "ASCII\n";
+    file << "DATASET STRUCTURED_POINTS\n";
+    file << "DIMENSIONS " << Nx << " " << Ny << " " << Nz << "\n";
+    file << "SPACING " << dx << " " << dy << " " << dz << "\n";
+    file << "ORIGIN 0 0 0\n";
+    file << "POINT_DATA " << (Nx * Ny * Nz) << "\n";
+    file << "VECTORS velocity float\n";
+
+    // Write velocity data
+    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+    {
+        Real u = velocity_solution.value(0, idx);
+        Real v = velocity_solution.value(1, idx);
+        Real w = velocity_solution.value(2, idx);
+        file << u << " " << v << " " << w << "\n";
+    }
+
+    file.close();
+}
+
+void NavierStokesBrinkman::write_pressure_vtk(const std::string &filename) const
+{
+    // Ensure the output directory exists
+    std::filesystem::path filepath(filename);
+    std::filesystem::create_directories(filepath.parent_path());
+
+    std::ofstream file(filename);
+    if (!file.is_open())
+        throw std::runtime_error("Cannot open file: " + filename);
+
+    // VTK header
+    file << "# vtk DataFile Version 3.0\n";
+    file << "Pressure field\n";
+    file << "ASCII\n";
+    file << "DATASET STRUCTURED_POINTS\n";
+    file << "DIMENSIONS " << Nx << " " << Ny << " " << Nz << "\n";
+    file << "SPACING " << dx << " " << dy << " " << dz << "\n";
+    file << "ORIGIN 0 0 0\n";
+    file << "POINT_DATA " << (Nx * Ny * Nz) << "\n";
+    file << "SCALARS pressure float 1\n";
+    file << "LOOKUP_TABLE default\n";
+
+    // Write pressure data
+    for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
+    {
+        Real p = pressure_solution.get(idx);
+        file << p << "\n";
+    }
+
+    file.close();
+}
+
+#ifdef USE_MPI
+// Helper function to synchronize scalar field across all MPI ranks
+void NavierStokesBrinkman::globalize_pressure(ScalarVariable &field, Dim Nx, Dim Ny, Dim Nz,
+                                              const MPITopology3D &topo)
+{
+    MPI_Comm comm = topo.cart_comm();
+    int world_rank;
+    MPI_Comm_rank(comm, &world_rank);
+
+    const int total = Nx * Ny * Nz;
+
+    std::vector<Real> local_data(total);
+    for (Dim k = 0; k < Nz; ++k)
+        for (Dim j = 0; j < Ny; ++j)
+            for (Dim i = 0; i < Nx; ++i)
             {
+                int idx = i + j * Nx + k * Nx * Ny;
+                local_data[idx] = field.get(i, j, k);
+            }
+
+    auto block_range = [](Dim Nglobal, int p, int P) -> std::pair<Dim, Dim>
+    {
+        const Dim q = Nglobal / Dim(P);
+        const Dim r = Nglobal % Dim(P);
+        Dim begin, end;
+        if (Dim(p) < r)
+        {
+            begin = Dim(p) * (q + 1);
+            end = begin + (q + 1);
+        }
+        else
+        {
+            begin = r * (q + 1) + (Dim(p) - r) * q;
+            end = begin + q;
+        }
+        return {begin, end};
+    };
+
+    if (world_rank == 0)
+    {
+        int world_size;
+        MPI_Comm_size(comm, &world_size);
+
+        for (int src = 1; src < world_size; ++src)
+        {
+            int src_coords[3];
+            MPI_Cart_coords(comm, src, 3, src_coords);
+
+            auto [i0, i1] = block_range(Nx, src_coords[2], topo.Px());
+            auto [j0, j1] = block_range(Ny, src_coords[1], topo.Py());
+            auto [k0, k1] = block_range(Nz, src_coords[0], topo.Pz());
+
+            Dim ni = i1 - i0;
+            Dim nj = j1 - j0;
+            Dim nk = k1 - k0;
+            int count = ni * nj * nk;
+
+            std::vector<Real> recv_buf(count);
+            MPI_Recv(recv_buf.data(), count, MPI_FLOAT, src, 0, comm, MPI_STATUS_IGNORE);
+
+            int idx = 0;
+            for (Dim kk = k0; kk < k1; ++kk)
+                for (Dim jj = j0; jj < j1; ++jj)
+                    for (Dim ii = i0; ii < i1; ++ii)
+                    {
+                        int gidx = ii + jj * Nx + kk * Nx * Ny;
+                        local_data[gidx] = recv_buf[idx++];
+                    }
+        }
+    }
+    else
+    {
+        int my_coords[3];
+        MPI_Cart_coords(comm, world_rank, 3, my_coords);
+
+        auto [i0, i1] = block_range(Nx, my_coords[2], topo.Px());
+        auto [j0, j1] = block_range(Ny, my_coords[1], topo.Py());
+        auto [k0, k1] = block_range(Nz, my_coords[0], topo.Pz());
+
+        Dim ni = i1 - i0;
+        Dim nj = j1 - j0;
+        Dim nk = k1 - k0;
+        int count = ni * nj * nk;
+
+        std::vector<Real> send_buf(count);
+        int idx = 0;
+        for (Dim kk = k0; kk < k1; ++kk)
+            for (Dim jj = j0; jj < j1; ++jj)
+                for (Dim ii = i0; ii < i1; ++ii)
+                    send_buf[idx++] = field.get(ii, jj, kk);
+
+        MPI_Send(send_buf.data(), count, MPI_FLOAT, 0, 0, comm);
+    }
+
+    MPI_Bcast(local_data.data(), total, MPI_FLOAT, 0, comm);
+
+    for (Dim k = 0; k < Nz; ++k)
+        for (Dim j = 0; j < Ny; ++j)
+            for (Dim i = 0; i < Nx; ++i)
+            {
+                int idx = i + j * Nx + k * Nx * Ny;
+                field.set(i, j, k) = local_data[idx];
+            }
+}
+
+// Helper function to synchronize vector field across all MPI ranks
+void NavierStokesBrinkman::globalize_velocity(VectorVariable &field, Dim Nx, Dim Ny, Dim Nz,
+                                              const MPITopology3D &topo)
+{
+    MPI_Comm comm = topo.cart_comm();
+    int world_rank;
+    MPI_Comm_rank(comm, &world_rank);
+
+    const int total = Nx * Ny * Nz;
+
+    auto block_range = [](Dim Nglobal, int p, int P) -> std::pair<Dim, Dim>
+    {
+        const Dim q = Nglobal / Dim(P);
+        const Dim r = Nglobal % Dim(P);
+        Dim begin, end;
+        if (Dim(p) < r)
+        {
+            begin = Dim(p) * (q + 1);
+            end = begin + (q + 1);
+        }
+        else
+        {
+            begin = r * (q + 1) + (Dim(p) - r) * q;
+            end = begin + q;
+        }
+        return {begin, end};
+    };
+
+    for (int comp = 0; comp < 3; ++comp)
+    {
+        std::vector<Real> local_data(total);
+        for (Dim k = 0; k < Nz; ++k)
+            for (Dim j = 0; j < Ny; ++j)
                 for (Dim i = 0; i < Nx; ++i)
                 {
-                    Real beta_val = compute_beta(i, j, k);
-                    Real coeff = dt / beta_val;
-
-                    // --- Correct U (Component 0) ---
-                    // Condition: Interior points only (i=0 and i=Nx-1 are fixed Dirichlet)
-                    if (i > 0 && i < Nx - 1)
-                    {
-                        // Central Difference: (P_{i+1} - P_{i-1}) / 2dx
-                        Real dp_dx = (other_phi.get(i + 1, j, k) - other_phi.get(i - 1, j, k)) / (2.0 * dx);
-                        velocity_solution.set(0, i, j, k) -= coeff * dp_dx;
-                    }
-
-                    // --- Correct V (Component 1) ---
-                    // Condition: Interior points only (j=0 and j=Ny-1 are fixed Dirichlet)
-                    if (j > 0 && j < Ny - 1)
-                    {
-                        // Central Difference: (P_{j+1} - P_{j-1}) / 2dy
-                        Real dp_dy = (other_phi.get(i, j + 1, k) - other_phi.get(i, j - 1, k)) / (2.0 * dy);
-                        velocity_solution.set(1, i, j, k) -= coeff * dp_dy;
-                    }
-
-                    // --- Correct W (Component 2) ---
-                    // Condition: Interior points only (k=0 and k=Nz-1 are fixed Dirichlet)
-                    if (k > 0 && k < Nz - 1)
-                    {
-                        // Central Difference: (P_{k+1} - P_{k-1}) / 2dz
-                        Real dp_dz = (other_phi.get(i, j, k + 1) - other_phi.get(i, j, k - 1)) / (2.0 * dz);
-                        velocity_solution.set(2, i, j, k) -= coeff * dp_dz;
-                    }
+                    int idx = i + j * Nx + k * Nx * Ny;
+                    local_data[idx] = field.value(comp, i, j, k);
                 }
+
+        if (world_rank == 0)
+        {
+            int world_size;
+            MPI_Comm_size(comm, &world_size);
+
+            for (int src = 1; src < world_size; ++src)
+            {
+                int src_coords[3];
+                MPI_Cart_coords(comm, src, 3, src_coords);
+
+                auto [i0, i1] = block_range(Nx, src_coords[2], topo.Px());
+                auto [j0, j1] = block_range(Ny, src_coords[1], topo.Py());
+                auto [k0, k1] = block_range(Nz, src_coords[0], topo.Pz());
+
+                Dim ni = i1 - i0;
+                Dim nj = j1 - j0;
+                Dim nk = k1 - k0;
+                int count = ni * nj * nk;
+
+                std::vector<Real> recv_buf(count);
+                MPI_Recv(recv_buf.data(), count, MPI_FLOAT, src, comp, comm, MPI_STATUS_IGNORE);
+
+                int idx = 0;
+                for (Dim kk = k0; kk < k1; ++kk)
+                    for (Dim jj = j0; jj < j1; ++jj)
+                        for (Dim ii = i0; ii < i1; ++ii)
+                        {
+                            int gidx = ii + jj * Nx + kk * Nx * Ny;
+                            local_data[gidx] = recv_buf[idx++];
+                        }
             }
         }
+        else
+        {
+            int my_coords[3];
+            MPI_Cart_coords(comm, world_rank, 3, my_coords);
 
-        */
+            auto [i0, i1] = block_range(Nx, my_coords[2], topo.Px());
+            auto [j0, j1] = block_range(Ny, my_coords[1], topo.Py());
+            auto [k0, k1] = block_range(Nz, my_coords[0], topo.Pz());
 
-        velocity_time_series.emplace_back(velocity_solution);
-        pressure_time_series.emplace_back(pressure_solution);
-        compute_Boundary_L2_errors(velocity_solution, pressure_solution, mms, t);
+            Dim ni = i1 - i0;
+            Dim nj = j1 - j0;
+            Dim nk = k1 - k0;
+            int count = ni * nj * nk;
+
+            std::vector<Real> send_buf(count);
+            int idx = 0;
+            for (Dim kk = k0; kk < k1; ++kk)
+                for (Dim jj = j0; jj < j1; ++jj)
+                    for (Dim ii = i0; ii < i1; ++ii)
+                        send_buf[idx++] = field.value(comp, ii, jj, kk);
+
+            MPI_Send(send_buf.data(), count, MPI_FLOAT, 0, comp, comm);
+        }
+
+        MPI_Bcast(local_data.data(), total, MPI_FLOAT, 0, comm);
+
+        for (Dim k = 0; k < Nz; ++k)
+            for (Dim j = 0; j < Ny; ++j)
+                for (Dim i = 0; i < Nx; ++i)
+                {
+                    int idx = i + j * Nx + k * Nx * Ny;
+                    field.set(comp, i, j, k) = local_data[idx];
+                }
     }
 }
+
+void NavierStokesBrinkman::build_rhs_mpi(VectorVariable &rhs,
+                                         const VectorVariable &velocity_solution,
+                                         const ScalarVariable &p_star, // predictor pressure at cell centers
+                                         const VectorVariable &f_half,
+                                         Real dx, Real dy, Real dz,
+                                         Dim Nx, Dim Ny, Dim Nz,
+                                         Real dt,
+                                         Real nu,
+                                         const ScalarVariable &k, const MPITopology3D &topo)
+{
+
+    Dim k0, k1, j0, j1, i0, i1;
+    k0 = topo.local_k0(Nz);
+    k1 = topo.local_k1(Nz);
+    j0 = topo.local_j0(Ny);
+    j1 = topo.local_j1(Ny);
+    i0 = topo.local_i0(Nx);
+    i1 = topo.local_i1(Nx);
+
+    for (int c = 0; c < 3; ++c)
+#pragma omp parallel for // if (use_openmp)
+        for (Dim kk = k0; kk < k1; ++kk)
+            for (Dim jj = j0; jj < j1; ++jj)
+                for (Dim ii = i0; ii < i1; ++ii)
+                {
+                    const Real beta = (nu * dt) / (Real(2.0) * k.get(ii, jj, kk));
+                    const Real scale = Real(1.0) / (Real(1.0) + beta);
+                    const Real diff = (nu * dt) / Real(2.0);
+
+                    Real val = velocity_solution.value(c, ii, jj, kk) + dt * f_half.value(c, ii, jj, kk) - beta * velocity_solution.value(c, ii, jj, kk);
+
+                    const bool interior =
+                        (ii > 0 && ii < Nx - 1 &&
+                         jj > 0 && jj < Ny - 1 &&
+                         kk > 0 && kk < Nz - 1);
+                    if (interior)
+                    {
+                        // Explicit CN half diffusion: + (nu dt/2) Lap(u^n)
+                        const Real u0 = velocity_solution.value(c, ii, jj, kk);
+
+                        const Real uxx =
+                            (velocity_solution.value(c, ii + 1, jj, kk) - Real(2.0) * u0 + velocity_solution.value(c, ii - 1, jj, kk)) / (dx * dx);
+                        const Real uyy =
+                            (velocity_solution.value(c, ii, jj + 1, kk) - Real(2.0) * u0 + velocity_solution.value(c, ii, jj - 1, kk)) / (dy * dy);
+                        const Real uzz =
+                            (velocity_solution.value(c, ii, jj, kk + 1) - Real(2.0) * u0 + velocity_solution.value(c, ii, jj, kk - 1)) / (dz * dz);
+
+                        val += diff * (uxx + uyy + uzz);
+
+                        // Predictor pressure gradient at staggered locations (MAC-consistent one-sided):
+                        // u-face: dp/dx ≈ (p(i+1)-p(i))/dx
+                        // v-face: dp/dy ≈ (p(j+1)-p(j))/dy
+                        // w-face: dp/dz ≈ (p(k+1)-p(k))/dz
+                        Real dp_dx = (p_star.get(ii + 1, jj, kk) - p_star.get(ii, jj, kk)) / dx;
+                        Real dp_dy = (p_star.get(ii, jj + 1, kk) - p_star.get(ii, jj, kk)) / dy;
+                        Real dp_dz = (p_star.get(ii, jj, kk + 1) - p_star.get(ii, jj, kk)) / dz;
+                        // dp_dx = 0.0; // Temporarily disable pressure gradient for MPI testing
+                        // dp_dy = 0.0;
+                        // dp_dz = 0.0;
+                        if (c == 0)
+                            val -= dt * dp_dx;
+                        else if (c == 1)
+                            val -= dt * dp_dy;
+                        else
+                            val -= dt * dp_dz;
+                    }
+
+                    rhs.set(c, ii, jj, kk) = val * scale;
+                }
+}
+
+void NavierStokesBrinkman::compute_forcing_term_mpi(VectorVariable &f,
+                                                    Real t,
+                                                    const MPITopology3D &topo)
+{
+    Dim k0, k1, j0, j1, i0, i1;
+    k0 = topo.local_k0(Nz);
+    k1 = topo.local_k1(Nz);
+    j0 = topo.local_j0(Ny);
+    j1 = topo.local_j1(Ny);
+    i0 = topo.local_i0(Nx);
+    i1 = topo.local_i1(Nx);
+
+    for (Dim comp = 0; comp < 3; ++comp)
+#pragma omp parallel for collapse(3)
+        for (Dim kk = k0; kk < k1; ++kk)
+            for (Dim jj = j0; jj < j1; ++jj)
+                for (Dim ii = i0; ii < i1; ++ii)
+                {
+                    Real f_val;
+                    if (comp == 0)
+                    {
+                        const Real x = (Real(ii) + Real(0.5)) * dx;
+                        const Real y = Real(jj) * dy;
+                        const Real z = Real(kk) * dz;
+                        f_val = forcing_function.value<0>(x, y, z, t);
+                    }
+                    else if (comp == 1)
+                    {
+                        const Real x = Real(ii) * dx;
+                        const Real y = (Real(jj) + Real(0.5)) * dy;
+                        const Real z = Real(kk) * dz;
+                        f_val = forcing_function.value<1>(x, y, z, t);
+                    }
+                    else // comp==2
+                    {
+                        const Real x = Real(ii) * dx;
+                        const Real y = Real(jj) * dy;
+                        const Real z = (Real(kk) + Real(0.5)) * dz;
+                        f_val = forcing_function.value<2>(x, y, z, t);
+                    }
+                    f.set(comp, ii, jj, kk) = f_val;
+                }
+}
+
+Real NavierStokesBrinkman::solve_only_momentum_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo)
+{
+    Real t = Real(1.5);
+
+    (void)mms;
+
+    DimensionsHandlerVector x_vector_handler(Nx, Ny, Nz, 0, 1, 2, dx);
+    DimensionsHandlerVector y_vector_handler(Ny, Nx, Nz, 1, 0, 2, dy);
+    DimensionsHandlerVector z_vector_handler(Nz, Nx, Ny, 2, 0, 1, dz);
+
+    VectorVariable f_half(Nx, Ny, Nz, dx, dy, dz);
+
+    // Initialize
+    velocity_solution.set_all(u_boundary, t);
+    pressure_solution.set_all(p_exact, t);
+
+    // Init intermediate vars
+    xi = eta = zeta = velocity_solution;
+    other_phi = phi = pressure_solution;
+
+    velocity_time_series.clear();
+    pressure_time_series.clear();
+    velocity_time_series.emplace_back(velocity_solution);
+    pressure_time_series.emplace_back(pressure_solution);
+
+    Dim nsteps = static_cast<Dim>(std::ceil(T / dt));
+
+    VectorVariable u_tmp(Nx, Ny, Nz, dx, dy, dz);
+    VectorVariable u_np1(Nx, Ny, Nz, dx, dy, dz);
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+    Dim k0, k1, j0, j1, i0, i1;
+    k0 = topo.local_k0(Nz);
+    k1 = topo.local_k1(Nz);
+    j0 = topo.local_j0(Ny);
+    j1 = topo.local_j1(Ny);
+    i0 = topo.local_i0(Nx);
+    i1 = topo.local_i1(Nx);
+    for (int n = 0; n < nsteps; ++n)
+    {
+        const Real t_np1 = t + dt;
+        const Real t_half = t + dt / Real(2.0);
+
+        velocity_solver.set_t(t_np1);
+
+        compute_forcing_term_mpi(f_half, t_half, topo);
+        build_rhs_mpi(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field, topo);
+
+        // MPI ADI velocity solves with synchronization
+        // MPI ADI velocity solves with synchronization
+        vector_rhs = xi - eta.A_operator(0, gamma_field);
+
+        velocity_solver.solve_x_only(vector_rhs, eta, topo, x_vector_handler);
+
+        vector_rhs = eta - zeta.A_operator(1, gamma_field);
+        velocity_solver.solve_y_only(vector_rhs, zeta, topo, y_vector_handler);
+
+        vector_rhs = zeta - velocity_solution.A_operator(2, gamma_field);
+        velocity_solver.solve_z_only(vector_rhs, velocity_solution, topo, z_vector_handler);
+
+        t = t_np1;
+    }
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end_time - start_time;
+    return elapsed.count();
+}
+
+Real NavierStokesBrinkman::solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo)
+{
+    Real t = Real(1.5);
+
+    (void)mms;
+
+    DimensionsHandlerVector x_vector_handler(Nx, Ny, Nz, 0, 1, 2, dx);
+    DimensionsHandlerVector y_vector_handler(Ny, Nx, Nz, 1, 0, 2, dy);
+    DimensionsHandlerVector z_vector_handler(Nz, Nx, Ny, 2, 0, 1, dz);
+
+    VectorVariable f_half(Nx, Ny, Nz, dx, dy, dz);
+
+    // Initialize
+    velocity_solution.set_all(u_boundary, t);
+    pressure_solution.set_all(p_exact, t);
+
+    // Init intermediate vars
+    xi = eta = zeta = velocity_solution;
+    other_phi = phi = pressure_solution;
+
+    velocity_time_series.clear();
+    pressure_time_series.clear();
+    velocity_time_series.emplace_back(velocity_solution);
+    pressure_time_series.emplace_back(pressure_solution);
+
+    Dim nsteps = static_cast<Dim>(std::ceil(T / dt));
+
+    VectorVariable u_tmp(Nx, Ny, Nz, dx, dy, dz);
+    VectorVariable u_np1(Nx, Ny, Nz, dx, dy, dz);
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+    Dim k0, k1, j0, j1, i0, i1;
+    k0 = topo.local_k0(Nz);
+    k1 = topo.local_k1(Nz);
+    j0 = topo.local_j0(Ny);
+    j1 = topo.local_j1(Ny);
+    i0 = topo.local_i0(Nx);
+    i1 = topo.local_i1(Nx);
+    for (int n = 0; n < nsteps; ++n)
+    {
+        const Real t_np1 = t + dt;
+        const Real t_half = t + dt / Real(2.0);
+
+        pressure_predictor = pressure_solution + other_phi;
+
+        velocity_solver.set_t(t_np1);
+
+        compute_forcing_term_mpi(f_half, t_half, topo);
+        build_rhs_mpi(xi, velocity_solution, pressure_predictor, f_half, dx, dy, dz, Nx, Ny, Nz, dt, nu, k_field, topo);
+
+        // MPI ADI velocity solves with synchronization
+        // MPI ADI velocity solves with synchronization
+        vector_rhs = xi - eta.A_operator(0, gamma_field);
+
+        velocity_solver.solve_x_only(vector_rhs, eta, topo, x_vector_handler);
+
+        vector_rhs = eta - zeta.A_operator(1, gamma_field);
+        velocity_solver.solve_y_only(vector_rhs, zeta, topo, y_vector_handler);
+
+        vector_rhs = zeta - velocity_solution.A_operator(2, gamma_field);
+        velocity_solver.solve_z_only(vector_rhs, velocity_solution, topo, z_vector_handler);
+
+        globalize_velocity(velocity_solution, Nx, Ny, Nz, topo);
+
+        // Pressure correction
+        compute_rhs_pressure(t_np1);
+
+        pressure_solver.set_t(t_np1);
+
+        // MPI ADI pressure solves with synchronization
+        pressure_solver.solve_x_mpi(rhs, psi, topo);
+        globalize_pressure(psi, Nx, Ny, Nz, topo);
+
+        pressure_solver.solve_y_mpi(psi, phi, topo);
+        globalize_pressure(phi, Nx, Ny, Nz, topo);
+        pressure_solver.solve_z_mpi(phi, other_phi, topo);
+        globalize_pressure(other_phi, Nx, Ny, Nz, topo);
+
+        pressure_solution += other_phi;
+
+        t = t_np1;
+    }
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end_time - start_time;
+    return elapsed.count();
+}
+#endif

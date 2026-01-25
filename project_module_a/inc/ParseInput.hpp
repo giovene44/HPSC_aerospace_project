@@ -55,11 +55,15 @@ public:
 
     // --- Helpers to generate std::function objects ---
     std::function<std::vector<Real>(Real, Real, Real, Real)> get_forcing_function() const;
+    BoundaryFunctions get_forcing_function_bf() const;
     std::function<std::vector<Real>(Real, Real, Real, Real)> get_exact_velocity_function() const;
+    BoundaryFunctions get_exact_velocity_function_bf() const;
     std::function<Real(Real, Real, Real, Real)> get_exact_pressure_function() const;
+    BoundaryFunctions get_exact_pressure_function_bf() const;
 
     // Helper for the K function
     std::function<Real(Real, Real, Real)> get_k_function() const;
+    BoundaryFunctions get_k_function_bf() const;
 
     void parse_input(const std::string &input_file)
     {
@@ -181,6 +185,7 @@ public:
         // 5. Physics Parameters (Reading from your updated input file)
         next_value(k_expression); // Reads "1e10"
         next_value(nu);           // Reads 6.0
+        /*
 
         std::cout << "\n===== Input Parameters Loaded =====\n";
         std::cout << "Forcing (Fx): " << fx_expression << "\n";
@@ -193,6 +198,9 @@ public:
         std::cout << "K Function:   " << k_expression << "\n";
         std::cout << "Viscosity (nu): " << nu << "\n";
         std::cout << "===================================\n";
+
+
+        */
     }
 };
 
@@ -241,6 +249,17 @@ inline std::function<std::vector<Real>(Real, Real, Real, Real)> ParseInput::get_
     };
 }
 
+inline BoundaryFunctions ParseInput::get_forcing_function_bf() const
+{
+    std::string s_fx = fx_expression;
+    std::string s_fy = fy_expression;
+    std::string s_fz = fz_expression;
+
+    BoundaryFunctions f_func;
+    f_func.set_string_expression({s_fx, s_fy, s_fz});
+    return f_func;
+}
+
 // 2. Exact Velocity Helper
 inline std::function<std::vector<Real>(Real, Real, Real, Real)> ParseInput::get_exact_velocity_function() const
 {
@@ -282,6 +301,17 @@ inline std::function<std::vector<Real>(Real, Real, Real, Real)> ParseInput::get_
     };
 }
 
+inline BoundaryFunctions ParseInput::get_exact_velocity_function_bf() const
+{
+    std::string s_u = u_exact_expression;
+    std::string s_v = v_exact_expression;
+    std::string s_w = w_exact_expression;
+
+    BoundaryFunctions u_func;
+    u_func.set_string_expression({s_u, s_v, s_w});
+    return u_func;
+}
+
 // 3. Exact Pressure Helper
 inline std::function<Real(Real, Real, Real, Real)> ParseInput::get_exact_pressure_function() const
 {
@@ -315,6 +345,15 @@ inline std::function<Real(Real, Real, Real, Real)> ParseInput::get_exact_pressur
     };
 }
 
+inline BoundaryFunctions ParseInput::get_exact_pressure_function_bf() const
+{
+    std::string s_p = p_exact_expression;
+
+    BoundaryFunctions p_func;
+    p_func.set_string_expression({s_p});
+    return p_func;
+}
+
 // 4. Coefficient (K) Helper
 inline std::function<Real(Real, Real, Real)> ParseInput::get_k_function() const
 {
@@ -345,6 +384,15 @@ inline std::function<Real(Real, Real, Real)> ParseInput::get_k_function() const
             return 0.0;
         }
     };
+}
+
+inline BoundaryFunctions ParseInput::get_k_function_bf() const
+{
+    std::string s_k = k_expression;
+
+    BoundaryFunctions k_func;
+    k_func.set_string_expression({s_k});
+    return k_func;
 }
 
 #endif // PARSE_INPUT_HPP

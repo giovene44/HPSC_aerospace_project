@@ -118,12 +118,13 @@ public:
 
     void set_all(BoundaryFunctions &other, Real t)
     {
-        for (Dim idx = 0; idx < Nx * Ny * Nz; ++idx)
-        {
-            Dim i = idx % Nx;
-            Dim j = (idx / Nx) % Ny;
-            Dim k = idx / (Nx * Ny);
 
+        #pragma omp parallel for collapse(3)
+        for (Dim k = 0; k < Nz; ++k)
+        for (Dim j = 0; j < Ny; ++j)
+        for (Dim i = 0; i < Nx; ++i)
+        {
+            Dim idx = i + j * Nx + k * Nx * Ny;
             // Convert grid indices to physical coordinates
             Real x = i * dx;
             Real y = j * dy;
@@ -157,7 +158,6 @@ public:
         }
         else 
             return 0.0; // g not used at the boundary!
-
     }
 
     Real getGradient_y(Dim i, Dim j, Dim k) const
@@ -220,7 +220,10 @@ public:
     {
         // Overloaded function to compute gradient for all elements
         ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
-        for (Dim i = 0; i < Nx; ++i)
+
+        gradient.set_all(0.0f); // Initialize to zero
+
+        for (Dim i = 1; i < Nx-1; ++i)
         {
             for (Dim j = 0; j < Ny; ++j)
             {
@@ -237,9 +240,10 @@ public:
     {
         // Overloaded function to compute gradient for all elements
         ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
+        gradient.set_all(0.0f); // Initialize to zero
         for (Dim i = 0; i < Nx; ++i)
         {
-            for (Dim j = 0; j < Ny; ++j)
+            for (Dim j = 1; j < Ny - 1; ++j)
             {
                 for (Dim k = 0; k < Nz; ++k)
                 {
@@ -254,17 +258,68 @@ public:
     {
         // Overloaded function to compute gradient for all elements
         ScalarVariable gradient(Nx, Ny, Nz, dx, dy, dz);
+        gradient.set_all(0.0f); // Initialize to zero
         for (Dim i = 0; i < Nx; ++i)
         {
             for (Dim j = 0; j < Ny; ++j)
             {
-                for (Dim k = 0; k < Nz; ++k)
+                for (Dim k = 1; k < Nz - 1; ++k)
                 {
                     gradient.set(i, j, k) = getGradient_z(i, j, k);
                 }
             }
         }
         return gradient;
+    }
+
+    Real second_derivative(int direction, Dim i, Dim j, Dim k) const
+    {
+        if (direction == 0) // x-direction
+        {
+            if (i > 0 && i < Nx - 1)
+            {
+                Real lhs = get(i - 1, j, k);
+                Real center = get(i, j, k);
+                Real rhs = get(i + 1, j, k);
+                return (lhs - 2 * center + rhs) / (dx * dx);
+            }
+            else
+            {
+                return 0.0;
+            }
+        }
+        else if (direction == 1) // y-direction
+        {
+            if (j > 0 && j < Ny - 1)
+            {
+                Real lhs = get(i, j - 1, k);
+                Real center = get(i, j, k);
+                Real rhs = get(i, j + 1, k);
+                return (lhs - 2 * center + rhs) / (dy * dy);
+            }
+            else
+            {
+                return 0.0;
+            }
+        }
+        else if (direction == 2) // z-direction
+        {
+            if (k > 0 && k < Nz - 1)
+            {
+                Real lhs = get(i, j, k - 1);
+                Real center = get(i, j, k);
+                Real rhs = get(i, j, k + 1);
+                return (lhs - 2 * center + rhs) / (dz * dz);
+            }
+            else
+            {
+                return 0.0;
+            }
+        }
+        else
+        {
+            throw std::invalid_argument("Invalid direction for second_derivative");
+        }
     }
 
     inline Dim get_Nx() const { return Nx; }

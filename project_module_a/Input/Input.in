@@ -1,39 +1,38 @@
 #Number of Run
-1
+4
 
-#Dim of X 
-2.0*3.141592653
+#Dim of X
+2.0*pi
 
-#Dim of Y 
-2.0*3.141592653
+#Dim of Y
+2.0*pi
 
-#Dim of Z 
-2.0*3.141592653
+#Dim of Z
+2.0*pi
 
 # Number of mesh points in X, Y, Z directions (Nx, Ny, Nz)
-10 10 10
+8 8 8
 
 # Time step size (dt)
-0.0001
+2e-5
 
 # Total simulation time (T)
-0.0003
-
-
+50e-5
 
 # boundary velocity
 ./Input/boundary_u0.dat
+
 # boundary pressure
 ./Input/boundary_p0.dat
 
 # fx forcing term
-cos(t)*sin(x)*sin(y)*sin(z)+sin(t)*((21+6e-10)*sin(x)*sin(y)*sin(z)-3*sin(x)*sin(y)*cos(z))
+cos(t)*sin(x)*sin(y)*sin(z)+(3.0*1e-1)*sin(t)*sin(x)*sin(y)*sin(z)+(1e-1)*sin(x)*sin(y)*sin(z)*sin(t)+sin(t)*cos(x)*sin(y)*sin(z)
 
 # fy forcing term
-cos(t)*cos(x)*cos(y)*cos(z)+sin(t)*((21+6e-10)*cos(x)*cos(y)*cos(z)-3*cos(x)*cos(y)*sin(z)) 
+cos(t)*cos(x)*cos(y)*cos(z)+(3.0*1e-1)*sin(t)*cos(x)*cos(y)*cos(z)+(1e-1)*cos(x)*cos(y)*cos(z)*sin(t)+sin(t)*sin(x)*cos(y)*sin(z)
 
 # fz forcing term
-cos(t)*cos(x)*sin(y)*(sin(z)+cos(z))+sin(t)*((15+6e-10)*cos(x)*sin(y)*(sin(z)+cos(z)))
+cos(t)*cos(x)*sin(y)*(sin(z)+cos(z))+(3.0*1e-1)*cos(x)*sin(y)*(cos(z)+sin(z))+(1e-1)*sin(t)*cos(x)*sin(y)*(sin(z)+cos(z))+sin(t)*sin(x)*sin(y)*cos(z)
 
 # u_initial condition term
 sin(t)*sin(x)*sin(y)*sin(z)
@@ -45,10 +44,10 @@ sin(t)*cos(x)*cos(y)*cos(z)
 sin(t)*cos(x)*sin(y)*(sin(z)+cos(z))
 
 # p initial condition term
--sin(t)*3.0*cos(x)*sin(y)*(sin(z)-cos(z))
+sin(t)*sin(x)*sin(y)*sin(z)
 
-# k 
-1e10
+# k
+1.0
 
-# nu 
-6.0
+# nu
+1e-1
