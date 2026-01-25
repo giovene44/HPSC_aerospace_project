@@ -22,11 +22,17 @@ endif
 
 # Modalità build: release (default) o debug
 BUILD ?= release
-
 ifeq ($(BUILD),debug)
 CXXFLAGS += -g -O0 -DDEBUG
 else
 CXXFLAGS += -O2
+endif
+
+# Profiling con gprof: impostare PROFILE=1 per abilitarlo
+PROFILE ?= 0
+ifeq ($(PROFILE),1)
+CXXFLAGS += -pg
+LDFLAGS  += -pg
 endif
 
 # Directory
@@ -53,13 +59,12 @@ INCLUDES      := -I$(INC_DIR) -I$(MUP_DIR)/parser
 # ==========================================
 # 3. FILE SELEZIONATI AUTOMATICAMENTE
 # ==========================================
-
 # --- SORGENTI PRINCIPALI ---
 ALL_SRC_FILES  := $(wildcard $(SRC_DIR)/*.cpp)
 APP_MAIN_FILE  := $(SRC_DIR)/$(MAIN_FILENAME)
+
 # Core files sono tutti tranne il main.cpp (per evitare conflitti di main multipli nei test)
 CORE_SRC_FILES := $(filter-out $(APP_MAIN_FILE), $(ALL_SRC_FILES))
-
 OBJS_CORE := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(CORE_SRC_FILES))
 OBJ_MAIN  := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(APP_MAIN_FILE))
 
@@ -77,8 +82,7 @@ TEST_EXES := $(patsubst $(TEST_DIR)/%.cpp, $(BIN_DIR)/%, $(TEST_SRCS))
 # ==========================================
 # 4. TARGET PRINCIPALI
 # ==========================================
-
-.PHONY: all main test debug clean clean-all setup run-tests
+.PHONY: all main test debug profile clean clean-all clean-profile setup run-tests analyze-profile
 
 all: main
 
@@ -117,26 +121,55 @@ debug:
 	@$(MAKE) clean
 	@$(MAKE) BUILD=debug main
 
+# ============================
+# Modalità PROFILING
+# ============================
+profile:
+	@$(MAKE) clean
+	@$(MAKE) PROFILE=1 main
+	@echo ""
+	@echo "=========================================="
+	@echo "Profiling build completata!"
+	@echo "=========================================="
+	@echo "Passi successivi:"
+	@echo "1. Esegui il programma:      ./$(MAIN_EXE) [args]"
+	@echo "2. Verrà generato:           gmon.out"
+	@echo "3. Analizza i risultati:     gprof $(MAIN_EXE) gmon.out"
+	@echo "4. Per output leggibile:     gprof $(MAIN_EXE) gmon.out > analysis.txt"
+	@echo "=========================================="
+
+# Shortcut per analizzare il profiling dopo l'esecuzione
+analyze-profile:
+	@if [ ! -f gmon.out ]; then \
+		echo "Errore: gmon.out non trovato!"; \
+		echo "Devi prima eseguire il programma compilato con PROFILE=1"; \
+		exit 1; \
+	fi
+	@echo "Generazione analisi profiling..."
+	gprof $(MAIN_EXE) gmon.out > analysis.txt
+	@echo "Analisi salvata in analysis.txt"
+	@echo "Mostrando le prime 50 righe:"
+	@echo "=========================================="
+	@head -n 50 analysis.txt
+
 # ==========================================
 # 5. LINKING
 # ==========================================
-
 # Link dell'applicazione principale
 $(MAIN_EXE): $(OBJ_MAIN) $(OBJS_CORE) $(MUP_LIB)
 	@echo "[LINK APP] $@"
-	$(CXX) $(OBJ_MAIN) $(OBJS_CORE) $(MUP_LIB) $(LDFLAGS) -o $@
+	$(CXX) $(LDFLAGS) $(OBJ_MAIN) $(OBJS_CORE) $(MUP_LIB) -o $@
 
 # Link dinamico per i TEST separati
 # La regola % matcha il nome del file (senza estensione) dentro bin/
 # Dipende dal corrispondente .o in obj/test/, dai file CORE e dalla LIB
 $(BIN_DIR)/%: $(OBJ_DIR)/test/%.o $(OBJS_CORE) $(MUP_LIB)
 	@echo "[LINK TEST] $@"
-	$(CXX) $< $(OBJS_CORE) $(MUP_LIB) $(LDFLAGS) -o $@
+	$(CXX) $(LDFLAGS) $< $(OBJS_CORE) $(MUP_LIB) -o $@
 
 # ==========================================
 # 6. COMPILAZIONE
 # ==========================================
-
 $(OBJ_DIR)/src/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(dir $@)
 	@echo "[CXX SRC] $<"
@@ -161,9 +194,12 @@ setup:
 # ==========================================
 # 7. CLEAN
 # ==========================================
-
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
 
-clean-all: clean
+clean-profile:
+	rm -f gmon.out analysis.txt
+	@echo "File di profiling rimossi"
+
+clean-all: clean clean-profile
 	rm -rf $(MUP_BUILD_DIR)
