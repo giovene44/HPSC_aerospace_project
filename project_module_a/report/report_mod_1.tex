@@ -2,7 +2,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage[english]{babel}
 \usepackage{amsmath}
-\usepackage{amsfonts}
+\usepackage{amsfonts}\
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{tikz}
@@ -524,23 +524,7 @@ This leads to the modified equation for the final node $N$:
 \section{Serial Implementation}
 The solver is designed to simulate 3D fluid flow in porous media using the Navier-Stokes-Brinkman equations on a staggered grid. The serial implementation relies on a fractional step method (projection method) where the core computational effort is distributed across directional sweeps (X, Y, and Z). This approach simplifies complex 3D differential operators into sequences of independent 1D tridiagonal systems.
 
-\subsection{Core Data Structures}
 
-The solver relies on two primary data structures for discretized fields:
-\begin{itemize}
-    \item \textbf{ScalarVariable}: Stores a 3D scalar field (e.g., pressure or velocity components) in a linearized array and provides indexed access and differential operators.
-    \item \textbf{VectorVariable}: Groups three \texttt{ScalarVariable} objects to represent vector fields $(u,v,w)$ and supports operations such as divergence and Laplacian evaluation.
-\end{itemize}
-
-\subsection{Class Hierarchy}
-
-Solver responsibilities are divided to separate physical modeling from linear solves:
-\begin{itemize}
-    \item \textbf{NavierStokesBrinkmann}: Manages time stepping, assembles momentum RHS terms, and performs the pressure projection.
-    \item \textbf{Solver}: Abstract base class defining the interface for directional sweeps and storing grid geometry.
-    \item \textbf{VelocitySolver} / \textbf{PressureSolver}: Implement momentum and pressure solves with appropriate coefficients and boundary conditions.
-    \item \textbf{DimensionsHandler}: Provides index mapping between the 3D grid and 1D sweep lines.
-\end{itemize}
 \subsection{Serial Algorithm Workflow}
 The serial execution follows a structured sequence of directional sweeps to update the fluid state from $t_0$ to $T_{final}$:
 \begin{algorithm}[H]
@@ -572,14 +556,21 @@ The serial execution follows a structured sequence of directional sweeps to upda
 \end{algorithm}
 
 \begin{algorithm}[H]
-\caption{Direction Splitting}
-\label{alg:single_split_scheme}
+\caption{Direction Splitting (single sweep)}
 \begin{algorithmic}[1]
-\Require $\mathbf{u}^n,\; p^n,\; \Delta t$ (and coefficients $\beta,\gamma$)
-\Ensure $N_1 \notin $ considereded direction 
-\Ensure $N_2 \notin $ considereded direction 
+\For{$i_1 = 0$ to $N_1^{\text{not swept}}-1$}
+  \For{$i_2 = 0$ to $N_2^{\text{not swept}}-1$}
+    \State Apply boundary conditions to RHS on line $(i_1,i_2)$
+    \If{line $(i_1,i_2)$ lies on a known face}
+      \State Set solution directly from boundary values
+    \Else
+      \State Solve $(I - \gamma D_{xx})\,u = \text{RHS}$ on the line (TDMA)
+    \EndIf
+  \EndFor
+\EndFor
 \end{algorithmic}
 \end{algorithm}
+
 
 
 
@@ -696,15 +687,23 @@ To overcome these limitations, a parallelization strategy based on the distribut
 Within the framework of Direction Splitting, a \emph{line} is defined as the set of grid points aligned along the current computational direction, for example along the $x$-axis. The parallelization strategy is organized into two distinct and complementary levels:
 
 \begin{itemize}
-    \item \textbf{Segment level (MPI)}: The total length of each line is decomposed into local segments. Each MPI process is responsible for one segment and employs the Schur Complement Method to correctly handle the coupling with adjacent segments located on different processes. This approach allows the global tridiagonal problem to be solved efficiently across distributed nodes.
-    
-    \item \textbf{Bundle level (OpenMP)}: The three-dimensional domain is viewed as a collection of independent, parallel lines. Within each MPI process, OpenMP threads distribute the workload by simultaneously solving multiple lines. This shared-memory parallelism maximizes the utilization of available cores and significantly reduces the overall computation time of each time step.
+    \item \textbf{Segment level (MPI)}:
+    Each one-dimensional line arising from a directional sweep is decomposed into contiguous local segments. Every MPI process owns one segment per line and applies the Schur Complement Method to correctly account for the coupling with neighboring segments located on different processes. This strategy enables the efficient solution of the global tridiagonal system in a distributed-memory environment with minimal communication.
+
+    \item \textbf{Bundle level (OpenMP)}:
+    The three-dimensional domain is interpreted as a collection of independent one-dimensional lines. Within each MPI process, OpenMP threads are used to solve multiple lines concurrently. This shared-memory parallelism maximizes core utilization and significantly reduces the overall computation time per time step.
+
+    \item \textbf{Domain decomposition (MPI)}:
+    The full three-dimensional domain is partitioned into subdomains and distributed across MPI processes. Within each subdomain, the segment-level (Schur complement) and bundle-level (OpenMP) parallelization strategies are applied. This hierarchical organization enables simultaneous computation across different regions of the domain while solving multiple lines per region, achieving scalable parallel efficiency at the distributed-memory level.
 \end{itemize}
 
+\subsection{Schur Complement Method}
 
-\subsection{Mathematical Foundations}
-
-Through domain decomposition, each process identifies its unknowns as either internal ($u_i$) or interface ($u_s$). The global system $Au = f$ can be rewritten in block-partitioned form as:
+At the segment level, each MPI process classifies its unknowns into internal variables $u_i$ and interface variables $u_s$. For a given one-dimensional segment, the global linear system
+\[
+Au = f
+\]
+can be expressed in block-partitioned form as
 \begin{equation}
     \begin{bmatrix}
         A_{ii} & A_{is} \\
@@ -719,168 +718,134 @@ Through domain decomposition, each process identifies its unknowns as either int
         f_i \\
         f_s
     \end{bmatrix}.
-    \label{eq:block_system}
 \end{equation}
 
-Where:
+Here:
 \begin{itemize}
-    \item $A_{ii}$ is a tridiagonal matrix containing the interactions among the internal points of a subdomain.
-    \item $A_{ss}$ represents the coefficients associated with the interface points located at the boundaries between processes.
+    \item $A_{ii}$ is the tridiagonal operator associated with the internal points of a local segment,
+    \item $A_{ss}$ contains the coefficients associated with interface points shared between neighboring MPI processes,
     \item $A_{is}$ and $A_{si}$ describe the coupling between internal and interface unknowns.
 \end{itemize}
 
-By substituting the relation $u_i = A_{ii}^{-1}(f_i - A_{is}u_s)$ into the second equation, the reduced system (Schur complement) is obtained:
+Eliminating the internal unknowns using
+\[
+u_i = A_{ii}^{-1}(f_i - A_{is}u_s),
+\]
+yields the reduced interface system (Schur complement)
 \begin{equation}
-    (A_{ss} - A_{si}A_{ii}^{-1}A_{is})u_s = f_s - A_{si}A_{ii}^{-1}f_i.
-    \label{eq:schur_complement}
+    (A_{ss} - A_{si}A_{ii}^{-1}A_{is})u_s
+    =
+    f_s - A_{si}A_{ii}^{-1}f_i.
 \end{equation}
 
-We define $S = (A_{ss} - A_{si}A_{ii}^{-1}A_{is})$ as the \emph{Schur matrix} and $\hat{f}_s = f_s - A_{si}A_{ii}^{-1}f_i$ as the modified right-hand side. A key property of this formulation is that the Schur matrix $S$ remains \emph{tridiagonal}, allowing the reduced interface system to be solved efficiently using the Thomas algorithm.
-
+The resulting Schur matrix remains tridiagonal, allowing the reduced system to be efficiently solved using the Thomas algorithm.
 
 \subsection{Domain Decomposition}
 
-The solver architecture is orchestrated through a three-dimensional Cartesian domain decomposition, managed by the \texttt{MPITopology3D} class. This class creates a 3D Cartesian communicator using \texttt{MPI\_Cart\_create} and provides:
+The solver employs a three-dimensional Cartesian domain decomposition. A Cartesian communicator is constructed using \texttt{MPI\_Cart\_create}, providing a global three-dimensional communicator for the full domain with dimensions $(P_z, P_y, P_x)$.
 
+Since the Schur complement method is applied to solve complete one-dimensional lines (depending on the sweep direction), three dedicated one-dimensional sub-communicators are defined to connect subdomains whose elements belong to the same line:
 \begin{itemize}
-    \item A main communicator \texttt{cart3d\_} for the full 3D domain with dimensions $(P_z, P_y, P_x)$.
-    \item Three 1D sub-communicators  \texttt{comm\_} for line-wise solves:
-    \begin{itemize}
-        \item \texttt{comm\_x}: processes along the $X$ direction (fixed $p_y$, $p_z$ coordinates)
-        \item \texttt{comm\_y}: processes along the $Y$ direction (fixed $p_x$, $p_z$ coordinates)
-        \item \texttt{comm\_z}: processes along the $Z$ direction (fixed $p_x$, $p_y$ coordinates)
-    \end{itemize}
+    \item \texttt{comm\_x}: processes aligned along the $X$ direction,
+    \item \texttt{comm\_y}: processes aligned along the $Y$ direction,
+    \item \texttt{comm\_z}: processes aligned along the $Z$ direction.
 \end{itemize}
 
-The domain is partitioned using a \emph{balanced block distribution}. For a global dimension $N$ distributed across $P$ processes, each process $p$ receives a contiguous block of points $[i_0(p), i_1(p))$ computed as follows:
+The domain is distributed using a balanced block decomposition. For a global size $N$ split across $P$ processes, each process $p$ is assigned a contiguous block $[i_0(p), i_1(p))$ computed as
 \begin{align}
-    q &= \lfloor N / P \rfloor, \quad r = N \mod P \\
-    i_0(p) &= \begin{cases}
-        p(q+1) & \text{if } p < r \\
-        r(q+1) + (p-r)q & \text{if } p \geq r
+    q &= \lfloor N / P \rfloor, \quad r = N \bmod P, \\
+    i_0(p) &=
+    \begin{cases}
+        p(q+1), & p < r, \\
+        r(q+1) + (p-r)q, & p \ge r.
     \end{cases}
 \end{align}
 
-This ensures load balancing: the first $r$ processes receive $(q+1)$ points each, while the remaining processes receive $q$ points. The interface between two adjacent processes is shared by both, and each process allocates memory only for the points belonging to its own block, plus the interface points required for boundary computations.
-
-
+This strategy ensures load balancing across processes. Each MPI process allocates memory only for its local block, together with the interface points required for boundary conditions and inter-process coupling.
 \subsection{Parallelized Algorithm Details}
 
-The implementation follows a five-phase workflow for each directional sweep, optimized to minimize MPI communication:
+For each directional sweep, the solver follows a five-phase workflow designed to minimize MPI communication while remaining consistent with the Schur complement formulation introduced earlier.
 
-\subsubsection{Phase 1--2: Local Computation (No MPI communication)}
+\subsubsection{Phases 1--2: Local computation (no MPI communication)}
 
-Each process independently performs:
+Each MPI process independently operates on its local line segments:
 \begin{enumerate}
-    \item \textbf{Internal solve}: Compute $y = A_{ii}^{-1} f_i$ using the Thomas algorithm on internal points.
-    \item \textbf{Interface RHS contribution}: Compute the local contribution to the modified right-hand side $\hat{f}_s = f_s - A_{si} y$.
+    \item \textbf{Internal solve}: compute the intermediate solution
+    \[
+        y = A_{ii}^{-1} f_i,
+    \]
+    using the Thomas algorithm on internal unknowns.
+    \item \textbf{Interface contribution}: assemble the local contribution to the Schur right-hand side
+    \[
+        \hat{f}_s = f_s - A_{si} y .
+    \]
 \end{enumerate}
 
-Defining $nLines$ as the number of independent lines solved by each processor, we can exploit the OpenMP parallelization strategy as follows: 
+Since multiple independent lines are processed within each subdomain, these steps are parallelized at the bundle level using OpenMP:
 \begin{verbatim}
 #pragma omp parallel for
-for (i = 0; i < nLines) {
-    compute_local_contrib();
+for (i = 0; i < nLines; ++i) {
+    compute_local_contribution();
 }
 \end{verbatim}
 
-\subsubsection{Phase 3: MPI Collective Communication}
-In order to solve the Schur Complement, each local contribution must be shared among all the partitions in the same line. Since, within each domain decomposition, multiple lines are considered, the communication represents the bottleneck for this computation. 
-Moreover, we adopt the following strategy : 
+\subsubsection{Phase 3: MPI collective communication}
 
-A single \texttt{MPI\_Allreduce} operation gathers and sums the interface RHS contributions from all processors:
+To form the global Schur complement system, all local interface contributions are exchanged among \textbf{MPI processes belonging to the same one-dimensional line communicator}. This is accomplished using a single collective operation:
 \begin{verbatim}
-comm_.allreduce();
+MPI_Allreduce(...)
 \end{verbatim}
 
-This is the \emph{only} MPI collective required per directional sweep, regardless of the number of lines being solved. The batched approach reduces the number of MPI calls from $n_{\text{lines}}$ to exactly one, significantly improving parallel efficiency.
+Given a one-dimensional communicator \texttt{comm\_direction} as defined above, each independent line within a partition would normally require its own communication step. This approach leads to performance degradation, as MPI collective operations quickly become the dominant bottleneck. To mitigate this issue, a batched communication strategy is employed, in which the interface right-hand side contributions of all lines are aggregated and communicated simultaneously. As a result, the number of MPI collective operations per directional sweep is reduced to a single call, independently of the number of lines, yielding a significant improvement in scalability.
 
-\subsubsection{Phase 4--5: Local Finalization (No MPI communication)}
 
-Each process independently performs:
+\subsubsection{Phases 4--5: Local finalization (no MPI communication)}
+
+After the collective communication, each MPI process possesses the complete interface right-hand side and independently performs:
 \begin{enumerate}
     \setcounter{enumi}{3}
-    \item \textbf{Interface system solve}: Solve the reduced tridiagonal system $S u_s = \hat{f}_s$ locally using the Thomas algorithm. Since all processes have the complete interface RHS after the Allreduce, this redundant computation avoids an additional broadcast.
-    \item \textbf{Back-substitution}: Recover the internal unknowns $u_i = A_{ii}^{-1}(f_i - A_{is} u_s)$ and assemble the complete local solution.
+    \item \textbf{Interface solve}: solve the reduced Schur complement system
+    \[
+        S u_s = \hat{f}_s,
+    \]
+    using the Thomas algorithm.
+    \item \textbf{Back-substitution}: recover the internal unknowns via
+    \[
+        u_i = A_{ii}^{-1}(f_i - A_{is} u_s),
+    \]
+    and assemble the complete local solution.
 \end{enumerate}
 
-These phases are also parallelized across lines using OpenMP.
-
-
-\subsection{Technical Deep Dive: C++ Implementation}
-
-The software architecture has been designed following object-oriented programming principles to ensure modularity and a clear separation of responsibilities. The main classes are:
-
-\subsubsection{\texttt{SchurComplementSolver}}
-
-This class represents the core of the parallel solver and manages the entire lifecycle of the computation:
-
-\begin{itemize}
-    \item \texttt{preprocess(a, b, c)}: This function is crucial for computational efficiency. It computes the columns of the inverse matrix $A_{ii}^{-1}$ required to form the Schur complement, assembles the local Schur contributions, and uses \texttt{MPI\_Allgather} to build the global Schur matrix $S$. This preprocessing is performed once and reused for all subsequent solves with the same coefficients.
-    
-    \item \texttt{solve(rhs, solution)}: Implements the runtime phase for a single line, executing all five phases described above.
-    
-    \item \texttt{solve\_batch(rhs\_flat, nLines, sol\_flat, use\_omp)}: The optimized batched interface that processes multiple independent lines with a single MPI collective. This is the primary method used in production.
-\end{itemize}
-
-\subsubsection{\texttt{MPITopology3D}}
-
-This class manages the 3D Cartesian topology and acts as an RAII wrapper for MPI communicators:
-
-\begin{itemize}
-    \item Creates the 3D Cartesian communicator via \texttt{MPI\_Cart\_create}.
-    \item Extracts 1D sub-communicators using \texttt{MPI\_Cart\_sub} for each spatial direction.
-    \item Provides methods for computing local index ranges: \texttt{local\_i0()}, \texttt{local\_i1()}, \texttt{local\_j0()}, \texttt{local\_j1()}, \texttt{local\_k0()}, \texttt{local\_k1()}.
-    \item Implements the balanced block distribution through the static method \texttt{block\_range(N, p, P)}.
-    \item Handles neighbor identification for potential halo exchanges.
-\end{itemize}
-
-\subsubsection{\texttt{MPICommunicator}}
-
-This class acts as the communication manager and provides:
-
-\begin{itemize}
-    \item Support for point-to-point operations (\texttt{send\_value}, \texttt{recv\_value}, \texttt{isend\_value}, \texttt{irecv\_value}).
-    \item Collective operations optimized for the Schur complement method:
-    \begin{itemize}
-        \item \texttt{allgather\_schur\_diag()}: Gathers Schur complement matrix contributions during preprocessing.
-        \item \texttt{allreduce\_interface\_rhs()}: Sums interface RHS values for a single line.
-        \item \texttt{allreduce\_interface\_rhs\_batched()}: Sums interface RHS values for multiple lines in a single collective.
-    \end{itemize}
-    \item Fallback to serial execution when running with a single process.
-\end{itemize}
-
-\subsubsection{\texttt{VelocitySolver} and \texttt{PressureSolver}}
-
-These classes integrate the Schur complement solver into the Navier--Stokes--Brinkman framework:
-
-\begin{itemize}
-    \item \texttt{solve\_x\_mpi()}, \texttt{solve\_y\_mpi()}, \texttt{solve\_z\_mpi()}: Direction-specific solve methods that:
-    \begin{enumerate}
-        \item Create a \texttt{SchurComplementSolver} for the appropriate 1D communicator.
-        \item Build the RHS locally (only for local points, ensuring $\mathcal{O}(N_{\text{local}})$ cost).
-        \item Call \texttt{solve\_batch()} with OpenMP parallelization over independent lines.
-    \end{enumerate}
-    \item Handle different boundary conditions (Dirichlet for normal components, ghost elimination for tangential components).
-\end{itemize}
-
-
+These final steps are also parallelized across independent lines using OpenMP.
 \subsection{Batched Solver Optimization}
 
-A key optimization in the implementation is the batched solving approach. Instead of solving each 1D line independently (which would require one MPI collective per line), the solver processes all lines belonging to a process simultaneously:
+As stated previously, solving each one-dimensional line independently would require a separate MPI collective per line, making communication the dominant performance bottleneck. To overcome this limitation, a batched solving strategy is adopted, in which all lines owned by a process are handled simultaneously:
 
 \begin{enumerate}
-    \item \textbf{Phase 1--2}: All lines are processed in parallel using OpenMP, accumulating interface contributions into a flat buffer of size $n_{\text{lines}} \times n_{\text{interfaces}}$.
+    \item \textbf{Phases 1--2}: All lines are processed in parallel using OpenMP, accumulating the interface right-hand side contributions into a flat buffer of size $n_{\text{lines}} \times n_{\text{interfaces}}$.
     
-    \item \textbf{Phase 3}: A single \texttt{MPI\_Allreduce} operation handles all lines at once.
+    \item \textbf{Phase 3}: A single \texttt{MPI\_Allreduce} operation aggregates the interface contributions for all lines at once.
     
-    \item \textbf{Phase 4--5}: All lines are finalized in parallel using OpenMP.
+    \item \textbf{Phases 4--5}: All lines are finalized independently and in parallel using OpenMP.
 \end{enumerate}
 
-This reduces the number of MPI collectives from $\mathcal{O}(N_y \times N_z)$ per sweep to exactly one, dramatically improving strong scaling efficiency. The implementation uses thread-local workspaces (\texttt{ThreadWorkspace}) to avoid synchronization overhead during the OpenMP parallel regions.
-
-
+This approach reduces the number of MPI collectives from $\mathcal{O}(N_y \times N_z)$ per directional sweep to exactly one, leading to a significant improvement in strong scaling efficiency. Thread-local workspaces (\texttt{ThreadWorkspace}) are employed to eliminate synchronization overhead within OpenMP parallel regions.
 \subsection{Parallelization Results}
+
+
+\section{Summary of the C++ Implementation}
+
+The C++ implementation has been designed to provide a clear separation between numerical kernels, parallelization mechanisms, physical modeling, and high-level solver logic. This modular structure allows the same core discretization and algebraic routines to be reused seamlessly in both sequential and parallel executions.
+
+At the lowest level, the \texttt{ScalarVariable} and \texttt{VectorVariable} classes encapsulate the storage and manipulation of discretized fields, ensuring a consistent data layout and uniform access patterns across all solver components. These data structures form the foundation of both the sequential and parallel solvers.
+
+Parallelism is introduced in a hierarchical manner. The \texttt{MPITopology3D} class manages the three-dimensional domain decomposition and provides direction-specific one-dimensional communicators required by the Schur complement method. Communication responsibilities are encapsulated within the \texttt{MPICommunicator} class, which exposes both point-to-point and collective operations, including optimized batched collectives tailored to the interface systems arising from directional splitting.
+
+The \texttt{SchurComplementSolver} class implements the core parallel line solver, clearly separating preprocessing from runtime execution and enabling efficient reuse of precomputed operators. Its batched interface allows multiple independent lines to be processed with a single MPI collective, significantly reducing communication overhead.
+
+Solver responsibilities are further divided to decouple physical modeling from linear algebra. The \texttt{NavierStokesBrinkman} class manages time integration, assembles the momentum right-hand sides, and performs the pressure projection step. A generic \texttt{Solver} abstract base class defines the common interface for directional sweeps and stores grid geometry. The \texttt{VelocitySolver} and \texttt{PressureSolver} classes implement the momentum and pressure solves, respectively, using problem-specific coefficients and boundary conditions. The \texttt{DimensionsHandler} class provides the mapping between the three-dimensional grid and the one-dimensional sweep lines required by the directional splitting strategy.
+
+Overall, the implementation achieves a clean and direct correspondence between the mathematical formulation and the software architecture, enabling scalable and efficient execution on modern hybrid MPI--OpenMP architectures while maintaining code clarity, extensibility, and numerical correctness.
 
 % Add your performance results here: speedup curves, efficiency plots, etc.
 
