@@ -305,11 +305,11 @@ int run_multiple_mpi(int argc, char **argv)
                 std::pair<Real, Real> time_per_run;
                 Real refinement_factor = std::pow(2, i);
 
-                Dim Nx_curr = N_initial_x * refinement_factor;
-                Dim Ny_curr = N_initial_y * refinement_factor;
-                Dim Nz_curr = N_initial_z * refinement_factor;
+                Dim Nx_curr = N_initial_x; // * refinement_factor;
+                Dim Ny_curr = N_initial_y; // * refinement_factor;
+                Dim Nz_curr = N_initial_z; // * refinement_factor;
 
-                Real dt_curr = dt_initial;
+                Real dt_curr = dt_initial / refinement_factor;
 
                 Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
                 Real dy_curr = parser.DimY / (Real)(Ny_curr - 0.5);
@@ -467,11 +467,11 @@ int run_multiple()
             // =================================================================
             // GRID AND TIME CALCULATION: Starting point is correctly i=0 (factor 1)
             // =================================================================
-            Dim Nx_curr = N_initial_x * refinement_factor;
-            Dim Ny_curr = N_initial_y * refinement_factor;
-            Dim Nz_curr = N_initial_z * refinement_factor;
+            Dim Nx_curr = N_initial_x; //* refinement_factor;
+            Dim Ny_curr = N_initial_y; //* refinement_factor;
+            Dim Nz_curr = N_initial_z; //* refinement_factor;
 
-            Real dt_curr = dt_initial; //* refinement_factor;
+            Real dt_curr = dt_initial / refinement_factor;
 
             // dx/dy/dz must be scaled inversely to N_curr (halved when N_curr is doubled)
             Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);

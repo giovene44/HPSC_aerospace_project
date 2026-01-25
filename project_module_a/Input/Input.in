@@ -11,13 +11,13 @@
 2.0*pi
 
 # Number of mesh points in X, Y, Z directions (Nx, Ny, Nz)
-8 8 8
+100 100 100
 
 # Time step size (dt)
-2e-5
+1.0
 
 # Total simulation time (T)
-50e-5
+5
 
 # boundary velocity
 ./Input/boundary_u0.dat
