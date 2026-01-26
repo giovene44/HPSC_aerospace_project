@@ -142,16 +142,17 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         nu);
 
     if (rank == 0)
+    if (rank == 0)
     {
-        std::cout << "Solver initialized (nu=" << nu << ").\n";
+        // std::cout << "Solver initialized (nu=" << nu << ").\n";
     }
 
-    Real time_out_auto = nsb_solver.solve_mpi(mms, topo);
+    Real time_out_auto = nsb_solver.solve_only_momentum_mpi(mms, topo);
     time_out = time_out_auto;
 
     if (rank == 0)
     {
-        std::cout << "Solver initialized (nu=" << nu << ").\n";
+        // std::cout << "Solver initialized (nu=" << nu << ").\n";
     }
 
     // Use MPI solve
@@ -171,6 +172,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
 
     if (rank == 0)
     {
+        /*
         std::cout << "=============================\n";
         std::cout << "   MMS Accuracy Results      \n";
         std::cout << "=============================\n";
@@ -179,6 +181,8 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         std::cout << "Velocity L2 relative  = " << rel_err_u << "\n";
         std::cout << "Pressure L2 relative  = " << rel_err_p << "\n";
         std::cout << "=============================\n";
+
+        */
     }
 
     return std::make_pair(std::make_pair(err_u, rel_err_u), std::make_pair(err_p, rel_err_p));
@@ -307,6 +311,7 @@ int run_multiple_mpi(int argc, char **argv)
                 Dim Nz_curr = N_initial_z;// * refinement_factor;
 
                 Real dt_curr = dt_initial / refinement_factor;
+                Real dt_curr = dt_initial / refinement_factor;
 
                 Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
                 Real dy_curr = parser.DimY / (Real)(Ny_curr - 0.5);
@@ -365,11 +370,11 @@ int run_multiple_mpi(int argc, char **argv)
                 auto time = std::chrono::system_clock::to_time_t(now);
                 std::stringstream ss;
                 ss << std::put_time(std::localtime(&time), "%Y-%m-%d_%H-%M-%S");
-                std::string filename = "OUTPUT/Convergence_Analysis_" + ss.str() + "_MPI_" + std::to_string(world_size) + "_" + "OpenMP_" + std::to_string(omp_get_max_threads()) + ".dat";
+                std::string filename = "OUTPUT/Convergence_Analysis_MPI_" + std::to_string(world_size) + "_" + "OpenMP_" + std::to_string(omp_get_max_threads()) + ".dat";
                 std::system("mkdir -p OUTPUT");
                 std::ofstream convergence_file(filename);
 
-                std::string header = "Nx\t\tdx\t\tdt\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTimeNoOMP\tTimeOMP\t\tSpeedUp\t\tProcs\t\tThreads\t\tRate_u\t\tRate_p\n";
+                std::string header = "Nx\t\tdx\t\t\tdt\t\t\tnsteps\t\tL2_u_abs\t\tL2_p_abs\t\tL2_u_rel\t\tL2_p_rel\t\tTimeNoOMP\tTimeOMP\t\t\tSpeedUp\t\tProcs\t\tRate_u\t\tRate_p\n";
                 std::cout << header;
                 convergence_file << header;
 
@@ -415,7 +420,6 @@ int run_multiple_mpi(int argc, char **argv)
                         << time_speedUps[i] << "\t\t"
                         << std::fixed << std::setprecision(0)
                         << world_size << "\t\t"
-                        << omp_get_max_threads() << "\t\t"
                         << std::fixed << std::setprecision(2)
                         << rate_u << "\t\t"
                         << rate_p << "\n";
@@ -483,6 +487,7 @@ int run_multiple()
             Dim Ny_curr = N_initial_y;// * refinement_factor;
             Dim Nz_curr = N_initial_z;// * refinement_factor;
 
+            Real dt_curr = dt_initial / refinement_factor;
             Real dt_curr = dt_initial / refinement_factor;
 
             // dx/dy/dz must be scaled inversely to N_curr (halved when N_curr is doubled)
