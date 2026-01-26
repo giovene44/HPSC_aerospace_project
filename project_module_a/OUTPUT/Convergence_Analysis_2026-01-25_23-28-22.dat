@@ -1,0 +1,2 @@
+Nx		dx	dt		nsteps		L2_u_abs		L2_p_abs		L2_u_rel		L2_p_rel		Time		Rate_u		Rate_p
+64	9.894780e-02	1.570796e-02	100		2.105535e+00		1.217121e+00		1.868291e-01		2.185911e-01		5.228053e+01		0.00		0.00

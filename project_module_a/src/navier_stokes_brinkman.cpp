@@ -266,7 +266,7 @@ void NavierStokesBrinkman::build_rhs(VectorVariable &rhs,
 #ifndef USE_MPI
 Real NavierStokesBrinkman::solve(const ManufacturedSolution &mms)
 {
-    Real t = Real(1.5);
+    Real t = Real(0.0);
 
     (void)mms; // Unused parameter
     DimensionsHandlerScalar x_scalar_handler(Nx, Ny, Nz, dx);
@@ -294,6 +294,7 @@ Real NavierStokesBrinkman::solve(const ManufacturedSolution &mms)
     pressure_time_series.emplace_back(pressure_solution);
 
     // write_pressure_vtk("./Output/pressure_N"+std::to_string(Nx) +"_step"+ std::to_string(0) + ".vtk");
+    // write_velocity_vtk("./Output/velocity_N"+std::to_string(Nx) +"_step"+ std::to_string(0) + ".vtk");
 
     Dim nsteps = static_cast<Dim>(std::ceil(T / dt));
     // --- Time Stepping Loop ---
@@ -352,6 +353,8 @@ Real NavierStokesBrinkman::solve(const ManufacturedSolution &mms)
         t = t_np1;
 
         std::cout << "Completed time step " << n + 1 << " / " << nsteps << ", t = " << t << "\n";
+        // write_pressure_vtk("./Output/pressure_N"+std::to_string(Nx) +"_step"+ std::to_string(n) + ".vtk");
+        // write_velocity_vtk("./Output/velocity_N"+std::to_string(Nx) +"_step"+ std::to_string(n) + ".vtk");
     }
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end_time - start_time;
@@ -757,7 +760,7 @@ void NavierStokesBrinkman::compute_forcing_term_mpi(VectorVariable &f,
 
 Real NavierStokesBrinkman::solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo)
 {
-    Real t = Real(1.5);
+    Real t = Real(0.0);
 
     (void)mms;
 
@@ -793,6 +796,7 @@ Real NavierStokesBrinkman::solve_mpi(const ManufacturedSolution &mms, const MPIT
     j1 = topo.local_j1(Ny);
     i0 = topo.local_i0(Nx);
     i1 = topo.local_i1(Nx);
+
     for (int n = 0; n < nsteps; ++n)
     {
         const Real t_np1 = t + dt;

@@ -77,7 +77,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run(
 
     // 5) COMPUTE ERRORS
 
-    T_final += Real(1.5);
+    T_final += Real(0.0);
 
     std::cout << "Computing Errors at T = " << T_final << "...\n";
 
@@ -141,7 +141,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
         dx_in, dy_in, dz_in,
         nu);
 
-    if(rank == 0)
+    if (rank == 0)
     {
         std::cout << "Solver initialized (nu=" << nu << ").\n";
     }
@@ -155,7 +155,7 @@ static std::pair<std::pair<Real, Real>, std::pair<Real, Real>> single_run_mpi(
     }
 
     // Use MPI solve
-    T_final += Real(1.5);
+    T_final += Real(0.0);
 
     auto L2_errors = nsb_solver.compute_L2_errors_mpi(
         nsb_solver.velocity_solution,
@@ -302,11 +302,11 @@ int run_multiple_mpi(int argc, char **argv)
                 std::pair<Real, Real> time_per_run;
                 Real refinement_factor = std::pow(2, i);
 
-                Dim Nx_curr = N_initial_x * refinement_factor;
-                Dim Ny_curr = N_initial_y * refinement_factor;
-                Dim Nz_curr = N_initial_z * refinement_factor;
+                Dim Nx_curr = N_initial_x;// * refinement_factor;
+                Dim Ny_curr = N_initial_y;// * refinement_factor;
+                Dim Nz_curr = N_initial_z;// * refinement_factor;
 
-                Real dt_curr = dt_initial;
+                Real dt_curr = dt_initial / refinement_factor;
 
                 Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
                 Real dy_curr = parser.DimY / (Real)(Ny_curr - 0.5);
@@ -322,7 +322,7 @@ int run_multiple_mpi(int argc, char **argv)
                 }
 
 #ifdef _OPENMP
-                omp_set_num_threads(1);
+                omp_set_num_threads(max_omp_threads);
 #endif
                 Real time_no_omp = 0.0;
 
@@ -340,15 +340,15 @@ int run_multiple_mpi(int argc, char **argv)
                 errors_rel_p.emplace_back(errors.second.second);
                 time_per_run.first = time_no_omp;
 
-#ifdef _OPENMP
-                omp_set_num_threads(max_omp_threads);
-#endif
-                Real time_omp = 0.0;
-                errors = single_run_mpi(
-                    Nx_curr, Ny_curr, Nz_curr, dt_curr,
-                    dx_curr, dy_curr, dz_curr, T_final,
-                    parser.u_boundary_file, parser.p_boundary_file,
-                    time_omp, topo);
+// #ifdef _OPENMP
+//                 omp_set_num_threads(max_omp_threads);
+// #endif
+                Real time_omp = 1.0;
+                // errors = single_run_mpi(
+                //     Nx_curr, Ny_curr, Nz_curr, dt_curr,
+                //     dx_curr, dy_curr, dz_curr, T_final,
+                //     parser.u_boundary_file, parser.p_boundary_file,
+                //     time_omp, topo);
                 time_per_run.second = time_omp;
                 time_values.emplace_back(time_per_run);
                 auto speed_up = time_per_run.first / time_per_run.second;
@@ -377,10 +377,24 @@ int run_multiple_mpi(int argc, char **argv)
                 {
                     Real dx = parser.DimX / (Real)(N_values[i] - 0.5);
                     Real dx_prev = (i > 0) ? parser.DimX / (Real)(N_values[i - 1] - 0.5) : 0.0;
+
+                    Real dt = dt_values[i];
+                    Real dt_prev = (i > 0) ? dt_values[i - 1] : 0.0;
+
                     Dim nsteps = (Dim)(T_final / dt_values[i]);
 
-                    Real rate_u = (i > 0) ? std::log(errors_u[i - 1] / errors_u[i]) / std::log(dx_prev / dx) : 0.0;
-                    Real rate_p = (i > 0) ? std::log(errors_p[i - 1] / errors_p[i]) / std::log(dx_prev / dx) : 0.0;
+                    Real den_rate(1.0);
+
+                    if (dx==dx_prev){
+                        den_rate = std::log(dt_prev/dt);
+                    }
+                    else if (dt==dt_prev){
+                        den_rate = std::log(dx_prev/dx);
+                    }
+
+
+                    Real rate_u = (i > 0) ? std::log(errors_u[i - 1] / errors_u[i]) / den_rate : 0.0;
+                    Real rate_p = (i > 0) ? std::log(errors_p[i - 1] / errors_p[i]) / den_rate : 0.0;
 
                     std::ostringstream oss;
                     oss << std::fixed << std::setprecision(0)
@@ -465,11 +479,11 @@ int run_multiple()
             // =================================================================
             // GRID AND TIME CALCULATION: Starting point is correctly i=0 (factor 1)
             // =================================================================
-            Dim Nx_curr = N_initial_x * refinement_factor;
-            Dim Ny_curr = N_initial_y * refinement_factor;
-            Dim Nz_curr = N_initial_z * refinement_factor;
+            Dim Nx_curr = N_initial_x;// * refinement_factor;
+            Dim Ny_curr = N_initial_y;// * refinement_factor;
+            Dim Nz_curr = N_initial_z;// * refinement_factor;
 
-            Real dt_curr = dt_initial; //* refinement_factor;
+            Real dt_curr = dt_initial / refinement_factor;
 
             // dx/dy/dz must be scaled inversely to N_curr (halved when N_curr is doubled)
             Real dx_curr = parser.DimX / (Real)(Nx_curr - 0.5);
@@ -523,8 +537,20 @@ int run_multiple()
             Real dx_prev = (i > 0) ? parser.DimX / (Real)(N_values[i - 1] - 0.5) : 0.0;
             Dim nsteps = (Dim)(T_final / dt_values[i]);
 
-            Real rate_u = (i > 0) ? std::log(errors_u[i - 1] / errors_u[i]) / std::log(dx_prev / dx) : 0.0;
-            Real rate_p = (i > 0) ? std::log(errors_p[i - 1] / errors_p[i]) / std::log(dx_prev / dx) : 0.0;
+            Real dt = dt_values[i];
+            Real dt_prev = (i > 0) ? dt_values[i - 1] : 0.0;
+
+            Real den_rate(1.0);
+
+                    if (dx==dx_prev){
+                        den_rate = std::log(dt_prev/dt);
+                    }
+                    else if (dt==dt_prev){
+                        den_rate = std::log(dx_prev/dx);
+                    }
+
+            Real rate_u = (i > 0) ? std::log(errors_u[i - 1] / errors_u[i]) / den_rate : 0.0;
+            Real rate_p = (i > 0) ? std::log(errors_p[i - 1] / errors_p[i]) / den_rate : 0.0;
 
             std::ostringstream oss;
             oss << std::fixed << std::setprecision(0)
