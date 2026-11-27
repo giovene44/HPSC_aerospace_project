@@ -229,6 +229,7 @@ public:
     {
         Parser p(source, *this);
         root_ = p.parse();
+        prune();
     }
 
     const std::string &source() const { return source_; }
@@ -300,54 +301,57 @@ public:
         const long s[3] = {sx, sy, sz};
         const int A = axis, B = (axis + 1) % 3, C = (axis + 2) % 3;
         const unsigned depA = 1u << A;
-        const unsigned depBC = (1u << B) | (1u << C);
+        // Directions with a single point are constants for the whole call. The remaining
+        // nodes are evaluated once per call (level 0), once per outer index kc (level 1:
+        // depend on C only) or once per line (level 2: depend on B).
+        const unsigned bitB = (n[B] > 1) ? (1u << B) : 0u;
+        const unsigned bitC = (n[C] > 1) ? (1u << C) : 0u;
 
         const std::size_t nn = nodes_.size();
         const int L = n[A];
 
-        // classification
-        std::vector<double> sval(nn, 0.0);          // scalar values
-        std::vector<int> arr(nn, -1);               // index of the array buffer, -1 => scalar
-        std::vector<char> fixed_arr(nn, 0);         // array computed once per call
+        std::vector<double> sval(nn, 0.0); // scalar values
+        std::vector<int> arr(nn, -1);      // index of the array buffer, -1 => scalar
+        std::vector<int> lev1, lev2;
         int narr = 0;
         for (std::size_t i = 0; i < nn; ++i)
-            if (nodes_[i].deps & depA)
+        {
+            const unsigned d = nodes_[i].deps;
+            if (d & depA)
                 arr[i] = narr++;
+            if (d & bitB)
+                lev2.push_back(static_cast<int>(i));
+            else if (d & bitC)
+                lev1.push_back(static_cast<int>(i));
+        }
         std::vector<double> buf(static_cast<std::size_t>(narr) * static_cast<std::size_t>(L));
         auto A_ptr = [&](int node) -> double *
         { return buf.data() + static_cast<std::size_t>(arr[node]) * L; };
-
-        double p[3] = {0.0, 0.0, 0.0};
-        // Pass 1: nodes that depend neither on B nor on C (computed once).
-        for (std::size_t i = 0; i < nn; ++i)
+        auto eval_node = [&](std::size_t i, const double *p)
         {
-            const Node &nd = nodes_[i];
-            if (nd.deps & depBC)
-                continue;
             if (arr[i] < 0)
                 sval[i] = eval_scalar_node(i, sval, p, t);
             else
-            {
                 eval_array_node(i, sval, arr, buf, L, c[A], A, t);
-                fixed_arr[i] = 1;
-            }
-        }
+        };
+
+        double p[3] = {0.0, 0.0, 0.0};
+        p[B] = c[B][0];
+        p[C] = c[C][0];
+        for (std::size_t i = 0; i < nn; ++i) // level 0
+            if (!(nodes_[i].deps & (bitB | bitC)))
+                eval_node(i, p);
 
         for (int kc = 0; kc < n[C]; ++kc)
+        {
+            p[C] = c[C][kc];
+            for (int i : lev1)
+                eval_node(i, p);
             for (int kb = 0; kb < n[B]; ++kb)
             {
                 p[B] = c[B][kb];
-                p[C] = c[C][kc];
-                for (std::size_t i = 0; i < nn; ++i)
-                {
-                    const Node &nd = nodes_[i];
-                    if (!(nd.deps & depBC))
-                        continue;
-                    if (arr[i] < 0)
-                        sval[i] = eval_scalar_node(i, sval, p, t);
-                    else
-                        eval_array_node(i, sval, arr, buf, L, c[A], A, t);
-                }
+                for (int i : lev2)
+                    eval_node(i, p);
                 double *o = out + kb * s[B] + kc * s[C];
                 const long sa = s[A];
                 if (arr[root_] < 0)
@@ -366,7 +370,7 @@ public:
                             o[ia * sa] = r[ia];
                 }
             }
-        (void)fixed_arr;
+        }
     }
 
 private:
@@ -376,6 +380,40 @@ private:
     std::unordered_map<std::string, int> cache_; // hash-consing for CSE
 
     // ------------------------------------------------------------------ building
+    /// Remove the nodes not reachable from the root (left behind by the simplifications),
+    /// keeping the topological order.
+    void prune()
+    {
+        const int n = static_cast<int>(nodes_.size());
+        std::vector<char> live(n, 0);
+        live[root_] = 1;
+        for (int i = n - 1; i >= 0; --i)
+        {
+            if (!live[i])
+                continue;
+            if (nodes_[i].a >= 0)
+                live[nodes_[i].a] = 1;
+            if (nodes_[i].b >= 0)
+                live[nodes_[i].b] = 1;
+        }
+        std::vector<int> map(n, -1);
+        std::vector<Node> kept;
+        for (int i = 0; i < n; ++i)
+            if (live[i])
+            {
+                Node nd = nodes_[i];
+                if (nd.a >= 0)
+                    nd.a = map[nd.a];
+                if (nd.b >= 0)
+                    nd.b = map[nd.b];
+                map[i] = static_cast<int>(kept.size());
+                kept.push_back(nd);
+            }
+        nodes_.swap(kept);
+        root_ = map[root_];
+        cache_.clear(); // the expression is complete: no more hash-consing needed
+    }
+
     static std::string key_of(const Node &n)
     {
         std::string k(1, static_cast<char>(n.op));
@@ -461,6 +499,15 @@ private:
         }
         if (op == Op::Sub && cb && vb == 0.0)
             return a;
+        // A*X +- B*X -> (A +- B)*X when X is the same node: products are built with the
+        // factors depending on x last (see Parser::product), so sums of terms with the same
+        // x-dependent factor need one multiplication per point instead of one per term.
+        if ((op == Op::Add || op == Op::Sub) && nodes_[a].op == Op::Mul && nodes_[b].op == Op::Mul &&
+            nodes_[a].b == nodes_[b].b && (nodes_[nodes_[a].b].deps & ~(nodes_[nodes_[a].a].deps | nodes_[nodes_[b].a].deps)))
+        {
+            const int x = nodes_[a].b;
+            return add_binary(Op::Mul, add_binary(op, nodes_[a].a, nodes_[b].a), x);
+        }
         if (op == Op::Div && cb && vb == 1.0)
             return a;
         if (op == Op::Pow && cb && vb == std::floor(vb) && std::fabs(vb) <= 64.0)
