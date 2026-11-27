@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
             int recv_count;
             MPI_Recv(&recv_count, 1, MPI_INT, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             std::vector<Real> recv_buf(recv_count);
-            MPI_Recv(recv_buf.data(), recv_count, MPI_FLOAT, r, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(recv_buf.data(), recv_count, mpi_real_type(), r, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
             for (int i = 0; i < recv_count && next_idx < N; ++i) {
                 x_global[next_idx++] = recv_buf[i];
@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
         // Send internal points (skip left interface to avoid duplication)
         int send_count = local_N - 1;
         MPI_Send(&send_count, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-        MPI_Send(&x_local[1], send_count, MPI_FLOAT, 0, 1, MPI_COMM_WORLD);
+        MPI_Send(&x_local[1], send_count, mpi_real_type(), 0, 1, MPI_COMM_WORLD);
 #endif
     }
 

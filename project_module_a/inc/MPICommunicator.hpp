@@ -512,7 +512,7 @@ inline int MPICommunicator::get_right_neighbor(int direction) const
 inline void MPICommunicator::send_value(Real value, int dest_rank, int tag)
 {
 #ifdef USE_MPI
-    MPI_Send(&value, 1, MPI_FLOAT, dest_rank, tag, get_active_comm(comm_, cart_comm_, world_comm_));
+    MPI_Send(&value, 1, mpi_real_type(), dest_rank, tag, get_active_comm(comm_, cart_comm_, world_comm_));
 #else
     (void)value;
     (void)dest_rank;
@@ -524,7 +524,7 @@ inline Real MPICommunicator::recv_value(int src_rank, int tag)
 {
 #ifdef USE_MPI
     Real value;
-    MPI_Recv(&value, 1, MPI_FLOAT, src_rank, tag, get_active_comm(comm_, cart_comm_, world_comm_), MPI_STATUS_IGNORE);
+    MPI_Recv(&value, 1, mpi_real_type(), src_rank, tag, get_active_comm(comm_, cart_comm_, world_comm_), MPI_STATUS_IGNORE);
     return value;
 #else
     (void)src_rank;
@@ -536,7 +536,7 @@ inline Real MPICommunicator::recv_value(int src_rank, int tag)
 inline void MPICommunicator::send_vector(const std::vector<Real> &values, int dest_rank, int tag)
 {
 #ifdef USE_MPI
-    MPI_Send(values.data(), static_cast<int>(values.size()), MPI_FLOAT, dest_rank, tag,
+    MPI_Send(values.data(), static_cast<int>(values.size()), mpi_real_type(), dest_rank, tag,
              get_active_comm(comm_, cart_comm_, world_comm_));
 #else
     (void)values;
@@ -548,7 +548,7 @@ inline void MPICommunicator::send_vector(const std::vector<Real> &values, int de
 inline void MPICommunicator::recv_vector(std::vector<Real> &values, int src_rank, int tag)
 {
 #ifdef USE_MPI
-    MPI_Recv(values.data(), static_cast<int>(values.size()), MPI_FLOAT, src_rank, tag,
+    MPI_Recv(values.data(), static_cast<int>(values.size()), mpi_real_type(), src_rank, tag,
              get_active_comm(comm_, cart_comm_, world_comm_), MPI_STATUS_IGNORE);
 #else
     (void)values;
@@ -562,7 +562,7 @@ inline int MPICommunicator::isend_value(Real value, int dest_rank, int tag)
 #ifdef USE_MPI
     send_buffers_.push_back(value);
     MPI_Request request;
-    MPI_Isend(&send_buffers_.back(), 1, MPI_FLOAT, dest_rank, tag,
+    MPI_Isend(&send_buffers_.back(), 1, mpi_real_type(), dest_rank, tag,
               get_active_comm(comm_, cart_comm_, world_comm_), &request);
     pending_requests_.push_back(request);
     return static_cast<int>(pending_requests_.size()) - 1;
@@ -578,7 +578,7 @@ inline int MPICommunicator::irecv_value(Real &value, int src_rank, int tag)
 {
 #ifdef USE_MPI
     MPI_Request request;
-    MPI_Irecv(&value, 1, MPI_FLOAT, src_rank, tag,
+    MPI_Irecv(&value, 1, mpi_real_type(), src_rank, tag,
               get_active_comm(comm_, cart_comm_, world_comm_), &request);
     pending_requests_.push_back(request);
     return static_cast<int>(pending_requests_.size()) - 1;
@@ -619,8 +619,8 @@ inline void MPICommunicator::allgather_schur_diag(const std::vector<Real> &local
 {
 #ifdef USE_MPI
     global_contrib.resize(size_ * local_contrib.size());
-    MPI_Allgather(local_contrib.data(), static_cast<int>(local_contrib.size()), MPI_FLOAT,
-                  global_contrib.data(), static_cast<int>(local_contrib.size()), MPI_FLOAT,
+    MPI_Allgather(local_contrib.data(), static_cast<int>(local_contrib.size()), mpi_real_type(),
+                  global_contrib.data(), static_cast<int>(local_contrib.size()), mpi_real_type(),
                   get_active_comm(comm_, cart_comm_, world_comm_));
 #else
     global_contrib = local_contrib;
@@ -634,7 +634,7 @@ inline void MPICommunicator::reduce_interface_rhs(const std::vector<Real> &local
 #ifdef USE_MPI
     global_rhs.resize(local_rhs.size());
     MPI_Reduce(local_rhs.data(), global_rhs.data(), static_cast<int>(local_rhs.size()),
-               MPI_FLOAT, MPI_SUM, root, get_active_comm(comm_, cart_comm_, world_comm_));
+               mpi_real_type(), MPI_SUM, root, get_active_comm(comm_, cart_comm_, world_comm_));
 #else
     (void)root;
     global_rhs = local_rhs;
@@ -647,7 +647,7 @@ inline void MPICommunicator::allreduce_interface_rhs(const std::vector<Real> &lo
 #ifdef USE_MPI
     global_rhs.resize(local_rhs.size());
     MPI_Allreduce(local_rhs.data(), global_rhs.data(), static_cast<int>(local_rhs.size()),
-                  MPI_FLOAT, MPI_SUM, get_active_comm(comm_, cart_comm_, world_comm_));
+                  mpi_real_type(), MPI_SUM, get_active_comm(comm_, cart_comm_, world_comm_));
 #else
     global_rhs = local_rhs;
 #endif
@@ -663,7 +663,7 @@ inline void MPICommunicator::allreduce_interface_rhs_batched(
     MPI_Allreduce(local_rhs_flat.data(),
                   global_rhs_flat.data(),
                   static_cast<int>(local_rhs_flat.size()),
-                  MPI_FLOAT, MPI_SUM,
+                  mpi_real_type(), MPI_SUM,
                   get_active_comm(comm_, cart_comm_, world_comm_));
 #else
     global_rhs_flat = local_rhs_flat;
@@ -674,7 +674,7 @@ inline void MPICommunicator::broadcast_interface_solution(std::vector<Real> &int
                                                           int root)
 {
 #ifdef USE_MPI
-    MPI_Bcast(interface_values.data(), static_cast<int>(interface_values.size()), MPI_FLOAT,
+    MPI_Bcast(interface_values.data(), static_cast<int>(interface_values.size()), mpi_real_type(),
               root, get_active_comm(comm_, cart_comm_, world_comm_));
 #else
     (void)interface_values;
@@ -704,24 +704,24 @@ inline void MPICommunicator::exchange_interface_values(int direction,
     // Send to left, receive from right
     if (left_neighbor >= 0)
     {
-        MPI_Isend(&left_value, 1, MPI_FLOAT, left_neighbor, 0,
+        MPI_Isend(&left_value, 1, mpi_real_type(), left_neighbor, 0,
                   active_comm, &requests[num_requests++]);
     }
     if (right_neighbor >= 0)
     {
-        MPI_Irecv(&recv_from_right, 1, MPI_FLOAT, right_neighbor, 0,
+        MPI_Irecv(&recv_from_right, 1, mpi_real_type(), right_neighbor, 0,
                   active_comm, &requests[num_requests++]);
     }
 
     // Send to right, receive from left
     if (right_neighbor >= 0)
     {
-        MPI_Isend(&right_value, 1, MPI_FLOAT, right_neighbor, 1,
+        MPI_Isend(&right_value, 1, mpi_real_type(), right_neighbor, 1,
                   active_comm, &requests[num_requests++]);
     }
     if (left_neighbor >= 0)
     {
-        MPI_Irecv(&recv_from_left, 1, MPI_FLOAT, left_neighbor, 1,
+        MPI_Irecv(&recv_from_left, 1, mpi_real_type(), left_neighbor, 1,
                   active_comm, &requests[num_requests++]);
     }
 

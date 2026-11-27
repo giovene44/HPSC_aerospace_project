@@ -548,7 +548,7 @@ bool test_serial_vs_parallel_comparison(MPICommunicator& comm) {
                 int recv_size;
                 MPI_Recv(&recv_size, 1, MPI_INT, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 std::vector<Real> recv_buf(recv_size);
-                MPI_Recv(recv_buf.data(), recv_size, MPI_FLOAT, r, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(recv_buf.data(), recv_size, mpi_real_type(), r, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 for (int i = 0; i < recv_size; ++i) {
                     if (next_global_idx < N) {
                         x_parallel_full[next_global_idx++] = recv_buf[i];
@@ -561,7 +561,7 @@ bool test_serial_vs_parallel_comparison(MPICommunicator& comm) {
             // Send internal + right interface points (skip left interface)
             int send_size = local_N - 1;  // Skip left interface point
             MPI_Send(&send_size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-            MPI_Send(&x_parallel[1], send_size, MPI_FLOAT, 0, 1, MPI_COMM_WORLD);
+            MPI_Send(&x_parallel[1], send_size, mpi_real_type(), 0, 1, MPI_COMM_WORLD);
 #endif
         }
 

@@ -1,4 +1,4 @@
-#Number of Run
+#Number of Run (N is doubled at every run, dt is divided by "dt refinement")
 4
 
 #Dim of X
@@ -13,16 +13,16 @@
 # Number of mesh points in X, Y, Z directions (Nx, Ny, Nz)
 8 8 8
 
-# Time step size (dt)
-2e-5
+# Time step size (dt) of the first run
+0.1
 
 # Total simulation time (T)
-50e-5
+1.0
 
 # boundary velocity
 ./Input/boundary_u0.dat
 
-# boundary pressure
+# boundary pressure (not used: the pressure increment has homogeneous Neumann conditions)
 ./Input/boundary_p0.dat
 
 # fx forcing term
@@ -32,7 +32,7 @@ cos(t)*sin(x)*sin(y)*sin(z)+(3.0*1e-1)*sin(t)*sin(x)*sin(y)*sin(z)+(1e-1)*sin(x)
 cos(t)*cos(x)*cos(y)*cos(z)+(3.0*1e-1)*sin(t)*cos(x)*cos(y)*cos(z)+(1e-1)*cos(x)*cos(y)*cos(z)*sin(t)+sin(t)*sin(x)*cos(y)*sin(z)
 
 # fz forcing term
-cos(t)*cos(x)*sin(y)*(sin(z)+cos(z))+(3.0*1e-1)*cos(x)*sin(y)*(cos(z)+sin(z))+(1e-1)*sin(t)*cos(x)*sin(y)*(sin(z)+cos(z))+sin(t)*sin(x)*sin(y)*cos(z)
+cos(t)*cos(x)*sin(y)*(sin(z)+cos(z))+(3.0*1e-1)*sin(t)*cos(x)*sin(y)*(cos(z)+sin(z))+(1e-1)*sin(t)*cos(x)*sin(y)*(sin(z)+cos(z))+sin(t)*sin(x)*sin(y)*cos(z)
 
 # u_initial condition term
 sin(t)*sin(x)*sin(y)*sin(z)
@@ -51,3 +51,20 @@ sin(t)*sin(x)*sin(y)*sin(z)
 
 # nu
 1e-1
+
+# ---- optional entries (may be omitted, defaults in brackets) ----
+# initial time t0 [1.5]
+1.5
+
+# dt refinement: dt is divided by this factor at every run [1]
+# (2 = dt proportional to h, i.e. space-time convergence study)
+2
+
+# grid refinement: N is multiplied by this factor at every run [2]
+# (1 = temporal convergence study on a fixed grid)
+2
+
+# chi: rotational pressure correction p += phi - chi*nu*div(u^{n+1}+u^n)/2, 0 <= chi <= 1 [0]
+# (0 = standard incremental scheme of the slides: pressure ~ dt^1.5;
+#  1 = rotational form: second-order pressure)
+1

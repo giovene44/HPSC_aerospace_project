@@ -1,19 +1,33 @@
 #ifndef PARSE_INPUT_HPP
 #define PARSE_INPUT_HPP
 
-#include <iostream>
 #include <fstream>
-#include <cmath>
-#include <vector>
-#include <string>
-#include <stdexcept>
-#include <sstream>
-#include <limits>
 #include <functional>
-#include <type_traits>
-#include "mpParser.h"
-#include "Variables.hpp"
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
+#include "Variables.hpp"
+#include "Expression.hpp"
+#include "BoundaryFunctions.hpp"
+
+/**
+ * @brief Reader of the input file (see Input/Input.in for the format).
+ *
+ * Mandatory entries, in order (lines starting with '#' are comments):
+ *   number of runs, Lx, Ly, Lz, Nx Ny Nz, dt, T, velocity boundary file, pressure boundary
+ *   file, fx, fy, fz, exact u, v, w, exact p, permeability k(x,y,z), viscosity nu.
+ * Optional trailing entries (backward compatible):
+ *   t0                 initial time (default 1.5, the value used so far),
+ *   dt_refinement      factor dividing dt at every refinement level (default 1: fixed dt;
+ *                      use 2 to refine dt together with the grid spacing),
+ *   grid_refinement    factor multiplying N at every refinement level (default 2; use 1 for
+ *                      a temporal convergence study on a fixed grid),
+ *   chi                rotational pressure correction, 0 <= chi <= 1 (default 0: standard
+ *                      incremental scheme of the course; 1 reduces the pressure error).
+ * Numeric entries may be expressions (e.g. 2.0*pi).
+ */
 class ParseInput
 {
 private:
@@ -29,370 +43,189 @@ public:
     ParseInput &operator=(const ParseInput &) = delete;
 
     // --- Member Variables ---
-    int num_runs;
-    Real DimX, DimY, DimZ;
-    Dim Nx, Ny, Nz;
-    Real dt, T;
-    Real dx, dy, dz;
+    int num_runs = 1;
+    Real DimX = 1, DimY = 1, DimZ = 1;
+    Dim Nx = 8, Ny = 8, Nz = 8;
+    Real dt = 0.1, T = 1.0;
+    Real dx = 1, dy = 1, dz = 1;
+    Real t0 = 1.5;
+    Real dt_refinement = 1.0;
+    int grid_refinement = 2;
+    Real chi = 0.0;
 
     std::string u_boundary_file;
     std::string p_boundary_file;
 
-    // RAW STRINGS for Forcing Functions
-    std::string fx_expression;
-    std::string fy_expression;
-    std::string fz_expression;
+    std::string fx_expression, fy_expression, fz_expression;
+    std::string u_exact_expression, v_exact_expression, w_exact_expression, p_exact_expression;
 
-    // RAW STRINGS for Exact Solution (u, v, w, p)
-    std::string u_exact_expression;
-    std::string v_exact_expression;
-    std::string w_exact_expression;
-    std::string p_exact_expression;
+    std::string k_expression;
+    Real nu = 1.0;
 
-    // PHYSICS PARAMETERS (Read from input)
-    std::string k_expression; // Can be "1e10" or "sin(x)"
-    Real nu;                  // Explicit viscosity (e.g., 6.0)
-
-    // --- Helpers to generate std::function objects ---
-    std::function<std::vector<Real>(Real, Real, Real, Real)> get_forcing_function() const;
-    BoundaryFunctions get_forcing_function_bf() const;
-    std::function<std::vector<Real>(Real, Real, Real, Real)> get_exact_velocity_function() const;
-    BoundaryFunctions get_exact_velocity_function_bf() const;
-    std::function<Real(Real, Real, Real, Real)> get_exact_pressure_function() const;
-    BoundaryFunctions get_exact_pressure_function_bf() const;
-
-    // Helper for the K function
-    std::function<Real(Real, Real, Real)> get_k_function() const;
-    BoundaryFunctions get_k_function_bf() const;
+    // --- Helpers to generate std::function objects / BoundaryFunctions ---
+    std::function<std::vector<Real>(Real, Real, Real, Real)> get_forcing_function() const
+    {
+        return vector_function(fx_expression, fy_expression, fz_expression);
+    }
+    BoundaryFunctions get_forcing_function_bf() const
+    {
+        BoundaryFunctions f;
+        f.set_string_expression({fx_expression, fy_expression, fz_expression});
+        return f;
+    }
+    std::function<std::vector<Real>(Real, Real, Real, Real)> get_exact_velocity_function() const
+    {
+        return vector_function(u_exact_expression, v_exact_expression, w_exact_expression);
+    }
+    BoundaryFunctions get_exact_velocity_function_bf() const
+    {
+        BoundaryFunctions f;
+        f.set_string_expression({u_exact_expression, v_exact_expression, w_exact_expression});
+        return f;
+    }
+    std::function<Real(Real, Real, Real, Real)> get_exact_pressure_function() const
+    {
+        fastexpr::Expression e(p_exact_expression);
+        return [e](Real x, Real y, Real z, Real t) -> Real
+        { return e(x, y, z, t); };
+    }
+    BoundaryFunctions get_exact_pressure_function_bf() const
+    {
+        BoundaryFunctions f;
+        f.set_string_expression({p_exact_expression});
+        return f;
+    }
+    std::function<Real(Real, Real, Real)> get_k_function() const
+    {
+        fastexpr::Expression e(k_expression);
+        return [e](Real x, Real y, Real z) -> Real
+        { return e(x, y, z, 0.0); };
+    }
+    BoundaryFunctions get_k_function_bf() const
+    {
+        BoundaryFunctions f;
+        f.set_string_expression({k_expression});
+        return f;
+    }
 
     void parse_input(const std::string &input_file)
     {
         std::ifstream file(input_file);
         if (!file.is_open())
-        {
             throw std::runtime_error("Error - Cannot open input file: " + input_file);
-        }
 
-        mup::ParserX p;
-        try
+        // One entry per non-empty line; '#' starts a comment that lasts until end of line.
+        // (Expressions may contain spaces; only the "Nx Ny Nz" line is split.)
+        std::vector<std::string> lines;
         {
-            p.DefineConst("pi", M_PI);
-        }
-        catch (...)
-        {
-        }
-        try
-        {
-            p.DefineConst("Pi", M_PI);
-        }
-        catch (...)
-        {
-        }
-
-        std::string token;
-
-        // Lambda to read next value/expression
-        auto next_value = [&](auto &var)
-        {
-            using T = std::decay_t<decltype(var)>;
-            while (file >> token)
+            std::string line;
+            while (std::getline(file, line))
             {
-                if (token.empty() || token[0] == '#')
-                {
-                    file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                const auto hash = line.find('#');
+                if (hash != std::string::npos)
+                    line = line.substr(0, hash);
+                const auto first = line.find_first_not_of(" \t\r");
+                if (first == std::string::npos)
                     continue;
-                }
-                if constexpr (std::is_same_v<T, std::string>)
-                {
-                    var = token;
-                    // Remove quotes if present
-                    if (var.size() >= 2 && var.front() == '"' && var.back() == '"')
-                    {
-                        var = var.substr(1, var.size() - 2);
-                    }
-                }
-                else
-                {
-                    try
-                    {
-                        p.SetExpr(token);
-                        var = static_cast<T>(p.Eval().GetFloat());
-                    }
-                    catch (const mup::ParserError &e)
-                    {
-                        throw std::runtime_error("Parser Error parsing token '" + token + "': " + e.GetMsg());
-                    }
-                }
-                return;
+                const auto last = line.find_last_not_of(" \t\r");
+                lines.push_back(line.substr(first, last - first + 1));
             }
-            throw std::runtime_error("Error - Unexpected end of file.");
+        }
+        std::vector<std::string> tokens;
+        for (std::size_t q = 0; q < lines.size(); ++q)
+        {
+            if (q == 4) // Nx Ny Nz
+            {
+                std::istringstream ss(lines[q]);
+                std::vector<std::string> n3;
+                std::string tok;
+                while (ss >> tok)
+                    n3.push_back(tok);
+                if (n3.size() == 1)
+                    n3 = {n3[0], n3[0], n3[0]};
+                if (n3.size() != 3)
+                    throw std::runtime_error("Error - expected 'Nx Ny Nz' in " + input_file + ", got: " + lines[q]);
+                tokens.insert(tokens.end(), n3.begin(), n3.end());
+            }
+            else
+                tokens.push_back(lines[q]);
+        }
+        std::size_t pos = 0;
+        auto next_token = [&](const char *what) -> std::string
+        {
+            if (pos >= tokens.size())
+                throw std::runtime_error(std::string("Error - Unexpected end of input file while reading ") + what);
+            std::string t = tokens[pos++];
+            if (t.size() >= 2 && t.front() == '"' && t.back() == '"')
+                t = t.substr(1, t.size() - 2);
+            return t;
+        };
+        auto next_number = [&](const char *what) -> double
+        {
+            const std::string t = next_token(what);
+            fastexpr::Expression e(t);
+            if (!e.is_constant())
+                throw std::runtime_error(std::string("Error - '") + t + "' is not a constant (" + what + ")");
+            return e(0, 0, 0, 0);
         };
 
-        // 1. General Parameters
-        next_value(num_runs);
-        next_value(DimX);
-        next_value(DimY);
-        next_value(DimZ);
-        next_value(Nx);
-        next_value(Ny);
-        next_value(Nz);
-        next_value(dt);
-        next_value(T);
+        num_runs = static_cast<int>(next_number("number of runs"));
+        DimX = next_number("Lx");
+        DimY = next_number("Ly");
+        DimZ = next_number("Lz");
+        Nx = static_cast<Dim>(next_number("Nx"));
+        Ny = static_cast<Dim>(next_number("Ny"));
+        Nz = static_cast<Dim>(next_number("Nz"));
+        dt = next_number("dt");
+        T = next_number("T");
 
-        // ===========================================
-        // 4. Calculate dx, dy, dz (Grid Spacing)
-        // ===========================================
-        if (Nx > 1)
-        {
-            dx = DimX / (Real)(Nx - 0.5);
-        }
-        else
-        {
-            dx = DimX;
-        }
-        if (Ny > 1)
-        {
-            dy = DimY / (Real)(Ny - 0.5);
-        }
-        else
-        {
-            dy = DimY;
-        }
-        if (Nz > 1)
-        {
-            dz = DimZ / (Real)(Nz - 0.5);
-        }
-        else
-        {
-            dz = DimZ;
-        }
+        // Staggered grid of the course: pressure nodes at i*h, i = 0..N-1, and the domain is
+        // [0, (N - 1/2) h], so that the last normal-velocity node lies on the boundary.
+        dx = DimX / (Real(Nx) - Real(0.5));
+        dy = DimY / (Real(Ny) - Real(0.5));
+        dz = DimZ / (Real(Nz) - Real(0.5));
 
-        // 2. Boundary Files
-        next_value(u_boundary_file);
-        next_value(p_boundary_file);
+        u_boundary_file = next_token("velocity boundary file");
+        p_boundary_file = next_token("pressure boundary file");
 
-        // 3. Forcing Function Expressions
-        next_value(fx_expression);
-        next_value(fy_expression);
-        next_value(fz_expression);
+        fx_expression = next_token("fx");
+        fy_expression = next_token("fy");
+        fz_expression = next_token("fz");
 
-        // 4. Exact Solution Expressions
-        next_value(u_exact_expression);
-        next_value(v_exact_expression);
-        next_value(w_exact_expression);
-        next_value(p_exact_expression);
+        u_exact_expression = next_token("exact u");
+        v_exact_expression = next_token("exact v");
+        w_exact_expression = next_token("exact w");
+        p_exact_expression = next_token("exact p");
 
-        // 5. Physics Parameters (Reading from your updated input file)
-        next_value(k_expression); // Reads "1e10"
-        next_value(nu);           // Reads 6.0
-        /*
+        k_expression = next_token("permeability k");
+        nu = next_number("nu");
 
-        std::cout << "\n===== Input Parameters Loaded =====\n";
-        std::cout << "Forcing (Fx): " << fx_expression << "\n";
-        std::cout << "Forcing (Fy): " << fy_expression << "\n";
-        std::cout << "Forcing (Fz): " << fz_expression << "\n";
-        std::cout << "Exact U:      " << u_exact_expression << "\n";
-        std::cout << "Exact V:      " << v_exact_expression << "\n";
-        std::cout << "Exact W:      " << w_exact_expression << "\n";
-        std::cout << "Exact P:      " << p_exact_expression << "\n";
-        std::cout << "K Function:   " << k_expression << "\n";
-        std::cout << "Viscosity (nu): " << nu << "\n";
-        std::cout << "===================================\n";
+        if (pos < tokens.size())
+            t0 = next_number("t0");
+        if (pos < tokens.size())
+            dt_refinement = next_number("dt refinement");
+        if (pos < tokens.size())
+            grid_refinement = static_cast<int>(next_number("grid refinement"));
+        if (pos < tokens.size())
+            chi = next_number("chi (rotational correction)");
 
+        // validate the expressions immediately (clear error messages)
+        for (const std::string *s : {&fx_expression, &fy_expression, &fz_expression, &u_exact_expression,
+                                     &v_exact_expression, &w_exact_expression, &p_exact_expression, &k_expression})
+            fastexpr::Expression check(*s);
+        if (num_runs < 1 || Nx < 3 || Ny < 3 || Nz < 3 || dt <= 0 || T < 0 || nu <= 0 || dt_refinement <= 0 ||
+            grid_refinement < 1 || chi < 0 || chi > 1)
+            throw std::runtime_error("Error - invalid parameters in " + input_file);
+    }
 
-        */
+private:
+    static std::function<std::vector<Real>(Real, Real, Real, Real)>
+    vector_function(const std::string &a, const std::string &b, const std::string &c)
+    {
+        fastexpr::Expression ea(a), eb(b), ec(c);
+        return [ea, eb, ec](Real x, Real y, Real z, Real t) -> std::vector<Real>
+        { return {ea(x, y, z, t), eb(x, y, z, t), ec(x, y, z, t)}; };
     }
 };
-
-// =========================================================================
-// Helper Implementations
-// =========================================================================
-
-// 1. Forcing Function Helper
-inline std::function<std::vector<Real>(Real, Real, Real, Real)> ParseInput::get_forcing_function() const
-{
-    std::string s_fx = fx_expression;
-    std::string s_fy = fy_expression;
-    std::string s_fz = fz_expression;
-
-    return [s_fx, s_fy, s_fz](Real x, Real y, Real z, Real t) -> std::vector<Real>
-    {
-        mup::ParserX p;
-        mup::Value vx((float)x), vy((float)y), vz((float)z), vt((float)t);
-        p.DefineVar("x", mup::Variable(&vx));
-        p.DefineVar("y", mup::Variable(&vy));
-        p.DefineVar("z", mup::Variable(&vz));
-        p.DefineVar("t", mup::Variable(&vt));
-        try
-        {
-            p.DefineConst("pi", M_PI);
-        }
-        catch (...)
-        {
-        }
-
-        std::vector<Real> res(3);
-        try
-        {
-            p.SetExpr(s_fx);
-            res[0] = (Real)p.Eval().GetFloat();
-            p.SetExpr(s_fy);
-            res[1] = (Real)p.Eval().GetFloat();
-            p.SetExpr(s_fz);
-            res[2] = (Real)p.Eval().GetFloat();
-        }
-        catch (...)
-        {
-            return {0, 0, 0};
-        }
-        return res;
-    };
-}
-
-inline BoundaryFunctions ParseInput::get_forcing_function_bf() const
-{
-    std::string s_fx = fx_expression;
-    std::string s_fy = fy_expression;
-    std::string s_fz = fz_expression;
-
-    BoundaryFunctions f_func;
-    f_func.set_string_expression({s_fx, s_fy, s_fz});
-    return f_func;
-}
-
-// 2. Exact Velocity Helper
-inline std::function<std::vector<Real>(Real, Real, Real, Real)> ParseInput::get_exact_velocity_function() const
-{
-    std::string s_u = u_exact_expression;
-    std::string s_v = v_exact_expression;
-    std::string s_w = w_exact_expression;
-
-    return [s_u, s_v, s_w](Real x, Real y, Real z, Real t) -> std::vector<Real>
-    {
-        mup::ParserX p;
-        mup::Value vx((float)x), vy((float)y), vz((float)z), vt((float)t);
-        p.DefineVar("x", mup::Variable(&vx));
-        p.DefineVar("y", mup::Variable(&vy));
-        p.DefineVar("z", mup::Variable(&vz));
-        p.DefineVar("t", mup::Variable(&vt));
-        try
-        {
-            p.DefineConst("pi", M_PI);
-        }
-        catch (...)
-        {
-        }
-
-        std::vector<Real> res(3);
-        try
-        {
-            p.SetExpr(s_u);
-            res[0] = (Real)p.Eval().GetFloat();
-            p.SetExpr(s_v);
-            res[1] = (Real)p.Eval().GetFloat();
-            p.SetExpr(s_w);
-            res[2] = (Real)p.Eval().GetFloat();
-        }
-        catch (...)
-        {
-            return {0, 0, 0};
-        }
-        return res;
-    };
-}
-
-inline BoundaryFunctions ParseInput::get_exact_velocity_function_bf() const
-{
-    std::string s_u = u_exact_expression;
-    std::string s_v = v_exact_expression;
-    std::string s_w = w_exact_expression;
-
-    BoundaryFunctions u_func;
-    u_func.set_string_expression({s_u, s_v, s_w});
-    return u_func;
-}
-
-// 3. Exact Pressure Helper
-inline std::function<Real(Real, Real, Real, Real)> ParseInput::get_exact_pressure_function() const
-{
-    std::string s_p = p_exact_expression;
-
-    return [s_p](Real x, Real y, Real z, Real t) -> Real
-    {
-        mup::ParserX p;
-        mup::Value vx((float)x), vy((float)y), vz((float)z), vt((float)t);
-        p.DefineVar("x", mup::Variable(&vx));
-        p.DefineVar("y", mup::Variable(&vy));
-        p.DefineVar("z", mup::Variable(&vz));
-        p.DefineVar("t", mup::Variable(&vt));
-        try
-        {
-            p.DefineConst("pi", M_PI);
-        }
-        catch (...)
-        {
-        }
-
-        try
-        {
-            p.SetExpr(s_p);
-            return (Real)p.Eval().GetFloat();
-        }
-        catch (...)
-        {
-            return 0.0;
-        }
-    };
-}
-
-inline BoundaryFunctions ParseInput::get_exact_pressure_function_bf() const
-{
-    std::string s_p = p_exact_expression;
-
-    BoundaryFunctions p_func;
-    p_func.set_string_expression({s_p});
-    return p_func;
-}
-
-// 4. Coefficient (K) Helper
-inline std::function<Real(Real, Real, Real)> ParseInput::get_k_function() const
-{
-    std::string s_k = k_expression;
-
-    return [s_k](Real x, Real y, Real z) -> Real
-    {
-        mup::ParserX p;
-        mup::Value vx((float)x), vy((float)y), vz((float)z);
-        p.DefineVar("x", mup::Variable(&vx));
-        p.DefineVar("y", mup::Variable(&vy));
-        p.DefineVar("z", mup::Variable(&vz));
-        try
-        {
-            p.DefineConst("pi", M_PI);
-        }
-        catch (...)
-        {
-        }
-
-        try
-        {
-            p.SetExpr(s_k);
-            return (Real)p.Eval().GetFloat();
-        }
-        catch (...)
-        {
-            return 0.0;
-        }
-    };
-}
-
-inline BoundaryFunctions ParseInput::get_k_function_bf() const
-{
-    std::string s_k = k_expression;
-
-    BoundaryFunctions k_func;
-    k_func.set_string_expression({s_k});
-    return k_func;
-}
 
 #endif // PARSE_INPUT_HPP
