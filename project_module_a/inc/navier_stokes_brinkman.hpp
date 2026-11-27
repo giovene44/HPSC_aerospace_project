@@ -1,422 +1,170 @@
+#ifndef NAVIER_STOKES_BRINKMAN_HPP
+#define NAVIER_STOKES_BRINKMAN_HPP
+
+/**
+ * @file navier_stokes_brinkman.hpp
+ * @brief Direction-splitting solver for the unsteady Stokes-Brinkman equations
+ *
+ *        du/dt - nu Lap(u) + (nu/k) u + grad(p) = f,   div(u) = 0
+ *
+ * on a MAC (staggered) grid, following F. Auteri, "Solving the momentum and pressure
+ * equations" (HPSC Module A, Lecture 5) and Guermond & Minev's direction splitting.
+ *
+ * Grid (per direction, N nodes, spacing h = L / (N - 1/2)):
+ *   pressure          p_i       at  i h,          i = 0..N-1
+ *   normal velocity   u_{i+1/2} at (i + 1/2) h,   i = 0..N-1   (the last one lies on x = L)
+ * so x = 0 passes through the pressure / tangential-velocity nodes and x = L through the
+ * normal-velocity nodes.
+ *
+ * Time step n -> n+1 (Crank-Nicolson in delta form, beta = 1 + nu dt / (2k),
+ * gamma = nu dt / (2 beta)):
+ *   p*      = p^{n-1/2} + phi^{n-1/2}
+ *   xi      = u^n + dt/beta [ f^{n+1/2} - grad p* - (nu/k) u^n + nu (Dxx eta^n + Dyy zeta^n + Dzz u^n) ]
+ *   (I - gamma Dxx)(eta^{n+1}  - eta^n ) = xi       - eta^n
+ *   (I - gamma Dyy)(zeta^{n+1} - zeta^n) = eta^{n+1} - zeta^n
+ *   (I - gamma Dzz)(u^{n+1}    - u^n   ) = zeta^{n+1} - u^n
+ *   (I - Dxx) psi = -div(u^{n+1}) / dt,  (I - Dyy) chi = psi,  (I - Dzz) phi^{n+1/2} = chi
+ *   p^{n+1/2} = p^{n-1/2} + phi^{n+1/2}            (standard incremental form, chi = 0)
+ *   p^{n+1/2} = p^{n-1/2} + phi^{n+1/2} - chi nu div(u^{n+1} + u^n)/2  (rotational, 0 < chi <= 1)
+ * with homogeneous Neumann conditions for the pressure increments.
+ *
+ * Velocity boundary conditions (Dirichlet). For a velocity component and a direction d:
+ *  - boundary through the nodes: the node value is prescribed;
+ *  - boundary half a cell away from the last node: second-order ghost extrapolation
+ *    u_ghost = 8/3 u_b - 2 u_0 + 1/3 u_1 ("Boundary Conditions Review", G. Martella).
+ * Exactly the same discrete operator (same closures) is used in the explicit and in the
+ * implicit part, so that the delta form is exact and the scheme is unconditionally stable;
+ * the same ghost value is used to evaluate the divergence on the boundary pressure nodes.
+ */
+
+#include "Variables.hpp"
+#include "Field3D.hpp"
+#include "Parallel.hpp"
+#include "TridiagonalSolver.hpp"
+#include "Expression.hpp"
+#include <array>
 #include <string>
-#include <cmath>
-#include <functional>
 #include <vector>
-#include "ScalarVariable.hpp"
-#include "VectorVariable.hpp"
-#ifdef USE_MPI
-#include "SolverCorrectMPI.hpp"
-#include "MPICommunicator.hpp"
-#else
-#include "Solver.hpp"
-#endif
-#include "manufactured_solution_technique.hpp"
+
+struct ProblemData
+{
+    std::array<Real, 3> L{1, 1, 1};           // domain size
+    Real nu = 1;                               // kinematic viscosity
+    std::string k_expr = "1";                  // permeability k(x, y, z)
+    std::array<std::string, 3> forcing;        // f(x, y, z, t)
+    std::array<std::string, 3> u_exact;        // exact velocity (initial condition + errors)
+    std::string p_exact = "0";                 // exact pressure (initial condition + errors)
+    std::array<std::string, 3> u_boundary;     // Dirichlet boundary data for the velocity
+    Real chi = 0;                              // rotational correction (0 = standard incremental)
+};
+
+struct ErrorNorms
+{
+    Real u_l2 = 0, u_l2_rel = 0, u_linf = 0;
+    Real p_l2 = 0, p_l2_rel = 0, p_linf = 0;
+    Real div_l2 = 0; // L2 norm of the discrete divergence of u
+};
 
 class NavierStokesBrinkman
 {
 public:
-    class Grid
+    NavierStokesBrinkman(const ProblemData &data, const Decomposition &dec, Real dt, Real t0);
+
+    /// Set the exact solution at t0 (pressure at t0 - dt/2, staggered in time).
+    void initialize();
+    /// Advance one time step.
+    void step();
+    /// Advance nsteps time steps, returns the wall-clock time (max over the processes).
+    double advance(int nsteps);
+
+    /// Errors with respect to the exact solution at the current time.
+    ErrorNorms errors() const;
+
+    Real time() const { return t_; }
+    Real dt() const { return dt_; }
+    Real h(int d) const { return h_[d]; }
+
+    /// Legacy-style VTK output of the cell-centred (interpolated) velocity and pressure
+    /// (one file per process).
+    void write_vtk(const std::string &prefix) const;
+
+private:
+    struct Face
     {
-
-        // Until we get more information for this part we will leave it empty
-    public:
-        Grid() {}
-
-        void compute_grid() {};
-        void split_in_blocks() {};
-        void compute_porosity(/*data structure for porosity*/){};
-
-    protected:
+        bool active = false;
+        int a = 0, b = 0, na = 0, nb = 0; // the two directions spanning the face
+        std::vector<Real> v;
+        Real at(int i, int j, int k) const
+        {
+            const int idx[3] = {i, j, k};
+            return v[idx[a] + static_cast<std::size_t>(na) * idx[b]];
+        }
     };
 
-public:
-    NavierStokesBrinkman(const Dim Nx, const Dim Ny, const Dim Nz,
-                         const Real dt, const Real T,
-                         BoundaryFunctions forcing_func,
-                         std::function<Real(Real, Real, Real)> k_func,
-                         std::string u_boundary_file,
-                         std::string p_boundary_file,
-                         BoundaryFunctions p_exact,
-                         const Real dx, const Real dy, const Real dz,
-                         const Real nu)
-        : // ============================
-          // GRID, MATERIAL, AND TIME INFO
-          // ============================
-          grid(),
-          dt(dt),
-          Nx(Nx),
-          Ny(Ny),
-          Nz(Nz),
-          dx(dx),
-          dy(dy),
-          dz(dz),
-          T(T),
+    const Decomposition &dec_;
+    Real dt_, t_, nu_, chi_;
+    std::array<Real, 3> L_, h_;
+    std::array<int, 3> n_, g0_, N_;
 
-          // ============================
-          // SOLVER CLASS
-          // ============================
-          velocity_solver(Nx, Ny, Nz, dx, dy, dz, dt, gamma_field, u_boundary),
-          pressure_solver(Nx, Ny, Nz, dx, dy, dz, dt, p_boundary),
+    std::array<fastexpr::Expression, 3> f_, uex_, ubc_;
+    fastexpr::Expression pex_, k_;
 
-          // ============================
-          // PHYSICAL AND MATERIAL FIELDS
-          // ============================
-          u_0(Nx, Ny, Nz, dx, dy, dz),
-          p_0(Nx, Ny, Nz, dx, dy, dz),
-          forcing_function(forcing_func),
-          k_function(k_func),
-          nu(nu),
-          k_field(Nx, Ny, Nz, dx, dy, dz),
-          gamma_field(Nx, Ny, Nz, dx, dy, dz),
+    // node coordinates: xc_[c][d] for velocity component c, xp_[d] for the pressure
+    std::array<std::array<std::vector<Real>, 3>, 3> xc_;
+    std::array<std::vector<Real>, 3> xp_;
 
-          p_boundary(),
-          u_boundary(),
-          p_exact(p_exact),
+    std::array<Field3D, 3> u_, eta_, zeta_, cs_, cu_;
+    std::vector<std::vector<Real>> fbuf_; // per-thread forcing plane
+    Real th_ = 0;                          // t^{n+1/2}
+    Field3D p_, phi_, pstar_, psi_;
+    Field3D div_new_, div_old_; // only for the rotational form (chi != 0)
 
-          // ============================
-          // VECTOR LINEAR SOLVER VARIABLES
-          // ============================
-          g(Nx, Ny, Nz, dx, dy, dz),
-          vector_rhs(Nx, Ny, Nz, dx, dy, dz),
-          vector_intermediate_solution(Nx, Ny, Nz, dx, dy, dz),
-          xi(Nx, Ny, Nz, dx, dy, dz),
-          eta(Nx, Ny, Nz, dx, dy, dz),
-          zeta(Nx, Ny, Nz, dx, dy, dz),
+    // boundary data: on-node Dirichlet values at t^{n+1}; half-cell values at t^n, t^{n+1}
+    std::array<std::array<Face, 3>, 3> bon_, bhalf_old_, bhalf_new_;
 
-          // ============================
-          // SCALAR LINEAR SOLVER VARIABLES
-          // ============================
-          pressure_predictor(Nx, Ny, Nz, dx, dy, dz),
-          gradient_pressure_predictor(Nx, Ny, Nz, dx, dy, dz),
-          rhs(Nx, Ny, Nz, dx, dy, dz),
-          psi(Nx, Ny, Nz, dx, dy, dz),
-          phi(Nx, Ny, Nz, dx, dy, dz),
-          other_phi(Nx, Ny, Nz, dx, dy, dz),
+    TridiagonalSolver solver_;
+    bool uniform_v_ = false;                           // k constant: one matrix per sweep
+    std::array<std::array<UniformMatrix, 3>, 3> umv_; // [direction][component]
+    std::array<UniformMatrix, 3> ump_;                 // pressure, [direction]
 
-          // ============================
-          // FINAL SOLUTION STORAGE
-          // ============================
-          velocity_solution(Nx, Ny, Nz, dx, dy, dz),
-          pressure_solution(Nx, Ny, Nz, dx, dy, dz)
-
+    // helpers
+    bool on_node_boundary(int c, int e, int G) const
     {
-        // --- Initialize all fields ---
-
-        // // Initialize intermediate fields to zero (CRITICAL FIX)
-        g.set_all(0.0f);
-
-        vector_rhs.set_all(0.0f);
-        vector_intermediate_solution.set_all(0.0f);
-        xi.set_all(0.0f);
-        eta.set_all(0.0f);
-        zeta.set_all(0.0f);
-        pressure_predictor.set_all(Real(0.0));
-        rhs.set_all(0.0f);
-        psi.set_all(0.0f);
-        phi.set_all(0.0f);
-        // other_phi.set_all(0.0f);
-
-        // Final solution fields are set to initial conditions in solve()
-        velocity_solution.set_all(0.0f);
-        pressure_solution.set_all(0.0f);
-
-        u_boundary.setParsing(u_boundary_file);
-        p_boundary.setParsing(p_boundary_file);
-        initialize_k_field();
-        initialize_gamma_field();
-        velocity_solver.u_boundary = u_boundary;
-        pressure_solver.p_boundary = p_boundary;
-        velocity_solver.gamma_field = gamma_field;
+        return (e != c) ? (G == 0) : (G == N_[e] - 1);
     }
-    // initialization methods:
-    void initialize_gamma_field();
-    void initialize_k_field();
-
-    Real compute_beta(Dim i, Dim j, Dim k) const;
-    Real compute_beta(Dim index) const;
-
-    Real compute_gamma(Dim i, Dim j, Dim k) const;
-    Real compute_gamma(Dim index) const;
-
-    // methods inside the iteration:
-    void compute_vector_g(Real t);
-    void compute_vector_xi();
-    void build_rhs(VectorVariable &rhs,
-                   const VectorVariable &velocity_solution,
-                   const ScalarVariable &p_star, // predictor pressure at cell centers
-                   const VectorVariable &f_half,
-                   Real dx, Real dy, Real dz,
-                   Dim Nx, Dim Ny, Dim Nz,
-                   Real dt,
-                   Real nu,
-                   const ScalarVariable &k);
-
-    void center_pressure(ScalarVariable &pressure_field);
-    void compute_divergence_cell_center(const VectorVariable &u,
-                                        ScalarVariable &div);
-
-    void compute_rhs_pressure(Real t);
-    void update_pressure_and_velocity_fields();
-#ifdef USE_MPI
-
-    Real solve_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo);
-    Real solve_only_momentum_mpi(const ManufacturedSolution &mms, const MPITopology3D &topo);
-    void compute_forcing_term_mpi(VectorVariable &f, Real t, const MPITopology3D &topo);
-    void globalize_velocity(VectorVariable &field, Dim Nx, Dim Ny, Dim Nz, const MPITopology3D &topo);
-    void globalize_pressure(ScalarVariable &field, Dim Nx, Dim Ny, Dim Nz, const MPITopology3D &topo);
-
-    void build_rhs_mpi(VectorVariable &rhs,
-                       const VectorVariable &velocity_solution,
-                       const ScalarVariable &p_star, // predictor pressure at cell centers
-                       const VectorVariable &f_half,
-                       Real dx, Real dy, Real dz,
-                       Dim Nx, Dim Ny, Dim Nz,
-                       Real dt,
-                       Real nu,
-                       const ScalarVariable &k, const MPITopology3D &topo);
-
-#ifdef USE_MPI
-    /**
-     * @brief Computes L2 errors for both Velocity and Pressure in a single pass over the grid.
-     * * @param u_num Numerical velocity field (Pass nsb_solver.u_0)
-     * @param p_num Numerical pressure field (Pass nsb_solver.p_0)
-     * @param mms   Manufactured Solution instance
-     * @param t     Current simulation time
-     * @param topo  MPI Topology for bounds
-     */
-    std::pair<std::pair<Real, Real>, std::pair<Real, Real>> compute_L2_errors_mpi(
-        const VectorVariable &u_num,
-        const ScalarVariable &p_num,
-        const ManufacturedSolution &mms,
-        Real t,
-        const MPITopology3D &topo)
+    int row_type(int c, int d, int G) const;
+    void eval_field(const fastexpr::Expression &ex, int comp, Real t, Field3D &F) const;
+    void eval_face(const fastexpr::Expression &ex, int c, int e, Real Xe, Real t, Face &F) const;
+    void update_faces(Real t, std::array<std::array<Face, 3>, 3> &half, bool on_node);
+    void fill_physical_ghost(int c, int d, Field3D &F, const std::array<std::array<Face, 3>, 3> &half) const;
+    Real weighted_mean(const Field3D &F) const;
+    Field3D output_pressure() const;
+    /// Call f(i, j, k) for the local pressure nodes lying on the edges x=0/y=0, x=0/z=0 and
+    /// y=0/z=0, which are not coupled to any velocity unknown.
+    template <class F>
+    void for_each_uncontrolled(F &&f) const
     {
-        // 1. Get Local Iteration Bounds (Global Indices)
-        Dim i0 = topo.local_i0(Nx), i1 = topo.local_i1(Nx);
-        Dim j0 = topo.local_j0(Ny), j1 = topo.local_j1(Ny);
-        Dim k0 = topo.local_k0(Nz), k1 = topo.local_k1(Nz);
-
-        Real local_sum_err_u = 0.0, local_sum_norm_u = 0.0;
-        Real local_sum_err_p = 0.0, local_sum_norm_p = 0.0;
-
-// 2. Single Unified Loop for both Fields
-// Collapsing loops improves OpenMP efficiency
-#pragma omp parallel for reduction(+ : local_sum_err_u, local_sum_norm_u, local_sum_err_p, local_sum_norm_p) collapse(2)
-        for (Dim k = k0; k < k1; ++k)
+        const bool z0[3] = {g0_[0] == 0, g0_[1] == 0, g0_[2] == 0};
+        for (int d = 0; d < 3; ++d) // edge along direction d
         {
-            for (Dim j = j0; j < j1; ++j)
+            const int a = (d + 1) % 3, b = (d + 2) % 3;
+            if (!z0[a] || !z0[b])
+                continue;
+            for (int s = (d == 0 || !z0[d]) ? 0 : 1; s < n_[d]; ++s) // the corner only once
             {
-                for (Dim i = i0; i < i1; ++i)
-                {
-                    // --- Coordinates ---
-                    Real x = i * dx;
-                    Real y = j * dy;
-                    Real z = k * dz;
-
-                    // ============================
-                    // 1. VELOCITY (Staggered Grid)
-                    // ============================
-                    // Fetch Exact Solution at staggered positions
-                    Real u_ex_x = u_boundary.value<0>(x + dx * 0.5, y, z, t);
-                    Real u_ex_y = u_boundary.value<1>(x, y + dy * 0.5, z, t);
-                    Real u_ex_z = u_boundary.value<2>(x, y, z + dz * 0.5, t);
-
-                    // Fetch Numerical Solution
-                    // NOTE: Ensure value() accepts Global Indices (i,j,k)
-                    Real u_num_x = u_num.value(0, i, j, k);
-                    Real u_num_y = u_num.value(1, i, j, k);
-                    Real u_num_z = u_num.value(2, i, j, k);
-
-                    Real du_x = u_num_x - u_ex_x;
-                    Real du_y = u_num_y - u_ex_y;
-                    Real du_z = u_num_z - u_ex_z;
-
-                    local_sum_err_u += du_x * du_x + du_y * du_y + du_z * du_z;
-                    local_sum_norm_u += u_ex_x * u_ex_x + u_ex_y * u_ex_y + u_ex_z * u_ex_z;
-
-                    // ============================
-                    // 2. PRESSURE (Cell Center)
-                    // ============================
-                    Real p_ex = p_exact.value(x, y, z, t);
-                    Real p_val = p_num.get(i, j, k);
-                    Real dp = p_val - p_ex;
-
-                    local_sum_err_p += dp * dp;
-                    local_sum_norm_p += p_ex * p_ex;
-                }
+                int idx[3];
+                idx[d] = s;
+                idx[a] = 0;
+                idx[b] = 0;
+                f(idx[0], idx[1], idx[2]);
             }
         }
-
-        // 3. Global Reduction (Pack 4 values into one MPI call)
-        // Order: [err_u_sq, norm_u_sq, err_p_sq, norm_p_sq]
-        Real local_sums[4] = {local_sum_err_u, local_sum_norm_u, local_sum_err_p, local_sum_norm_p};
-        Real global_sums[4] = {0.0};
-
-        // Determine MPI type (float or double)
-        MPI_Datatype mpi_real = (sizeof(Real) == sizeof(double)) ? MPI_DOUBLE : MPI_FLOAT;
-
-        MPI_Allreduce(local_sums, global_sums, 4, mpi_real, MPI_SUM, topo.cart_comm());
-
-        // 4. Final Calculation
-        Real dV = dx * dy * dz;
-
-        Real err_u_abs = std::sqrt(global_sums[0] * dV);
-        Real nrm_u_abs = std::sqrt(global_sums[1] * dV);
-
-        Real err_p_abs = std::sqrt(global_sums[2] * dV);
-        Real nrm_p_abs = std::sqrt(global_sums[3] * dV);
-
-        // Prevent division by zero
-        Real err_u_rel = (nrm_u_abs > 1e-12) ? err_u_abs / nrm_u_abs : err_u_abs;
-        Real err_p_rel = (nrm_p_abs > 1e-12) ? err_p_abs / nrm_p_abs : err_p_abs;
-
-        return {{err_u_abs, err_u_rel}, {err_p_abs, err_p_rel}};
-    }
-#endif
-
-#else
-    Real solve(const ManufacturedSolution &mms);
-#endif
-
-    /**
-     * @brief Computes the L2 relative error between the numerical solution and the MMS exact solution.
-     * * @param u_num Numerical velocity field (from Solver)
-     * @param p_num Numerical pressure field (from Solver)
-     * @param mms   Manufactured Solution instance (provides exact solution and grid spacing)
-     * @param t     Time at which to evaluate the error
-     * @return std::pair<Real, Real> {Relative Error Velocity, Relative Error Pressure}
-     */
-    std::pair<std::pair<Real, Real>, std::pair<Real, Real>> compute_L2_errors(
-        const VectorVariable &u_num,
-        const ScalarVariable &p_num,
-        const ManufacturedSolution &mms,
-        Real t)
-    {
-
-        Real err_u = 0.0, err_p = 0.0;
-        Real norm_u = 0.0, norm_p = 0.0;
-        Real dV = dx * dy * dz;
-
-        for (Dim k = 0; k < Nz; ++k)
-        {
-            for (Dim j = 0; j < Ny; ++j)
-            {
-                for (Dim i = 0; i < Nx; ++i)
-                {
-                    Real x = i * dx;
-                    Real y = j * dy;
-                    Real z = k * dz;
-
-                    auto u_ex_x = u_boundary.value<0>(x + dx * 0.5, y, z, t);
-                    auto u_ex_y = u_boundary.value<1>(x, y + dy * 0.5, z, t);
-                    auto u_ex_z = u_boundary.value<2>(x, y, z + dz * 0.5, t);
-                    std::vector<Real> u_ex = {u_ex_x, u_ex_y, u_ex_z};
-
-                    Real p_ex = p_exact.value(x, y, z, t);
-                    Real ux = velocity_solution.value(0, i, j, k);
-                    Real uy = velocity_solution.value(1, i, j, k);
-                    Real uz = velocity_solution.value(2, i, j, k);
-                    Real pN = pressure_solution.get(i, j, k);
-
-                    Real dux = ux - u_ex[0];
-                    Real duy = uy - u_ex[1];
-                    Real duz = uz - u_ex[2];
-
-                    err_u += dux * dux + duy * duy + duz * duz;
-                    norm_u += u_ex[0] * u_ex[0] + u_ex[1] * u_ex[1] + u_ex[2] * u_ex[2];
-
-                    err_p += (pN - p_ex) * (pN - p_ex);
-                    norm_p += p_ex * p_ex;
-                }
-            }
-        }
-
-        err_u = std::sqrt(err_u * dV);
-        norm_u = std::sqrt(norm_u * dV);
-        err_p = std::sqrt(err_p * dV);
-        norm_p = std::sqrt(norm_p * dV);
-
-        Real rel_err_u = (norm_u > 1e-12) ? err_u / norm_u : err_u;
-        Real rel_err_p = (norm_p > 1e-12) ? err_p / norm_p : err_p;
-
-        // 6. PRINT DETAILED DIAGNOSTICS (Crucial for debugging)
-        // std::cout << "------------------------------------------\n";
-        // std::cout << " ERRORS at t = " << t << "\n";
-        // std::cout << " Velocity -> Abs: " << err_u << " | Ref Norm: " << norm_u << " | Rel: " << rel_err_u << "\n";
-        // std::cout << " Pressure -> Abs: " << err_p << " | Ref Norm: " << norm_p << " | Rel: " << rel_err_p << "\n";
-        // std::cout << "------------------------------------------\n";
-
-        return {{err_u, rel_err_u}, {err_p, rel_err_p}};
     }
 
-    void write_velocity_vtk(const std::string &filename) const;
-    void write_pressure_vtk(const std::string &filename) const;
-
-    // ============================================================================
-    // GRID, MATERIAL, AND TIME INFORMATION
-    // ============================================================================
-    Grid grid; // Grid geometry and domain decomposition
-
-    Real dt; // Time step
-
-    Dim Nx; // Grid points in x
-    Dim Ny; // Grid points in y
-    Dim Nz; // Grid points in z
-
-    Real dx = Real(1.0); // Grid spacing in x
-    Real dy = Real(1.0); // Grid spacing in y
-    Real dz = Real(1.0); // Grid spacing in z
-
-    Real T;
-
-    // ============================================================================
-    // SOLVER CLASS
-    // ============================================================================
-    VelocitySolver velocity_solver;
-    PressureSolver pressure_solver;
-
-    // ============================================================================
-    // PHYSICAL AND MATERIAL FIELDS
-    // ============================================================================
-    VectorVariable u_0;                               // Velocity field
-    ScalarVariable p_0;                               // Pressure field
-    BoundaryFunctions forcing_function;               // Forcing term (can vary in space)
-    std::function<Real(Real, Real, Real)> k_function; // Forcing term (can vary in space)
-    Real nu;                                          // Kinematic viscosity (can vary in space)
-    ScalarVariable k_field;                           // Brinkman permeability or resistance term
-    ScalarVariable gamma_field;                       // Gamma field for Brinkman term
-    BoundaryFunctions p_boundary;                     // Boundary condition for pressure
-    BoundaryFunctions u_boundary;                     // Boundary condition for velocity
-    BoundaryFunctions p_exact;                        // Exact pressure for MMS
-
-    // ============================================================================
-    // VECTOR LINEAR SOLVER VARIABLES (MOMENTUM EQUATION)
-    //    Used to solve the three components of momentum
-    // ============================================================================
-    VectorVariable g;
-    VectorVariable vector_rhs;                   // RHS of the momentum equation
-    VectorVariable vector_intermediate_solution; // solution of linear equation, it's a delta between
-                                                 // the previous timestamp variable and the new one
-    VectorVariable xi;                           // x-direction solve intermediate
-    VectorVariable eta;                          // y-direction solve intermediate
-    VectorVariable zeta;                         // z-direction solve intermediate
-
-    // ============================================================================
-    // SCALAR LINEAR SOLVER VARIABLES (PRESSURE EQUATION AND OTHER SCALARS)
-    // ============================================================================
-    ScalarVariable pressure_predictor;          // Pressure predictor
-    VectorVariable gradient_pressure_predictor; // ∇p correction term
-    ScalarVariable rhs;                         // RHS of scalar Poisson equation
-    ScalarVariable psi;                         // Auxiliary scalar (potential or correction)
-    ScalarVariable phi;                         // Pressure correction
-    ScalarVariable other_phi;                   // Additional scalar field for iterative updates
-
-    // ============================================================================
-    // FINAL SOLUTION STORAGE
-    // ============================================================================
-    VectorVariable velocity_solution; // Final converged velocity
-    ScalarVariable pressure_solution; // Final converged pressure
-
-    std::vector<VectorVariable> velocity_time_series;
-    std::vector<ScalarVariable> pressure_time_series;
+    template <int D>
+    void velocity_sweep(int c);
+    template <int D>
+    void pressure_sweep(const Field3D *src, Field3D &dst);
 };
+
+#endif // NAVIER_STOKES_BRINKMAN_HPP

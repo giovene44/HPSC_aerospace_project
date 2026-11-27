@@ -4,6 +4,7 @@ Simple plotting script for convergence analysis
 Usage: python3 plot.py error_vs_N.dat
 """
 
+import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
@@ -19,6 +20,48 @@ if len(sys.argv) < 2:
 
 # Read the data file
 filename = sys.argv[1]
+
+
+def plot_convergence_analysis(filename):
+    """Files written by bin/main_app (OUTPUT/Convergence_Analysis_*.dat): the columns are
+    found by name in the header. Velocity and pressure errors are plotted against the grid
+    spacing (or against dt when the grid is not refined)."""
+    with open(filename) as f:
+        header = f.readline().split()
+    data = np.atleast_2d(np.loadtxt(filename, skiprows=1))
+    col = {name: i for i, name in enumerate(header)}
+    dx, dt = data[:, col["dx"]], data[:, col["dt"]]
+    eu, ep = data[:, col["L2_u_abs"]], data[:, col["L2_p_abs"]]
+    spatial = dx.size < 2 or dx[0] != dx[1]
+    x, xlabel = (dx, "grid spacing h") if spatial else (dt, "time step dt")
+
+    plt.figure(figsize=(8, 6))
+    plt.loglog(x, eu, "o-", lw=2, ms=7, label="velocity $L^2$ error")
+    plt.loglog(x, ep, "s-", lw=2, ms=7, label="pressure $L^2$ error")
+    for order, style in ((1, "k--"), (2, "k-.")):
+        plt.loglog(x, eu[0] * (x / x[0]) ** order, style, alpha=0.6, label=f"O({xlabel.split()[-1]}^{order})")
+    plt.xlabel(xlabel, fontsize=12)
+    plt.ylabel("error", fontsize=12)
+    plt.title(f"Convergence: {os.path.basename(filename)}", fontsize=11)
+    plt.grid(True, which="both", alpha=0.3)
+    plt.legend(fontsize=10)
+    plt.tight_layout()
+    out = filename.replace(".dat", ".png")
+    plt.savefig(out, dpi=300, bbox_inches="tight")
+    print(f"Plot saved as {out}")
+
+    print(f"{'N':>6} {'h':>12} {'dt':>12} {'err u':>12} {'err p':>12} {'rate u':>8} {'rate p':>8}")
+    for i in range(eu.size):
+        ru = np.log(eu[i - 1] / eu[i]) / np.log(x[i - 1] / x[i]) if i else 0.0
+        rp = np.log(ep[i - 1] / ep[i]) / np.log(x[i - 1] / x[i]) if i else 0.0
+        print(f"{int(data[i, 0]):>6} {dx[i]:>12.4e} {dt[i]:>12.4e} {eu[i]:>12.4e} {ep[i]:>12.4e} {ru:>8.2f} {rp:>8.2f}")
+
+
+with open(filename) as _f:
+    if "L2_u_abs" in _f.readline():
+        plot_convergence_analysis(filename)
+        sys.exit(0)
+
 try:
     data = np.loadtxt(filename, skiprows=1)
 except Exception as e:

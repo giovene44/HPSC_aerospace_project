@@ -1,91 +1,71 @@
 #ifndef BOUNDARY_FUNCTIONS_HPP
 #define BOUNDARY_FUNCTIONS_HPP
+
 #include "Variables.hpp"
-#include "mpParser.h"
-#include <string>
+#include "Expression.hpp"
 #include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
-using namespace mup;
-
+/**
+ * @brief A set of analytic functions f_c(x, y, z, t) (one per component) read from a file
+ *        or given as strings. Expressions are compiled once (see Expression.hpp), the
+ *        evaluation is thread safe and does not allocate.
+ */
 class BoundaryFunctions
 {
 public:
-    void setParsing(std::string input_file)
+    /// Read one expression per line; empty lines and lines starting with '#' are skipped.
+    void setParsing(const std::string &input_file)
     {
         std::ifstream file(input_file);
         if (!file.is_open())
-        {
             throw std::runtime_error("Unable to open file: " + input_file);
-        }
+        std::vector<std::string> exprs;
         std::string line;
-        // std::cout<<"File is open: " << input_file << std::endl;
         while (std::getline(file, line))
         {
-            if (line[0] == '#') // Skip comment lines
+            const auto first = line.find_first_not_of(" \t\r");
+            if (first == std::string::npos || line[first] == '#')
                 continue;
-            string_expression.emplace_back(line);
-            // std::cout<<"Read line: " << line << std::endl;
+            const auto last = line.find_last_not_of(" \t\r");
+            exprs.emplace_back(line.substr(first, last - first + 1));
         }
-        // std::cout<<"Get all line " << std::endl;
+        set_string_expression(exprs);
     }
+
+    void set_string_expression(const std::vector<std::string> &exprs)
+    {
+        string_expression = exprs;
+        expr_.clear();
+        expr_.reserve(exprs.size());
+        for (const auto &s : exprs)
+            expr_.emplace_back(s);
+    }
+
+    std::size_t size() const { return expr_.size(); }
+    const std::string &string_of(int component) const { return string_expression.at(component); }
+    const fastexpr::Expression &expression(int component) const { return expr_.at(component); }
 
     template <Dim component = 0>
-Real value(Real x_, Real y_, Real z_, Real t_) const
-{
-    // Thread-local parser and values: each thread gets its own instance
-    // Note: Since this is a template, value<0>, value<1>, value<2> get 
-    // DIFFERENT static instances. This prevents "thrashing" when you 
-    // call them sequentially in the VectorVariable loop.
-    thread_local ParserX p_local;
-    thread_local Value xval_local;
-    thread_local Value yval_local;
-    thread_local Value zval_local;
-    thread_local Value tval_local;
-    thread_local bool initialized = false;
-    
-    thread_local std::string last_expr_str = "";
-
-    if (!initialized)
+    Real value(Real x_, Real y_, Real z_, Real t_) const
     {
-        xval_local = Value(Real(0.0));
-        yval_local = Value(Real(0.0));
-        zval_local = Value(Real(0.0));
-        tval_local = Value(Real(0.0));
-        p_local.DefineVar("x", Variable(&xval_local));
-        p_local.DefineVar("y", Variable(&yval_local));
-        p_local.DefineVar("z", Variable(&zval_local));
-        p_local.DefineVar("t", Variable(&tval_local));
-        initialized = true;
+        return expr_[component](x_, y_, z_, t_);
     }
 
-    if (last_expr_str != string_expression[component])
+    Real value(int component, Real x_, Real y_, Real z_, Real t_) const
     {
-        try
-        {
-            p_local.SetExpr(string_expression[component]);
-            last_expr_str = string_expression[component];
-        }
-        catch (ParserError &e)
-        {
-            std::cerr << "Parser error in BoundaryFunctions::value(): " << e.GetMsg() << std::endl;
-            throw;
-        }
+        return expr_[component](x_, y_, z_, t_);
     }
 
-    xval_local = Value(x_);
-    yval_local = Value(y_);
-    zval_local = Value(z_);
-    tval_local = Value(t_);
-
-    return p_local.Eval().GetFloat();
-}
-
+    /// Centred finite difference (step d) of component `component` along its own direction.
     template <Dim component = 0>
     Real first_derivative(Real x_, Real y_, Real z_, Real t_, Real d) const
     {
         Real xp = x_, yp = y_, zp = z_;
         Real xm = x_, ym = y_, zm = z_;
-
         if constexpr (component == 0)
         {
             xp += d * Real(0.5);
@@ -101,19 +81,12 @@ Real value(Real x_, Real y_, Real z_, Real t_) const
             zp += d * Real(0.5);
             zm -= d * Real(0.5);
         }
-
-        return (value<component>(xp, yp, zp, t_) -
-                value<component>(xm, ym, zm, t_)) /
-               (d);
-    }
-
-    void set_string_expression(const std::vector<std::string> &exprs)
-    {
-        string_expression = exprs;
+        return (value<component>(xp, yp, zp, t_) - value<component>(xm, ym, zm, t_)) / d;
     }
 
 private:
     std::vector<std::string> string_expression;
+    std::vector<fastexpr::Expression> expr_;
 };
 
 #endif // BOUNDARY_FUNCTIONS_HPP

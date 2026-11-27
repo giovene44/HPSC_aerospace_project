@@ -324,7 +324,7 @@ static Real allreduce_sum_real(Real local, MPI_Comm comm)
 {
 #ifdef USE_MPI
     Real global = 0;
-    MPI_Allreduce(&local, &global, 1, MPI_FLOAT, MPI_SUM, comm);
+    MPI_Allreduce(&local, &global, 1, mpi_real_type(), MPI_SUM, comm);
     return global;
 #else
     return local;
@@ -409,7 +409,7 @@ static void sync_scalar_field_full(ScalarVariable &field, const Grid &g,
             int count = ni * nj * nk;
 
             std::vector<Real> recv_buf(count);
-            MPI_Recv(recv_buf.data(), count, MPI_FLOAT, src, 0, comm, MPI_STATUS_IGNORE);
+            MPI_Recv(recv_buf.data(), count, mpi_real_type(), src, 0, comm, MPI_STATUS_IGNORE);
 
             // Unpack into local_data
             int idx = 0;
@@ -462,11 +462,11 @@ static void sync_scalar_field_full(ScalarVariable &field, const Grid &g,
                 for (Dim i = i0; i < i1; ++i)
                     send_buf[idx++] = field.get(i, j, k);
 
-        MPI_Send(send_buf.data(), count, MPI_FLOAT, 0, 0, comm);
+        MPI_Send(send_buf.data(), count, mpi_real_type(), 0, 0, comm);
     }
 
     // Broadcast complete data from rank 0 to all
-    MPI_Bcast(local_data.data(), total, MPI_FLOAT, 0, comm);
+    MPI_Bcast(local_data.data(), total, mpi_real_type(), 0, comm);
 
     // Unpack into field
     for (Dim k = 0; k < g.Nz; ++k)
@@ -543,7 +543,7 @@ static void sync_vector_field_full(VectorVariable &field, const Grid &g,
                 int count = ni * nj * nk;
 
                 std::vector<Real> recv_buf(count);
-                MPI_Recv(recv_buf.data(), count, MPI_FLOAT, src, comp, comm, MPI_STATUS_IGNORE);
+                MPI_Recv(recv_buf.data(), count, mpi_real_type(), src, comp, comm, MPI_STATUS_IGNORE);
 
                 int idx = 0;
                 for (Dim k = k0; k < k1; ++k)
@@ -576,11 +576,11 @@ static void sync_vector_field_full(VectorVariable &field, const Grid &g,
                     for (Dim i = i0; i < i1; ++i)
                         send_buf[idx++] = field.value(comp, i, j, k);
 
-            MPI_Send(send_buf.data(), count, MPI_FLOAT, 0, comp, comm);
+            MPI_Send(send_buf.data(), count, mpi_real_type(), 0, comp, comm);
         }
 
         // Broadcast complete data from rank 0 to all
-        MPI_Bcast(local_data.data(), total, MPI_FLOAT, 0, comm);
+        MPI_Bcast(local_data.data(), total, mpi_real_type(), 0, comm);
 
         // Unpack into field
         for (Dim k = 0; k < g.Nz; ++k)

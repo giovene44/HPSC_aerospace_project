@@ -26,3 +26,23 @@ This script will:
 - Execute the main application (`main_app`) with different combinations of MPI processes (`-n`) and OpenMP threads (`OMP_NUM_THREADS`)
 
 Results and outputs will be generated in the appropriate output folders for further analysis and plotting.
+
+### Building by hand
+
+```bash
+cd project_module_a
+make                  # serial
+make OMP=1            # OpenMP (on macOS it uses Homebrew's libomp: brew install libomp)
+make MPI=1 OMP=1      # MPI + OpenMP
+make MPI=1 OMP=1 check CHECK_NP=8   # automatic checks (tridiagonal solver, MMS convergence)
+OMP_NUM_THREADS=4 mpirun --bind-to none -n 2 ./bin/main_app [-i Input/Input.in] [--procs Px Py Pz] [--no-omp-ref] [--vtk]
+```
+
+The analytic expressions of the input file (forcing, exact solution, permeability) are compiled
+by `inc/Expression.hpp`, so muparserx is no longer needed. `Input/Input.in` also accepts four
+optional trailing entries: the initial time `t0`, the factor dividing `dt` at every run
+(`2` = `dt` proportional to `h`), the factor multiplying `N` at every run (`1` = temporal
+study on a fixed grid) and `chi`, the rotational pressure correction (`0` = standard
+incremental scheme, `1` = rotational form, second-order pressure).
+The pressure error is computed up to an additive constant (Dirichlet velocity on the whole
+boundary) and against `p(t - dt/2)`, since the pressure is staggered in time.
